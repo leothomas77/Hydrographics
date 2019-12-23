@@ -144,27 +144,30 @@ __global__ void UpdateForceFields(int numParticles, const Vec4* __restrict__ pos
 	}
 }
 
-__global__ void UpdateDisplacements(float epsilon, float displacementThreshold, 
-	float displacementFactor, float gridY, Vec4* positions,
-	Vec3* velocities, const Vec4* originalPositions)
+__global__ void UpdateDisplacements(Vec4* pos, Vec4* disp_pos, Vec3* disp_vel, const Vec4* orig_pos)
 {
 	const int i = blockIdx.x*blockDim.x + threadIdx.x;
 
-	Vec4 originalPos = originalPositions[i];
-	Vec4 displacedPos = positions[i];
-	float dipping = fabs(positions[i].y - gridY);
+	float epsilon = 0.0f;
+	float displacementThreshold = 0.01f;
+	float displacementFactor = 1.0f;
+	float gridY = 0.5f;
+
+	Vec3 originalPos = Vec3(orig_pos[i]);
+	Vec3 displacedPos = Vec3(pos[i]);
+	float dipping = fabs(pos[i].y - gridY);
 	float displacement = Length(originalPos - displacedPos);
 	if (dipping <= epsilon && displacement > displacementThreshold) // particle is not yet dipped
 	{
 		//track position
 		Vec3 gradient = (originalPos - displacedPos) / displacement;
 		Vec3 predictedPosition = displacementFactor * displacement * gradient;
-		positions[i].x += predictedPosition.x;
-		positions[i].y += predictedPosition.y;
-		positions[i].z += predictedPosition.z;
+		disp_pos[i].x += predictedPosition.x;
+		disp_pos[i].y += predictedPosition.y;
+		disp_pos[i].z += predictedPosition.z;
 	}
 	else {
-		velocities[i] = Vec3(0.0f, 0.0f, 0.0f);
+		disp_vel[i] = Vec3(0.0f, 0.0f, 0.0f);
 	}
 
 
@@ -224,10 +227,8 @@ void NvFlexExtSetForceFields(NvFlexExtForceFieldCallback* c, const NvFlexExtForc
 	NvFlexRegisterSolverCallback(c->mSolver, callback, eNvFlexStageUpdateEnd);
 }
 
-void UpdateDisplacements(int kNumBlocks, int kNumThreadsPerBlock, float epsilon, 
-	float displacementThreshold, float displacementFactor, 
-	float gridY, Vec4* positions, Vec3* velocities,
-	Vec4* originalPositions)
+void UpdateDisplacements(int kNumBlocks, int kNumThreadsPerBlock, 
+	Vec4* pos, Vec4* disp_pos, Vec3* disp_vel, Vec4* orig_pos)
 {
 	// setup execution parameters
 	dim3 block(kNumThreadsPerBlock, 1, 1);
@@ -236,12 +237,9 @@ void UpdateDisplacements(int kNumBlocks, int kNumThreadsPerBlock, float epsilon,
 	// execute the kernel
 	UpdateDisplacements <<<grid, block>>>
 		(
-		epsilon, 
-		displacementThreshold, 
-		displacementFactor, 
-		gridY, 
-		positions, 
-		velocities, 
-		originalPositions
+		pos,
+		disp_pos,
+		disp_vel, 
+		orig_pos
 		);
 }

@@ -273,33 +273,37 @@ public:
     float displacementFactor = 1.0f;
     if (lower.y <= gridY && !g_pause)  // is dipping
     {
-		Vec4* d_positions;
-		Vec4* d_originalPositions;
-		Vec3* d_velocities;
-		cudaMalloc(&d_positions, g_buffers->positions.size() * sizeof(Vec4));
-		cudaMalloc(&d_velocities, g_buffers->positions.size() * sizeof(Vec3));
-		cudaMalloc(&d_originalPositions, g_buffers->positions.size() * sizeof(Vec4));
+		if (1) // CUDA calling
+		{
+			Vec4* d_positions;
+			Vec4* d_disp_positions;
+			Vec4* d_originalPositions;
+			Vec3* d_velocities;
 
-		cudaMemcpy(d_positions, &g_displacement_buffers->positions[0], g_displacement_buffers->positions.size() * sizeof(Vec4), cudaMemcpyHostToDevice);
-		cudaMemcpy(d_velocities, &g_displacement_buffers->velocities[0], g_displacement_buffers->velocities.size() * sizeof(Vec3), cudaMemcpyHostToDevice);
-		cudaMemcpy(d_originalPositions, &g_displacement_buffers->positions[0], g_displacement_buffers->originalPositions.size() * sizeof(Vec4), cudaMemcpyHostToDevice);
+			size_t nPositions = g_buffers->positions.size();
 
-		UpdateDisplacements(g_buffers->positions.size(), 1, epsilon,
-			displacementThreshold,
-			displacementFactor,
-			gridY,
-			d_positions,
-			d_velocities,
-			d_originalPositions
-		);
+			cudaMalloc(&d_positions, nPositions * sizeof(Vec4));
+			cudaMalloc(&d_disp_positions, nPositions * sizeof(Vec4));
+			cudaMalloc(&d_velocities, nPositions * sizeof(Vec3));
+			cudaMalloc(&d_originalPositions, nPositions * sizeof(Vec4));
 
-		cudaMemcpy(&g_displacement_buffers->positions[0], d_positions, g_displacement_buffers->positions.size() * sizeof(Vec4), cudaMemcpyDeviceToHost);
-		cudaMemcpy(&g_displacement_buffers->velocities[0], d_velocities, g_displacement_buffers->velocities.size() * sizeof(Vec3), cudaMemcpyDeviceToHost);
-		// cudaMemcpy(&g_displacement_buffers->positions[0], d_originalPositions, g_displacement_buffers->originalPositions.size() * sizeof(Vec4), cudaMemcpyHostToDevice);
+			cudaMemcpy(d_positions, &g_buffers->positions[0], nPositions * sizeof(Vec4), cudaMemcpyHostToDevice);
+			cudaMemcpy(d_disp_positions, &g_displacement_buffers->positions[0], nPositions * sizeof(Vec4), cudaMemcpyHostToDevice);
+			cudaMemcpy(d_velocities, &g_displacement_buffers->velocities[0], nPositions * sizeof(Vec3), cudaMemcpyHostToDevice);
+			cudaMemcpy(d_originalPositions, &g_displacement_buffers->originalPositions[0], nPositions * sizeof(Vec4), cudaMemcpyHostToDevice);
 
-		cudaFree(d_positions);
-		cudaFree(d_velocities);
-		cudaFree(d_originalPositions);
+			UpdateDisplacements(nPositions, 1, d_positions, d_disp_positions, d_velocities, d_originalPositions);
+
+			//cudaDeviceSynchronize();
+
+			cudaMemcpy(&g_displacement_buffers->positions[0], d_disp_positions, nPositions * sizeof(Vec4), cudaMemcpyDeviceToHost);
+			cudaMemcpy(&g_displacement_buffers->velocities[0], d_velocities, nPositions * sizeof(Vec3), cudaMemcpyDeviceToHost);
+
+			cudaFree(d_positions);
+			cudaFree(d_disp_positions);
+			cudaFree(d_velocities);
+			cudaFree(d_originalPositions);
+		}
 
 		if (0)
 		{
@@ -308,12 +312,12 @@ public:
 			Vec3 originalPos = g_displacement_buffers->originalPositions[i];
 			Vec3 displacedPos = Vec3(g_buffers->positions[i]);
 			float dipping = fabs(g_buffers->positions[i].y - gridY);
-			displacements[i] = Length(originalPos - displacedPos);
-			if (dipping <= epsilon && displacements[i] > displacementThreshold) // particle is not yet dipped
+			float displacement = Length(originalPos - displacedPos);
+			if (dipping <= epsilon && displacement > displacementThreshold) // particle is not yet dipped
 			{
 			  //track position
-			  Vec3 gradient = (originalPos - displacedPos) / displacements[i];
-			  Vec3 predictedPosition = displacementFactor * displacements[i] * gradient;
+			  Vec3 gradient = (originalPos - displacedPos) / displacement;
+			  Vec3 predictedPosition = displacementFactor * displacement * gradient;
 			  g_displacement_buffers->positions[i].x += predictedPosition.x;
 			  g_displacement_buffers->positions[i].y += predictedPosition.y;
 			  g_displacement_buffers->positions[i].z += predictedPosition.z;
