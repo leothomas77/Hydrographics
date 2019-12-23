@@ -1,0 +1,219 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="debug|x64">
+      <Configuration>debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="release|x64">
+      <Configuration>release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{5159D6B6-76B6-4056-6797-30484A82D93C}</ProjectGuid>
+    <RootNamespace>Hydrographics</RootNamespace>
+    <WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
+    <ProjectName>Hydrographics</ProjectName>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>v140</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>v140</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings" />
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='debug|x64'">
+    <OutDir>./../../../bin/win64\</OutDir>
+    <IntDir>./build/win64/debug\</IntDir>
+    <TargetExt>.exe</TargetExt>
+    <TargetName>NvFlexDemoDebugCUDA_x64</TargetName>
+    <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
+    <CodeAnalysisRules />
+    <CodeAnalysisRuleAssemblies />
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='debug|x64'">
+    <ClCompile>
+      <FloatingPointModel>Precise</FloatingPointModel>
+      <AdditionalOptions> /d2Zi+</AdditionalOptions>
+      <Optimization>Disabled</Optimization>
+      <AdditionalIncludeDirectories>$(CUDA_PATH)/include;$(CUDA_PATH)/extras/cupti/include;./../../../;./../..;./../../external/SDL2-2.0.4/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>_CONSOLE;WIN32;_CRT_SECURE_NO_WARNINGS;_DEBUG;_ITERATOR_DEBUG_LEVEL=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <WarningLevel>Level3</WarningLevel>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <PrecompiledHeaderFile>
+      </PrecompiledHeaderFile>
+    </ClCompile>
+    <Link>
+      <AdditionalOptions>
+      </AdditionalOptions>
+      <AdditionalDependencies>cudart.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;delayimp.lib;./../../../external/SDL2-2.0.4/lib/x64/SDL2.lib;./../../../external/SDL2-2.0.4/lib/x64/SDL2main.lib;./../../../external/NvToolsExt/lib/x64/nvToolsExt64_1.lib;./../../../lib/win64/NvFlexDebugCUDA_x64.lib;./../../../lib/win64/NvFlexExtDebugCUDA_x64.lib;./../../../lib/win64/NvFlexDeviceDebug_x64.lib;%(AdditionalDependencies);assimp.lib</AdditionalDependencies>
+      <OutputFile>$(OutDir)NvFlexDemoDebugCUDA_x64.exe</OutputFile>
+      <AdditionalLibraryDirectories>$(CUDA_PATH)/lib/x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <ProgramDatabaseFile>$(OutDir)/NvFlexDemoDebugCUDA_x64.exe.pdb</ProgramDatabaseFile>
+      <SubSystem>Console</SubSystem>
+      <ImportLibrary>$(OutDir)$(TargetName).lib</ImportLibrary>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <TargetMachine>MachineX64</TargetMachine>
+    </Link>
+    <ResourceCompile>
+    </ResourceCompile>
+    <ProjectReference>
+    </ProjectReference>
+  </ItemDefinitionGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='release|x64'">
+    <OutDir>./../../../bin/win64\</OutDir>
+    <IntDir>./build/win64/release\</IntDir>
+    <TargetExt>.exe</TargetExt>
+    <TargetName>NvFlexDemoReleaseCUDA_x64</TargetName>
+    <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
+    <CodeAnalysisRules />
+    <CodeAnalysisRuleAssemblies />
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='release|x64'">
+    <ClCompile>
+      <EnableEnhancedInstructionSet>StreamingSIMDExtensions2</EnableEnhancedInstructionSet>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <FloatingPointModel>Fast</FloatingPointModel>
+      <AdditionalOptions> /d2Zi+</AdditionalOptions>
+      <Optimization>MaxSpeed</Optimization>
+      <AdditionalIncludeDirectories>$(CUDA_PATH)/include;$(CUDA_PATH)/extras/cupti/include;./../../..;./../..;./../../../external/SDL2-2.0.4/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>_CONSOLE;WIN32;_CRT_SECURE_NO_WARNINGS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <WarningLevel>Level3</WarningLevel>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <PrecompiledHeaderFile>
+      </PrecompiledHeaderFile>
+    </ClCompile>
+    <Link>
+      <AdditionalOptions>
+      </AdditionalOptions>
+      <AdditionalDependencies>assimp.lib;cudart.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;delayimp.lib;./../../../external/SDL2-2.0.4/lib/x64/SDL2.lib;./../../../external/SDL2-2.0.4/lib/x64/SDL2main.lib;./../../../external/NvToolsExt/lib/x64/nvToolsExt64_1.lib;./../../../lib/win64/NvFlexReleaseCUDA_x64.lib;./../../../lib/win64/NvFlexExtReleaseCUDA_x64.lib;./../../../lib/win64/NvFlexDeviceRelease_x64.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <OutputFile>$(OutDir)NvFlexDemoReleaseCUDA_x64.exe</OutputFile>
+      <AdditionalLibraryDirectories>$(CUDA_PATH)/lib/x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <ProgramDatabaseFile>$(OutDir)/NvFlexDemoReleaseCUDA_x64.exe.pdb</ProgramDatabaseFile>
+      <SubSystem>Console</SubSystem>
+      <ImportLibrary>$(OutDir)$(TargetName).lib</ImportLibrary>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <TargetMachine>MachineX64</TargetMachine>
+    </Link>
+    <ResourceCompile>
+    </ResourceCompile>
+    <ProjectReference>
+    </ProjectReference>
+  </ItemDefinitionGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='debug|x64'">
+    <LocalDebuggerWorkingDirectory>$(OutputPath)</LocalDebuggerWorkingDirectory>
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='release|x64'">
+    <LocalDebuggerWorkingDirectory>$(OutputPath)</LocalDebuggerWorkingDirectory>
+  </PropertyGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\..\core\aabbtree.h" />
+    <ClInclude Include="..\..\..\core\cloth.h" />
+    <ClInclude Include="..\..\..\core\convex.h" />
+    <ClInclude Include="..\..\..\core\core.h" />
+    <ClInclude Include="..\..\..\core\extrude.h" />
+    <ClInclude Include="..\..\..\core\mat22.h" />
+    <ClInclude Include="..\..\..\core\mat33.h" />
+    <ClInclude Include="..\..\..\core\mat44.h" />
+    <ClInclude Include="..\..\..\core\maths.h" />
+    <ClInclude Include="..\..\..\core\matnn.h" />
+    <ClInclude Include="..\..\..\core\mesh.h" />
+    <ClInclude Include="..\..\..\core\perlin.h" />
+    <ClInclude Include="..\..\..\core\pfm.h" />
+    <ClInclude Include="..\..\..\core\platform.h" />
+    <ClInclude Include="..\..\..\core\png.h" />
+    <ClInclude Include="..\..\..\core\point3.h" />
+    <ClInclude Include="..\..\..\core\quat.h" />
+    <ClInclude Include="..\..\..\core\sdf.h" />
+    <ClInclude Include="..\..\..\core\tga.h" />
+    <ClInclude Include="..\..\..\core\types.h" />
+    <ClInclude Include="..\..\..\core\vec2.h" />
+    <ClInclude Include="..\..\..\core\vec3.h" />
+    <ClInclude Include="..\..\..\core\vec4.h" />
+    <ClInclude Include="..\..\..\core\voxelize.h" />
+    <ClInclude Include="..\..\..\include\NvFlex.h" />
+    <ClInclude Include="..\..\..\include\NvFlexDevice.h" />
+    <ClInclude Include="..\..\..\include\NvFlexExt.h" />
+    <ClInclude Include="..\..\..\opengl\demoContextOGL.h" />
+    <ClInclude Include="..\..\..\opengl\imguiRenderGL.h" />
+    <ClInclude Include="..\..\..\opengl\shader.h" />
+    <ClInclude Include="..\..\..\opengl\utilsGL.h" />
+    <ClInclude Include="..\..\..\source\benchmark.h" />
+    <ClInclude Include="..\..\..\source\ColorGradient.h" />
+    <ClInclude Include="..\..\..\source\demoContext.h" />
+    <ClInclude Include="..\..\..\source\helpers.h" />
+    <ClInclude Include="..\..\..\source\hydrographic.h" />
+    <ClInclude Include="..\..\..\source\imgui.h" />
+    <ClInclude Include="..\..\..\source\main.h" />
+    <ClInclude Include="..\..\..\source\scenes.h" />
+    <ClInclude Include="..\..\..\source\shaders.h" />
+    <ClInclude Include="..\..\..\source\shadersDemoContext.h" />
+    <ClInclude Include="..\..\..\source\stb_image.h" />
+    <ClInclude Include="..\..\..\source\stb_image_write.h" />
+    <ClInclude Include="..\..\..\source\stb_truetype.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\..\core\aabbtree.cpp" />
+    <ClCompile Include="..\..\..\core\core.cpp" />
+    <ClCompile Include="..\..\..\core\extrude.cpp" />
+    <ClCompile Include="..\..\..\core\maths.cpp" />
+    <ClCompile Include="..\..\..\core\mesh.cpp" />
+    <ClCompile Include="..\..\..\core\perlin.cpp" />
+    <ClCompile Include="..\..\..\core\pfm.cpp" />
+    <ClCompile Include="..\..\..\core\platform.cpp" />
+    <ClCompile Include="..\..\..\core\png.cpp" />
+    <ClCompile Include="..\..\..\core\sdf.cpp" />
+    <ClCompile Include="..\..\..\core\tga.cpp" />
+    <ClCompile Include="..\..\..\core\voxelize.cpp" />
+    <ClCompile Include="..\..\..\opengl\imguiRenderGL.cpp" />
+    <ClCompile Include="..\..\..\opengl\shader.cpp" />
+    <ClCompile Include="..\..\..\opengl\shadersGL.cpp" />
+    <ClCompile Include="..\..\..\source\imgui.cpp" />
+    <ClCompile Include="..\..\..\source\main.cpp" />
+    <ClCompile Include="..\..\..\source\shadersDemoContext.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\..\shaders\displacements.fs">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|x64'">true</ExcludedFromBuild>
+    </None>
+    <None Include="..\..\..\shaders\displacements.vs">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|x64'">true</ExcludedFromBuild>
+    </None>
+    <None Include="..\..\..\shaders\film.fs">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|x64'">true</ExcludedFromBuild>
+    </None>
+    <None Include="..\..\..\shaders\film.vs">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|x64'">true</ExcludedFromBuild>
+    </None>
+    <None Include="..\..\..\shaders\rigid.fs">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|x64'">true</ExcludedFromBuild>
+    </None>
+    <None Include="..\..\..\shaders\rigid.vs">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|x64'">true</ExcludedFromBuild>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\extensions\compiler\vc14win64\flexExtCUDA.vcxproj">
+      <Project>{fd4c9c06-7bec-cdf8-c631-cd32a428a280}</Project>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets" />
+</Project>
