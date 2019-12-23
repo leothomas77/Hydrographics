@@ -284,7 +284,7 @@ public:
 		cudaMemcpy(d_velocities, &g_displacement_buffers->velocities[0], g_displacement_buffers->velocities.size() * sizeof(Vec3), cudaMemcpyHostToDevice);
 		cudaMemcpy(d_originalPositions, &g_displacement_buffers->positions[0], g_displacement_buffers->originalPositions.size() * sizeof(Vec4), cudaMemcpyHostToDevice);
 
-		UpdateDisplacements(1, g_buffers->positions.size(), epsilon,
+		UpdateDisplacements(g_buffers->positions.size(), 1, epsilon,
 			displacementThreshold,
 			displacementFactor,
 			gridY,
@@ -293,7 +293,13 @@ public:
 			d_originalPositions
 		);
 
+		cudaMemcpy(&g_displacement_buffers->positions[0], d_positions, g_displacement_buffers->positions.size() * sizeof(Vec4), cudaMemcpyDeviceToHost);
+		cudaMemcpy(&g_displacement_buffers->velocities[0], d_velocities, g_displacement_buffers->velocities.size() * sizeof(Vec3), cudaMemcpyDeviceToHost);
+		// cudaMemcpy(&g_displacement_buffers->positions[0], d_originalPositions, g_displacement_buffers->originalPositions.size() * sizeof(Vec4), cudaMemcpyHostToDevice);
 
+		cudaFree(d_positions);
+		cudaFree(d_velocities);
+		cudaFree(d_originalPositions);
 
 		if (0)
 		{

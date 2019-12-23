@@ -229,7 +229,12 @@ void UpdateDisplacements(int kNumBlocks, int kNumThreadsPerBlock, float epsilon,
 	float gridY, Vec4* positions, Vec3* velocities,
 	Vec4* originalPositions)
 {
-	UpdateDisplacements <<<kNumBlocks, kNumThreadsPerBlock>>>
+	// setup execution parameters
+	dim3 block(kNumThreadsPerBlock, 1, 1);
+	dim3 grid(kNumBlocks / block.x, 1, 1);
+
+	// execute the kernel
+	UpdateDisplacements <<<grid, block>>>
 		(
 		epsilon, 
 		displacementThreshold, 

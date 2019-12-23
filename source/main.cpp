@@ -652,7 +652,7 @@ void RenderSceneV2()
   SetFillMode(g_wireframe);
   DrawGpuMeshV2(g_gpu_mesh, modelMatrix);
 
-  if (1) // draw film
+  if (0) // draw film
   {
     BindFilmShader(g_view, g_proj, g_lightPos, g_camPos, lightColor, ambientColor, specularColor, specularExpoent, diffuseColor, showTexture);
     SetCullMode(false);
@@ -660,7 +660,7 @@ void RenderSceneV2()
     DrawHydrographicV2(g_film_mesh, &g_buffers->positions[0], &g_buffers->normals[0], &g_buffers->uvs[0], &g_buffers->triangles[0], g_buffers->triangles.size(), g_buffers->positions.size());
   }
 
-  if (0)
+  if (1)
   {
     BindFilmShader(g_view, g_proj, g_lightPos, g_camPos, lightColor, ambientColor, specularColor, specularExpoent, diffuseColor, showTexture);
     SetCullMode(false);
