@@ -144,10 +144,30 @@ __global__ void UpdateForceFields(int numParticles, const Vec4* __restrict__ pos
 	}
 }
 
-__global__ void UpdateDisplacements()
+__global__ void UpdateDisplacements(float epsilon, float displacementThreshold, 
+	float displacementFactor, float gridY, Vec4* positions,
+	Vec3* velocities, const Vec4* originalPositions)
 {
 	const int i = blockIdx.x*blockDim.x + threadIdx.x;
-	//parei aqui
+
+	Vec4 originalPos = originalPositions[i];
+	Vec4 displacedPos = positions[i];
+	float dipping = fabs(positions[i].y - gridY);
+	float displacement = Length(originalPos - displacedPos);
+	if (dipping <= epsilon && displacement > displacementThreshold) // particle is not yet dipped
+	{
+		//track position
+		Vec3 gradient = (originalPos - displacedPos) / displacement;
+		Vec3 predictedPosition = displacementFactor * displacement * gradient;
+		positions[i].x += predictedPosition.x;
+		positions[i].y += predictedPosition.y;
+		positions[i].z += predictedPosition.z;
+	}
+	else {
+		velocities[i] = Vec3(0.0f, 0.0f, 0.0f);
+	}
+
+
 }
 
 
@@ -204,7 +224,19 @@ void NvFlexExtSetForceFields(NvFlexExtForceFieldCallback* c, const NvFlexExtForc
 	NvFlexRegisterSolverCallback(c->mSolver, callback, eNvFlexStageUpdateEnd);
 }
 
-void UpdateDisplacements(int kNumBlocks, int kNumThreadsPerBlock) 
+void UpdateDisplacements(int kNumBlocks, int kNumThreadsPerBlock, float epsilon, 
+	float displacementThreshold, float displacementFactor, 
+	float gridY, Vec4* positions, Vec3* velocities,
+	Vec4* originalPositions)
 {
-	UpdateDisplacements <<<kNumBlocks, kNumThreadsPerBlock>>>();
+	UpdateDisplacements <<<kNumBlocks, kNumThreadsPerBlock>>>
+		(
+		epsilon, 
+		displacementThreshold, 
+		displacementFactor, 
+		gridY, 
+		positions, 
+		velocities, 
+		originalPositions
+		);
 }

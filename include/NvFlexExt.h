@@ -38,7 +38,9 @@
 #include <cassert>
 #include <cstddef>
 
-// A vector type that wraps a NvFlexBuffer, behaves like a standard vector for POD types (no construction)
+#include "../core/maths.h" // parei aqui
+
+ // A vector type that wraps a NvFlexBuffer, behaves like a standard vector for POD types (no construction)
 // The vector must be mapped using map() before any read/write access to elements or resize operation
 
 template <typename T>
@@ -814,7 +816,9 @@ NV_FLEX_API void NvFlexExtDestroySoftJoint(NvFlexExtContainer* container, NvFlex
 */
 NV_FLEX_API void NvFlexExtSoftJointSetTransform(NvFlexExtContainer* container, NvFlexExtSoftJoint* joint, const float* position, const float* rotation);
 
-NV_FLEX_API void UpdateDisplacements(int kNumBlocks, int kNumThreadsPerBlock);
+NV_FLEX_API void UpdateDisplacements(int kNumBlocks, int kNumThreadsPerBlock, float epsilon, float displacementThreshold,
+	float displacementFactor, float gridY, Vec4* positions,
+	Vec3* velocities, Vec4* originalPositions);
 
 
 } // extern "C"

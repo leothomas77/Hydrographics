@@ -267,34 +267,57 @@ public:
 
 #ifdef TRACK_DISPLACEMENTS
 
-	UpdateDisplacements(1, 100);
 
     float epsilon = 0.0f;
     float displacementThreshold = 0.01f;
     float displacementFactor = 1.0f;
     if (lower.y <= gridY && !g_pause)  // is dipping
     {
+		Vec4* d_positions;
+		Vec4* d_originalPositions;
+		Vec3* d_velocities;
+		cudaMalloc(&d_positions, g_buffers->positions.size() * sizeof(Vec4));
+		cudaMalloc(&d_velocities, g_buffers->positions.size() * sizeof(Vec3));
+		cudaMalloc(&d_originalPositions, g_buffers->positions.size() * sizeof(Vec4));
 
-      for (int i = 0; i < g_buffers->positions.size(); i++)
-      {
-        Vec3 originalPos = originalPositions[i];
-        Vec3 displacedPos = Vec3(g_buffers->positions[i]);
-        float dipping = fabs(g_buffers->positions[i].y - gridY);
-        displacements[i] = Length(originalPos - displacedPos);
-        if (dipping <= epsilon && displacements[i] > displacementThreshold) // particle is not yet dipped
-        {
-          //track position
-          Vec3 gradient = (originalPos - displacedPos) / displacements[i];
-          Vec3 predictedPosition = displacementFactor * displacements[i] * gradient;
-          g_displacement_buffers->positions[i].x += predictedPosition.x;
-          g_displacement_buffers->positions[i].y += predictedPosition.y;
-          g_displacement_buffers->positions[i].z += predictedPosition.z;
-          //g_displacement_buffers->velocities[i] = (originalPos - displacedPos) / g_dt;
-        }
-        else {
-          g_displacement_buffers->velocities[i] = Vec3(0.0f, 0.0f, 0.0f);
-        }
-      }
+		cudaMemcpy(d_positions, &g_displacement_buffers->positions[0], g_displacement_buffers->positions.size() * sizeof(Vec4), cudaMemcpyHostToDevice);
+		cudaMemcpy(d_velocities, &g_displacement_buffers->velocities[0], g_displacement_buffers->velocities.size() * sizeof(Vec3), cudaMemcpyHostToDevice);
+		cudaMemcpy(d_originalPositions, &g_displacement_buffers->positions[0], g_displacement_buffers->originalPositions.size() * sizeof(Vec4), cudaMemcpyHostToDevice);
+
+		UpdateDisplacements(1, g_buffers->positions.size(), epsilon,
+			displacementThreshold,
+			displacementFactor,
+			gridY,
+			d_positions,
+			d_velocities,
+			d_originalPositions
+		);
+
+
+
+		if (0)
+		{
+		  for (int i = 0; i < g_buffers->positions.size(); i++)
+		  {
+			Vec3 originalPos = g_displacement_buffers->originalPositions[i];
+			Vec3 displacedPos = Vec3(g_buffers->positions[i]);
+			float dipping = fabs(g_buffers->positions[i].y - gridY);
+			displacements[i] = Length(originalPos - displacedPos);
+			if (dipping <= epsilon && displacements[i] > displacementThreshold) // particle is not yet dipped
+			{
+			  //track position
+			  Vec3 gradient = (originalPos - displacedPos) / displacements[i];
+			  Vec3 predictedPosition = displacementFactor * displacements[i] * gradient;
+			  g_displacement_buffers->positions[i].x += predictedPosition.x;
+			  g_displacement_buffers->positions[i].y += predictedPosition.y;
+			  g_displacement_buffers->positions[i].z += predictedPosition.z;
+			  //g_displacement_buffers->velocities[i] = (originalPos - displacedPos) / g_dt;
+			}
+			else {
+			  g_displacement_buffers->velocities[i] = Vec3(0.0f, 0.0f, 0.0f);
+			}
+		  }
+		}
     }
 #endif
 

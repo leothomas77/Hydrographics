@@ -89,6 +89,9 @@ struct SimBuffers
 	NvFlexVector<int> activeIndices;
 	NvFlexVector<int> diffuseCount;
 
+	NvFlexVector<Vec4>  originalPositions;	// for compute displacement heatmap
+
+
 	// convexes
 	NvFlexVector<NvFlexCollisionGeometry> shapeGeometry;
 	NvFlexVector<Vec4> shapePositions;
@@ -107,6 +110,7 @@ struct SimBuffers
 
 	SimBuffers(NvFlexLibrary* l) :
 		positions(l), restPositions(l), velocities(l), phases(l), normals(l), activeIndices(l), diffuseCount(l),
+		originalPositions(l),
 		shapeGeometry(l), shapePositions(l), shapeRotations(l),
 		shapePrevPositions(l), shapePrevRotations(l), shapeFlags(l),
 		springIndices(l), springLengths(l), springStiffness(l),
@@ -131,6 +135,9 @@ void MapBuffers(SimBuffers* buffers)
 	buffers->normals.map();
 	buffers->activeIndices.map();
 	buffers->diffuseCount.map();
+
+	buffers->originalPositions.map();
+
 	// convexes
 	buffers->shapeGeometry.map();
 	buffers->shapePositions.map();
@@ -158,6 +165,9 @@ void UnmapBuffers(SimBuffers* buffers)
 	buffers->normals.unmap();
 	buffers->activeIndices.unmap();
 	buffers->diffuseCount.unmap();
+
+	buffers->originalPositions.unmap();
+	
 	// convexes
 	buffers->shapeGeometry.unmap();
 	buffers->shapePositions.unmap();
@@ -190,6 +200,9 @@ void DestroyBuffers(SimBuffers* buffers)
 	buffers->normals.destroy();
 	buffers->activeIndices.destroy();
 	buffers->diffuseCount.destroy();
+
+	buffers->originalPositions.destroy();
+	
 	// convexes
 	buffers->shapeGeometry.destroy();
 	buffers->shapePositions.destroy();
@@ -280,7 +293,6 @@ NvFlexSolver* g_displacements_solver;
 // hydrographics
 vector<float> displacements;		// for compute hydrographic distortion
 									//vector<Vec3>  displacedPositions;	// for compute hydrographic distortion
-vector<Vec4>  originalPositions;	// for compute displacement heatmap
 									//vector<bool>  tracking;
 									//std::map<int, float> frameTracking;
 									//bool g_tracking;

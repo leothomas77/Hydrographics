@@ -487,7 +487,7 @@ void CreateHydrographicSpringGrid(Vec3 lower, Vec3 meshCenter, int dx, int dy, i
 				Vec3 position = lower + radius*Vec3(float(x), float(z), float(y));
 #ifdef TRACK_DISPLACEMENTS
 				displacements.push_back(0.0f);
-        originalPositions.push_back(Vec4(position.x, position.y, position.z, 1.0f));
+				g_displacement_buffers->originalPositions.push_back(Vec4(position.x, position.y, position.z, 1.0f));
 #endif
 				if (x == 0 || x == dx - 1) {
 					g_buffers->positions.push_back(Vec4(position.x, position.y, position.z, invMassV));// 0.08f aumenta o arrasto nas bordas

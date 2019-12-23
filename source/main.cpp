@@ -58,6 +58,9 @@
 	#define RENDER_V2
 #endif
 
+// CUDA runtime
+#include <cuda_runtime.h>
+
 #include "main.h"
 
 
@@ -125,7 +128,7 @@ void Init(int scene, bool centerCamera = true)
   //g_displacement_buffers->springStiffness.resize(0);
 
   // for compute hydrographic distortion 
-  originalPositions.resize(0);
+  g_displacement_buffers->originalPositions.resize(0);
   //displacedPositions.resize(0);
   displacements.resize(0);
 #endif
