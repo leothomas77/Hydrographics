@@ -25,7 +25,11 @@
 //
 // Copyright (c) 2013-2016 NVIDIA Corporation. All rights reserved.
 
+// CUDA runtime
+#include <cuda_runtime.h>
+
 #include "sdf.h"
+#include "../include/NvFlexExt.h"
 
 #include <vector>
 #include <float.h>
@@ -206,13 +210,16 @@ void MakeSDF(const uint32_t* img, uint32_t w, uint32_t h, uint32_t d, float* out
 	std::vector<Coord3D> queue;
 
 	// find surface points
-	for (uint32_t z=0; z < d; ++z)
+  //printf("Begin find surface points\n");
+  //double startSDF = GetSeconds();
+  for (uint32_t z=0; z < d; ++z)
 	{
 		for (uint32_t y=0; y < h; ++y)
 		{
 			for (uint32_t x=0; x < w; ++x)
 			{
 				float dist;
+
 				if (EdgeDetect(img, w, h, d, x, y, z, dist))
 				{
 					Coord3D c = {(int)x, (int)y, (int)z, dist, (int)x, (int)y, (int)z};
@@ -223,6 +230,7 @@ void MakeSDF(const uint32_t* img, uint32_t w, uint32_t h, uint32_t d, float* out
 			}
 		}
 	}
+  //printf("Begin find surface points\n", (GetSeconds() - startSDF));
 
 	// no occupied voxels so quit
 	if (queue.empty())
@@ -291,6 +299,105 @@ void MakeSDF(const uint32_t* img, uint32_t w, uint32_t h, uint32_t d, float* out
 }
 
 
+void MakeSDFCUDA(const uint32_t* img, uint32_t w, uint32_t h, uint32_t d, float* output)
+{
+  const float scale = 1.0f / max(max(w, h), d);
+
+  std::vector<Coord3D> queue;
+
+  // find surface points
+  for (uint32_t z = 0; z < d; ++z)
+  {
+    for (uint32_t y = 0; y < h; ++y)
+    {
+      for (uint32_t x = 0; x < w; ++x)
+      {
+        float dist;
+        if (EdgeDetect(img, w, h, d, x, y, z, dist))
+        {
+          Coord3D c = { (int)x, (int)y, (int)z, dist, (int)x, (int)y, (int)z };
+          queue.push_back(c);
+        }
+
+        output[z*w*h + y*w + x] = FLT_MAX;
+      }
+    }
+  }
+
+  // no occupied voxels so quit
+  if (queue.empty())
+    return;
+
+  std::make_heap(queue.begin(), queue.end());
+
+  while (!queue.empty())
+  {
+    std::pop_heap(queue.begin(), queue.end());
+
+    Coord3D c = queue.back();
+    queue.pop_back();
+
+    // freeze coord if not already frozen
+    if (output[c.k*w*h + c.j*w + c.i] == FLT_MAX)
+    {
+      output[c.k*w*h + c.j*w + c.i] = c.d;
+
+      // update neighbours
+      int xmin = max(c.i - 1, 0), xmax = min(c.i + 1, int(w - 1));
+      int ymin = max(c.j - 1, 0), ymax = min(c.j + 1, int(h - 1));
+      int zmin = max(c.k - 1, 0), zmax = min(c.k + 1, int(d - 1));
+
+      for (int z = zmin; z <= zmax; ++z)
+      {
+        for (int y = ymin; y <= ymax; ++y)
+        {
+          for (int x = xmin; x <= xmax; ++x)
+          {
+            if ((c.i != x || c.j != y || c.k != z) && output[z*w*h + y*w + x] == FLT_MAX)
+            {
+              int dx = x - c.si;
+              int dy = y - c.sj;
+              int dz = z - c.sk;
+
+              // calculate distance to source coord
+              float d = sqrtf(float(dx*dx + dy*dy + dz*dz)) + output[c.sk*w*h + c.sj*w + c.si];
+
+              assert(d > 0.0f);
+
+              Coord3D newc = { x, y, z, d, c.si, c.sj, c.sk };
+
+              queue.push_back(newc);
+              std::push_heap(queue.begin(), queue.end());
+            }
+          }
+        }
+      }
+    }
+  }
+
+  float     *d_scale;
+  uint32_t  *d_img;
+  float     *d_output;
+
+  cudaMalloc(&d_scale, sizeof(float));
+  cudaMalloc(&d_img, d * 3 * sizeof(uint32_t));
+  cudaMalloc(&d_output, d * 3 * sizeof(float));
+
+  cudaMemcpy(d_scale, &scale, sizeof(float), cudaMemcpyHostToDevice);
+  cudaMemcpy(d_img, img, d * 3 * sizeof(uint32_t), cudaMemcpyHostToDevice);
+  cudaMemcpy(d_output, output, d * 3 * sizeof(float), cudaMemcpyHostToDevice);
+
+  SDFFlipSignCUDA(d, d_scale, d_img, d_output);
+
+  cudaDeviceSynchronize();
+
+  cudaMemcpy(output, d_output, d * 3 * sizeof(float), cudaMemcpyDeviceToHost);
+
+  cudaFree(d_scale);
+  cudaFree(d_img);
+  cudaFree(d_output);
+
+}
 
 
 /*

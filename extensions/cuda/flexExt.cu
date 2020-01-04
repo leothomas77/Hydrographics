@@ -27,6 +27,7 @@
 
 #include <cuda.h>
 #include <cuda_runtime_api.h>
+#include "cuda.h"
 
 #include <vector>
 #include <limits>
@@ -146,7 +147,8 @@ __global__ void UpdateForceFields(int numParticles, const Vec4* __restrict__ pos
 
 __global__ void UpdateDisplacements(Vec4* pos, Vec4* disp_pos, Vec3* disp_vel, const Vec4* orig_pos)
 {
-	const int i = blockIdx.x*blockDim.x + threadIdx.x;
+
+  const int i = blockIdx.x*blockDim.x + threadIdx.x;
 
 	float epsilon = 0.0f;
 	float displacementThreshold = 0.01f;
@@ -165,12 +167,26 @@ __global__ void UpdateDisplacements(Vec4* pos, Vec4* disp_pos, Vec3* disp_vel, c
 		disp_pos[i].x += predictedPosition.x;
 		disp_pos[i].y += predictedPosition.y;
 		disp_pos[i].z += predictedPosition.z;
+    // active_indices[i]
 	}
 	else {
 		disp_vel[i] = Vec3(0.0f, 0.0f, 0.0f);
 	}
 
 
+}
+
+__global__ void SDFFlipSign(const float* scale, const uint32_t* img, float* output)
+{
+  unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
+  unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+  unsigned int z = blockIdx.z * blockDim.z + threadIdx.z;
+
+  unsigned int i = x + blockDim.y * (y + blockDim.z * z);
+
+  assert(output[i] < FLT_MAX);
+  // flip sign for interior
+  output[i] *= (img[i] ? -1.0f : 1.0f)* (*scale);
 }
 
 
@@ -227,19 +243,21 @@ void NvFlexExtSetForceFields(NvFlexExtForceFieldCallback* c, const NvFlexExtForc
 	NvFlexRegisterSolverCallback(c->mSolver, callback, eNvFlexStageUpdateEnd);
 }
 
-void UpdateDisplacements(int kNumBlocks, int kNumThreadsPerBlock, 
-	Vec4* pos, Vec4* disp_pos, Vec3* disp_vel, Vec4* orig_pos)
+void UpdateDisplacements(int kNumBlocks, int kNumThreadsPerBlock, Vec4* pos, Vec4* disp_pos, Vec3* disp_vel, Vec4* orig_pos)
 {
 	// setup execution parameters
 	dim3 block(kNumThreadsPerBlock, 1, 1);
 	dim3 grid(kNumBlocks / block.x, 1, 1);
 
 	// execute the kernel
-	UpdateDisplacements <<<grid, block>>>
-		(
-		pos,
-		disp_pos,
-		disp_vel, 
-		orig_pos
-		);
+	UpdateDisplacements <<<grid, block>>>(pos, disp_pos, disp_vel, orig_pos);
+}
+
+void SDFFlipSignCUDA(const unsigned int dim, const float* scale, const uint32_t* img, float* output)
+{
+  // setup execution parameters
+  dim3 block(1, 1, 1);      // threads
+  dim3 grid(dim, dim, dim); //
+  //execute the kernel
+  SDFFlipSign <<<grid, block>>>(scale, img, output);
 }

@@ -24,6 +24,12 @@
 // NVIDIA Corporation.
 //
 // Copyright (c) 2013-2017 NVIDIA Corporation. All rights reserved.
+#ifndef TRACK_DISPLACEMENTS
+  #define TRACK_DISPLACEMENTS
+#endif
+#ifndef RENDER_V2
+  #define RENDER_V2
+#endif
 
 #include "../core/types.h"
 #include "../core/maths.h"
@@ -45,31 +51,20 @@
 
 #include <iostream>
 #include <map>
+#include <cuda_runtime.h>
 
 #include "shaders.h"
 #include "imgui.h"
 #include "shadersDemoContext.h"
-#include "ColorGradient.h"
+//#include "ColorGradient.h"
 
-#ifndef TRACK_DISPLACEMENTS
-	#define TRACK_DISPLACEMENTS
-#endif
-#ifndef RENDER_V2
-	#define RENDER_V2
-#endif
-
-// CUDA runtime
-#include <cuda_runtime.h>
 
 #include "main.h"
-
-
-
-using namespace std;
-
 #include "helpers.h"
 #include "../source/scenes.h"
 #include "benchmark.h"
+
+using namespace std;
 
 void Init(int scene, bool centerCamera = true)
 {
@@ -194,6 +189,13 @@ void Init(int scene, bool centerCamera = true)
 	//g_ior = 1.0f;
 	g_lightDistance = 2.0f;
 	g_fogDistance = 0.005f;
+
+  Vec3 perspectiveCam = Vec3(6.0f, 8.0f, 18.0f);
+  g_camPos.resize(0);
+  g_camPos.push_back(perspectiveCam);
+  g_camIndex = g_camPos.size() - 1;
+
+  g_camAngle.push_back(Vec3(0.0f, -DegToRad(20.0f), 0.0f));
 
 	g_camSpeed = 0.05f;//0.075f;
 	g_camNear = 0.01f;
@@ -417,8 +419,8 @@ void Init(int scene, bool centerCamera = true)
 	// center camera on particles
 	if (centerCamera)
 	{
-		g_camPos = Vec3((g_sceneLower.x + g_sceneUpper.x)*0.5f, min(g_sceneUpper.y*1.25f, 6.0f), g_sceneUpper.z + min(g_sceneUpper.y, 6.0f)*2.0f);
-		g_camAngle = Vec3(0.0f, -DegToRad(15.0f), 0.0f);
+		g_camPos[g_camIndex] = Vec3((g_sceneLower.x + g_sceneUpper.x)*0.5f, min(g_sceneUpper.y*1.25f, 6.0f), g_sceneUpper.z + min(g_sceneUpper.y, 6.0f)*2.0f);
+		g_camAngle[g_camIndex] = Vec3(0.0f, -DegToRad(15.0f), 0.0f);
 
 		// give scene a chance to modify camera position
 		g_scenes[g_scene]->CenterCamera();
@@ -608,11 +610,11 @@ void Shutdown()
 
 void UpdateCamera()
 {
-	Vec3 forward(-sinf(g_camAngle.x)*cosf(g_camAngle.y), sinf(g_camAngle.y), -cosf(g_camAngle.x)*cosf(g_camAngle.y));
+	Vec3 forward(-sinf(g_camAngle[g_camIndex].x)*cosf(g_camAngle[g_camIndex].y), sinf(g_camAngle[g_camIndex].y), -cosf(g_camAngle[g_camIndex].x)*cosf(g_camAngle[g_camIndex].y));
 	Vec3 right(Normalize(Cross(forward, Vec3(0.0f, 1.0f, 0.0f))));
 
 	g_camSmoothVel = Lerp(g_camSmoothVel, g_camVel, 0.1f);
-	g_camPos += (forward*g_camSmoothVel.z + right*g_camSmoothVel.x + Cross(right, forward)*g_camSmoothVel.y);
+	g_camPos[g_camIndex] += (forward*g_camSmoothVel.z + right*g_camSmoothVel.x + Cross(right, forward)*g_camSmoothVel.y);
 }
 
 void SyncScene()
@@ -633,16 +635,16 @@ void RenderSceneV2()
   float aspect = float(g_screenWidth) / g_screenHeight;
 
   g_proj = ProjectionMatrix(RadToDeg(fov), aspect, g_camNear, g_camFar);
-  g_view = RotationMatrix(-g_camAngle.x, Vec3(0.0f, 1.0f, 0.0f))*RotationMatrix(-g_camAngle.y, Vec3(cosf(-g_camAngle.x), 0.0f, sinf(-g_camAngle.x)))*TranslationMatrix(-Point3(g_camPos));
+  g_view = RotationMatrix(-g_camAngle[g_camIndex].x, Vec3(0.0f, 1.0f, 0.0f))*RotationMatrix(-g_camAngle[g_camIndex].y, Vec3(cosf(-g_camAngle[g_camIndex].x), 0.0f, sinf(-g_camAngle[g_camIndex].x)))*TranslationMatrix(-Point3(g_camPos[g_camIndex]));
 
-  g_lightPos = g_camPos + g_lightDir * g_lightDistance;
+  g_lightPos = Vec3(0.0f, -10.0f, 0.0f);//g_camPos;// +g_lightDir * g_lightDistance;
   Vec4 lightColor = Vec4(1.0f, 1.0f, 1.0f, 1.0f);
   Vec4 ambientColor = Vec4(0.15f, 0.15f, 0.15f, 1.0f);
   Vec4 diffuseColor = Vec4(1.0f, 1.0f, 1.0f, 1.0f);
   Vec4 specularColor = Vec4(1.0f, 1.0f, 1.0f, 1.0f);
   unsigned int specularExpoent = 40;
   bool showTexture = true;
-  BindSolidShaderV2(g_view, g_proj, g_lightPos, g_camPos, lightColor, ambientColor, specularColor, specularExpoent, diffuseColor, showTexture);
+  BindSolidShaderV2(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], lightColor, ambientColor, specularColor, specularExpoent, diffuseColor, showTexture);
   int i = 0; // rigid shape index
   const Quat rotation = g_buffers->shapePrevRotations[i];
   const Vec3 position = Vec3(g_buffers->shapePrevPositions[i]);
@@ -652,17 +654,17 @@ void RenderSceneV2()
   SetFillMode(g_wireframe);
   DrawGpuMeshV2(g_gpu_mesh, modelMatrix);
 
-  if (0) // draw film
+  if (1) // draw film
   {
-    BindFilmShader(g_view, g_proj, g_lightPos, g_camPos, lightColor, ambientColor, specularColor, specularExpoent, diffuseColor, showTexture);
+    BindFilmShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], lightColor, ambientColor, specularColor, specularExpoent, diffuseColor, showTexture);
     SetCullMode(false);
     //EnableTexture(GetHydrographicTextureId());
     DrawHydrographicV2(g_film_mesh, &g_buffers->positions[0], &g_buffers->normals[0], &g_buffers->uvs[0], &g_buffers->triangles[0], g_buffers->triangles.size(), g_buffers->positions.size());
   }
 
-  if (1)
+  if (0)
   {
-    BindFilmShader(g_view, g_proj, g_lightPos, g_camPos, lightColor, ambientColor, specularColor, specularExpoent, diffuseColor, showTexture);
+    BindFilmShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], lightColor, ambientColor, specularColor, specularExpoent, diffuseColor, showTexture);
     SetCullMode(false);
     //EnableTexture(GetHydrographicTextureId());
     DrawHydrographicV2(g_film_mesh, &g_displacement_buffers->positions[0], &g_displacement_buffers->normals[0], &g_buffers->uvs[0], &g_buffers->triangles[0], g_buffers->triangles.size(), g_displacement_buffers->positions.size());
@@ -679,7 +681,7 @@ void RenderDisplacements()
   float aspect = float(g_screenWidth) / g_screenHeight;
 
   Matrix44 proj = ProjectionMatrix(RadToDeg(fov), aspect, g_camNear, g_camFar);
-  Matrix44 view = RotationMatrix(-g_camAngle.x, Vec3(0.0f, 1.0f, 0.0f))*RotationMatrix(-g_camAngle.y, Vec3(cosf(-g_camAngle.x), 0.0f, sinf(-g_camAngle.x)))*TranslationMatrix(-Point3(g_camPos));
+  Matrix44 view = RotationMatrix(-g_camAngle[g_camIndex].x, Vec3(0.0f, 1.0f, 0.0f))*RotationMatrix(-g_camAngle[g_camIndex].y, Vec3(cosf(-g_camAngle[g_camIndex].x), 0.0f, sinf(-g_camAngle[g_camIndex].x)))*TranslationMatrix(-Point3(g_camPos[g_camIndex]));
 
   BindDisplacementsShader(view, proj, Vec3(0.0f), Vec3(0.0f));
   //EnableDisplacementsTexture();
@@ -722,7 +724,7 @@ void RenderDebug()
     //BeginPoints(5.0f);
 		int start = 0;
 
-		ColorGradient *colorGradient = new ColorGradient();
+		//ColorGradient *colorGradient = new ColorGradient();
 
 		std::vector<Vec4> pixels;
 
@@ -796,8 +798,63 @@ void RenderDebug()
 		EndLines();
 	}
 
+  if (g_drawNeighbors)
+  {
+    NvFlexVector<int> neighbors(g_flexLib, g_solverDesc.maxParticles * g_solverDesc.maxNeighborsPerParticle);
+    NvFlexVector<int> neighborCounts(g_flexLib, g_solverDesc.maxParticles);
+    NvFlexVector<int> apiToInternal(g_flexLib, g_solverDesc.maxParticles);
+    NvFlexVector<int> internalToApi(g_flexLib, g_solverDesc.maxParticles);
+
+    NvFlexGetNeighbors(g_solver, neighbors.buffer, neighborCounts.buffer, apiToInternal.buffer, internalToApi.buffer);
+    // neighbors are stored in a strided format so that the first neighbor
+    // of each particle is stored sequentially, then the second, and so on
+
+    neighbors.map();
+    neighborCounts.map();
+    apiToInternal.map();
+    internalToApi.map();
+
+    int stride = g_solverDesc.maxParticles;
+
+    BeginLines();
+    Vec4 redColor = Vec4(1.0f, 0.0f, 0.0f, 1.0f);
+    Vec4 yellowColor = Vec4(1.0f, 1.0f, 0.0f, 1.0f);
+    //DrawLine(Vec3(0.0f), Vec3(0.0f) + Vec3(0.0f, 1.0f, 0.0f)* 0.1f ,yellowColor);
+
+
+    for (int i = 0; i < int(g_buffers->positions.size()); ++i)
+    {
+      // find offset in the neighbors buffer
+      int offset = apiToInternal[i];
+      int count = neighborCounts[offset];
+
+      for (int c = 0; c < count; ++c)
+      {
+        int neighbor = internalToApi[neighbors[c*stride + offset]];
+
+        Vec3 particle = Vec3(g_buffers->positions[i]);
+        //Vec3 normal = Vec3(g_buffers->normals[i]);
+
+        Vec3 particleNeighbor = Vec3(g_buffers->positions[neighbor]);
+        //Vec3 neighborNormal = Vec3(g_buffers->normals[neighbor]);
+
+        DrawLine(particle, particleNeighbor, redColor);
+
+        //DrawLine(particleNeighbor, particleNeighbor + normal * 0.05f, yellowColor);
+
+        //printf("Particle %d's neighbor %d is particle %d\n", i, c, neighbor);
+      }
+    }
+    neighbors.destroy();
+    neighborCounts.destroy();
+    apiToInternal.destroy();
+    internalToApi.destroy();
+
+    EndLines();
+  }
+
 #ifdef TRACK_DISPLACEMENTS
-	if (g_drawDisplacements)
+	if (g_drawDisplacements && false)
   {
     BeginPoints(2.0f);
     Vec4 color = Vec4(0.0f, 1.0f, 0.0f, 0.8f);
@@ -1238,8 +1295,8 @@ void UpdateFrame(bool &quit)
 			g_camVel.x = 4 * g_camSpeed * leftStick.x;
 
 			// cam orientation
-			g_camAngle.x -= rightStick.x * 0.05f;
-			g_camAngle.y -= rightStick.y * 0.05f;
+			g_camAngle[g_camIndex].x -= rightStick.x * 0.05f;
+			g_camAngle[g_camIndex].y -= rightStick.y * 0.05f;
 		}
 
 		// Handle left stick motion
@@ -1706,6 +1763,12 @@ bool InputKeyboardDown(unsigned char key, int x, int y)
 {
 	if (key > '0' && key <= '9')
 	{
+    if ((key - '0' - 1) >= g_scenes.size())
+    {
+      cout << "Scene index not exists";
+      return false;
+    }
+
 		g_scene = key - '0' - 1;
 		Init(g_scene);
 		return false;
@@ -1816,14 +1879,19 @@ bool InputKeyboardDown(unsigned char key, int x, int y)
 #endif
 		break;
 	}
-	case 'p':
+  case 'n':
+  {
+    g_drawNeighbors = !g_drawNeighbors;
+    break;
+  }
+  case 'o':
+  {
+    g_step = true;
+    break;
+  }
+  case 'p':
 	{
 		g_pause = !g_pause;
-		break;
-	}
-	case 'o':
-	{
-		g_step = true;
 		break;
 	}
 	case 'h':
@@ -1843,10 +1911,18 @@ bool InputKeyboardDown(unsigned char key, int x, int y)
 	}
 	case 'l':
 	{
-		g_camPos = Vec3(g_meshCenter.x, -2.4f, g_meshCenter.z);
-		g_camAngle = Vec3(0.0f, DegToRad(90.0f), 0.0f);
-		g_lightDir = Normalize(Vec3(5.0f, -15.0f, 7.5f));
-		g_centerLight = false;
+    if (g_camIndex < g_camPos.size() - 1)
+    {
+      g_camIndex++;
+    } 
+    else
+    {
+      g_camIndex = 0; // to perspective cam
+    }
+		//g_camPos = Vec3(g_meshCenter.x, -2.4f, g_meshCenter.z);
+		//g_camAngle = Vec3(0.0f, DegToRad(90.0f), 0.0f);
+		//g_lightDir = Normalize(Vec3(5.0f, -15.0f, 7.5f));
+		//g_centerLight = false;
 		break;
 	}
 	case 'm':
@@ -1970,8 +2046,8 @@ void MouseMotionFunc(unsigned state, int x, int y)
 		const float kSensitivity = DegToRad(0.1f);
 		const float kMaxDelta = FLT_MAX;
 
-		g_camAngle.x -= Clamp(dx*kSensitivity, -kMaxDelta, kMaxDelta);
-		g_camAngle.y -= Clamp(dy*kSensitivity, -kMaxDelta, kMaxDelta);
+		g_camAngle[g_camIndex].x -= Clamp(dx*kSensitivity, -kMaxDelta, kMaxDelta);
+		g_camAngle[g_camIndex].y -= Clamp(dy*kSensitivity, -kMaxDelta, kMaxDelta);
 	}
 }
 

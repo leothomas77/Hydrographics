@@ -139,6 +139,8 @@ void CreateSDF(const Mesh* mesh, uint32_t dim, Vec3 lower, Vec3 upper, float* sd
 
 		MakeSDF(volume, dim, dim, dim, sdf);
 
+    //MakeSDFCUDA(volume, dim, dim, dim, sdf); // not so performatic
+
 		printf("End SDF gen (%.2fs)\n", (GetSeconds()-startSDF));
 	
 		delete[] volume;

@@ -38,7 +38,7 @@
 #include <cassert>
 #include <cstddef>
 
-#include "../core/maths.h" // parei aqui
+#include "../core/maths.h" 
 
  // A vector type that wraps a NvFlexBuffer, behaves like a standard vector for POD types (no construction)
 // The vector must be mapped using map() before any read/write access to elements or resize operation
@@ -816,9 +816,9 @@ NV_FLEX_API void NvFlexExtDestroySoftJoint(NvFlexExtContainer* container, NvFlex
 */
 NV_FLEX_API void NvFlexExtSoftJointSetTransform(NvFlexExtContainer* container, NvFlexExtSoftJoint* joint, const float* position, const float* rotation);
 
-NV_FLEX_API void UpdateDisplacements(int kNumBlocks, int kNumThreadsPerBlock,
-	Vec4* pos, Vec4* disp_pos, Vec3* disp_vel, Vec4* orig_pos);
+NV_FLEX_API void UpdateDisplacements(int kNumBlocks, int kNumThreadsPerBlock, Vec4* pos, Vec4* disp_pos, Vec3* disp_vel, Vec4* orig_pos);
 
+NV_FLEX_API void SDFFlipSignCUDA(const unsigned int dim, const float* scale, const uint32_t* img, float* output);
 
 } // extern "C"
 

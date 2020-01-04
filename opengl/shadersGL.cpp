@@ -230,12 +230,17 @@ GLuint LoadTexture(const char* filename)
         glVerify(glActiveTexture(GL_TEXTURE0));
         glVerify(glBindTexture(GL_TEXTURE_2D, tex));
 
+        glTexStorage2D(GL_TEXTURE_2D, 2 /* mip map levels */, GL_RGB8, img.m_width, img.m_height);
+        glTexSubImage2D(GL_TEXTURE_2D, 0 /* mip map level */, 0 /* xoffset */, 0 /* yoffset */, img.m_width, img.m_height, GL_RGBA, GL_UNSIGNED_BYTE, img.m_data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+
+
         glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR));
         glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR));
         glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT));
         glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT));
-        glVerify(glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, GL_TRUE));
-        glVerify(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img.m_width, img.m_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, img.m_data));
+        //glVerify(glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, GL_TRUE));
+        //glVerify(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img.m_width, img.m_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, img.m_data));
 
         PngFree(img);
 
@@ -3428,6 +3433,8 @@ void createVBOs(const aiScene *scene, GpuMesh* gpu_mesh, std::string basePath, M
   mesh->Transform(transformation);
   mesh->Normalize(1.0f - margin);
   mesh->Transform(TranslationMatrix(Point3(margin, margin, margin)*0.5f));
+
+
 
   glGenBuffers(1, &gpu_mesh->mPositionsVBO);
   glBindBuffer(GL_ARRAY_BUFFER, gpu_mesh->mPositionsVBO);

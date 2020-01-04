@@ -54,7 +54,7 @@ public:
 		  ModelData tetra = ModelData("../../data/tetrahedron2.obj", Vec3(0.0f, 0.0f, 0.0f), 0.216f, Vec3(0.0f, 90.0f, 0.0f));//fator escala medido 0.216
       ModelData sphere = ModelData("../../data/sphere.obj", Vec3(0.0f, 0.0f, 0.0f), 0.17f, Vec3(0.0f)); //.17
       ModelData turtle = ModelData("../../data/tartaruga_centro.obj", Vec3(0.0f, 0.0f, 0.0f), 0.125f, Vec3(0.0f, -95.5f, 0.0f)); //fator escala fixa medida 0.14
-      ModelData onca = ModelData("../../data/Onca_Poisson_15_16_0.obj", Vec3(0.0f, 0.0f, 0.0f), 0.125f, Vec3(0.0f, -95.5f, 0.0f)); //fator escala fixa medida 0.14
+      ModelData onca = ModelData("../../data/Onca_Poisson_15_16_0.obj", Vec3(0.0f, -1.8f, 0.0f), 0.125f, Vec3(0.0f, 0.0f, 0.0f)); //fator escala fixa medida 0.14
       ModelData bunny = ModelData("../../data/bunny.obj", Vec3(0.0f, 0.0f, 0.0f), 0.125f, Vec3(0.0f, -95.5f, 0.0f)); //fator escala fixa medida 0.14
 
     //modelos alinhados - NÃO REMOVER                                                                                                                                 //modelos alinhados trasladados
@@ -83,7 +83,7 @@ public:
     g_fps = 0.0f;
     g_frame = 0;
 		//float stretchStiffness = 1.0f; // default tartaruga esfera tetra
-    float stretchStiffness = 0.15f; // onca //parei aqui
+    float stretchStiffness = 0.5f; // onca 
     float bendStiffness = 0.75f; // not used
 		float shearStiffness = 0.5f; // not used
 		verticalInvMass = 1.0f;
@@ -126,7 +126,7 @@ public:
 		// general params
     float radius = 0.012f;
 		g_params.radius = radius;//0.012f;   //radius*1.0f; // raio max de interação entre partículas
-    g_params.numIterations = 1; // onca
+    g_params.numIterations = 3; // onca
     g_numSubsteps = 2;
     //g_params.numIterations = 5; // iteracoes pbd default
 
@@ -221,8 +221,8 @@ public:
 
 		gridPosition.x += g_meshCenter.x + models[selectedModel].translation.x;
 		gridPosition.z += g_meshCenter.z + models[selectedModel].translation.z;
-    //horizontalInvMass = verticalInvMass = 0.6f;
-    //stretchStiffness = 0.1f;
+
+
     Matrix44 filmModel = TranslationMatrix(Point3(gridPosition));
 
 		CreateHydrographicSpringGrid(gridPosition, g_meshCenter, gridDimX, gridDimZ, 1, spacing, phase, stretchStiffness, bendStiffness, shearStiffness, 0.0f, 1.0f, horizontalInvMass, verticalInvMass, false);
@@ -237,6 +237,9 @@ public:
 
 		mTime = 0.0f;
 
+    //generate a bottom position and bottom angle for camera
+    g_camPos.push_back(Vec3(g_meshCenter.x, -2.4f, g_meshCenter.z));
+    g_camAngle.push_back(Vec3(0.0f, DegToRad(90.0f), 0.0f));
 	}
 
 	void CenterCamera() {
@@ -247,7 +250,7 @@ public:
 		filmCenter.y += 0.8f;
 		filmCenter.z += 2.6f;
 
-		g_camPos = filmCenter;
+		g_camPos[g_camIndex] = filmCenter;
 	}
 
  	void Update()
@@ -267,67 +270,90 @@ public:
 
 #ifdef TRACK_DISPLACEMENTS
 
-
     float epsilon = 0.0f;
     float displacementThreshold = 0.01f;
     float displacementFactor = 1.0f;
     if (lower.y <= gridY && !g_pause)  // is dipping
     {
-		if (1) // CUDA calling
-		{
-			Vec4* d_positions;
-			Vec4* d_disp_positions;
-			Vec4* d_originalPositions;
-			Vec3* d_velocities;
-
-			size_t nPositions = g_buffers->positions.size();
-
-			cudaMalloc(&d_positions, nPositions * sizeof(Vec4));
-			cudaMalloc(&d_disp_positions, nPositions * sizeof(Vec4));
-			cudaMalloc(&d_velocities, nPositions * sizeof(Vec3));
-			cudaMalloc(&d_originalPositions, nPositions * sizeof(Vec4));
-
-			cudaMemcpy(d_positions, &g_buffers->positions[0], nPositions * sizeof(Vec4), cudaMemcpyHostToDevice);
-			cudaMemcpy(d_disp_positions, &g_displacement_buffers->positions[0], nPositions * sizeof(Vec4), cudaMemcpyHostToDevice);
-			cudaMemcpy(d_velocities, &g_displacement_buffers->velocities[0], nPositions * sizeof(Vec3), cudaMemcpyHostToDevice);
-			cudaMemcpy(d_originalPositions, &g_displacement_buffers->originalPositions[0], nPositions * sizeof(Vec4), cudaMemcpyHostToDevice);
-
-			UpdateDisplacements(nPositions, 1, d_positions, d_disp_positions, d_velocities, d_originalPositions);
-
-			//cudaDeviceSynchronize();
-
-			cudaMemcpy(&g_displacement_buffers->positions[0], d_disp_positions, nPositions * sizeof(Vec4), cudaMemcpyDeviceToHost);
-			cudaMemcpy(&g_displacement_buffers->velocities[0], d_velocities, nPositions * sizeof(Vec3), cudaMemcpyDeviceToHost);
-
-			cudaFree(d_positions);
-			cudaFree(d_disp_positions);
-			cudaFree(d_velocities);
-			cudaFree(d_originalPositions);
-		}
-
-		if (0)
-		{
-		  for (int i = 0; i < g_buffers->positions.size(); i++)
+		  if (0) // CUDA way
 		  {
-			Vec3 originalPos = g_displacement_buffers->originalPositions[i];
-			Vec3 displacedPos = Vec3(g_buffers->positions[i]);
-			float dipping = fabs(g_buffers->positions[i].y - gridY);
-			float displacement = Length(originalPos - displacedPos);
-			if (dipping <= epsilon && displacement > displacementThreshold) // particle is not yet dipped
-			{
-			  //track position
-			  Vec3 gradient = (originalPos - displacedPos) / displacement;
-			  Vec3 predictedPosition = displacementFactor * displacement * gradient;
-			  g_displacement_buffers->positions[i].x += predictedPosition.x;
-			  g_displacement_buffers->positions[i].y += predictedPosition.y;
-			  g_displacement_buffers->positions[i].z += predictedPosition.z;
-			  //g_displacement_buffers->velocities[i] = (originalPos - displacedPos) / g_dt;
-			}
-			else {
-			  g_displacement_buffers->velocities[i] = Vec3(0.0f, 0.0f, 0.0f);
-			}
+			  Vec4* d_positions;
+			  Vec4* d_disp_positions;
+			  Vec4* d_originalPositions;
+			  Vec3* d_velocities;
+
+			  size_t nPositions = g_buffers->positions.size();
+
+			  cudaMalloc(&d_positions, nPositions * sizeof(Vec4));
+			  cudaMalloc(&d_disp_positions, nPositions * sizeof(Vec4));
+			  cudaMalloc(&d_velocities, nPositions * sizeof(Vec3));
+			  cudaMalloc(&d_originalPositions, nPositions * sizeof(Vec4));
+
+			  cudaMemcpy(d_positions, &g_buffers->positions[0], nPositions * sizeof(Vec4), cudaMemcpyHostToDevice);
+			  cudaMemcpy(d_disp_positions, &g_displacement_buffers->positions[0], nPositions * sizeof(Vec4), cudaMemcpyHostToDevice);
+			  cudaMemcpy(d_velocities, &g_displacement_buffers->velocities[0], nPositions * sizeof(Vec3), cudaMemcpyHostToDevice);
+			  cudaMemcpy(d_originalPositions, &g_displacement_buffers->originalPositions[0], nPositions * sizeof(Vec4), cudaMemcpyHostToDevice);
+
+			  UpdateDisplacements(nPositions, 1, d_positions, d_disp_positions, d_velocities, d_originalPositions);
+
+			  //cudaDeviceSynchronize();
+
+			  cudaMemcpy(&g_displacement_buffers->positions[0], d_disp_positions, nPositions * sizeof(Vec4), cudaMemcpyDeviceToHost);
+			  cudaMemcpy(&g_displacement_buffers->velocities[0], d_velocities, nPositions * sizeof(Vec3), cudaMemcpyDeviceToHost);
+
+			  cudaFree(d_positions);
+			  cudaFree(d_disp_positions);
+			  cudaFree(d_velocities);
+			  cudaFree(d_originalPositions);
 		  }
-		}
+
+		  if (0) // CPU way
+		  {
+        NvFlexVector<int> currentActiveIndices(g_flexLib);
+        currentActiveIndices.resize(0);
+        currentActiveIndices.reserve(g_buffers->activeIndices.size());
+        unsigned int activeCount = 0;
+		    for (unsigned int activeIndex = 0; activeIndex < g_buffers->activeIndices.size(); activeIndex++)
+		    {
+          unsigned int i = g_buffers->activeIndices[activeIndex];
+
+			    Vec3 originalPos = g_displacement_buffers->originalPositions[i];
+			    Vec3 displacedPos = Vec3(g_buffers->positions[i]);
+			    float dipping = fabs(g_buffers->positions[i].y - gridY);
+			    float displacement = Length(originalPos - displacedPos);
+			    if (dipping <= epsilon && displacement > displacementThreshold) // particle is not yet dipped
+			    {
+			      //track position
+            currentActiveIndices.push_back(i);
+            activeCount++;
+			      Vec3 gradient = (originalPos - displacedPos) / displacement;
+			      Vec3 predictedPosition = displacementFactor * displacement * gradient;
+			      g_displacement_buffers->positions[i].x += predictedPosition.x;
+			      g_displacement_buffers->positions[i].y += predictedPosition.y;
+			      g_displacement_buffers->positions[i].z += predictedPosition.z;
+			      //g_displacement_buffers->velocities[i] = (originalPos - displacedPos) / g_dt;
+			    }
+			    else {
+			      g_displacement_buffers->velocities[i] = Vec3(0.0f, 0.0f, 0.0f);
+			    }
+		    }
+
+        NvFlexBuffer* activeBuffer = NvFlexAllocBuffer(g_flexLib, currentActiveIndices.count, sizeof(int), eNvFlexBufferHost);
+        int* activeIndices = (int*)NvFlexMap(activeBuffer, eNvFlexMapWait);
+
+        for (int i = 0; i < currentActiveIndices.count; ++i)
+          activeIndices[i] = currentActiveIndices[i];
+
+        NvFlexUnmap(activeBuffer);
+
+        NvFlexCopyDesc copyDesc;
+        copyDesc.dstOffset = 0;
+        copyDesc.srcOffset = 0;
+        copyDesc.elementCount = currentActiveIndices.count;
+
+        NvFlexSetActive(g_solver, activeBuffer, &copyDesc);
+
+		  }
     }
 #endif
 
