@@ -76,7 +76,7 @@ public:
     }
     else
     {
-      selectedModel = 3;
+      selectedModel = 1;
     }
 
 
@@ -215,7 +215,6 @@ public:
 
 		meshIndex = g_buffers->shapePositions.size() - 1;
 		//get the sdf center after the normalization
-
 		GetShapeBounds(lower, upper);
 		g_meshCenter = (lower + upper) * 0.5f;
 
@@ -233,24 +232,9 @@ public:
 		g_drawSprings = false;
 		g_drawHydrographic = true;
 		g_drawShadows = false;
-		//g_lightDistance *= 1.5f;
 
 		mTime = 0.0f;
 
-    //generate a bottom position and bottom angle for camera
-    g_camPos.push_back(Vec3(g_meshCenter.x, -2.4f, g_meshCenter.z));
-    g_camAngle.push_back(Vec3(0.0f, DegToRad(90.0f), 0.0f));
-	}
-
-	void CenterCamera() {
-		Vec3 lower, upper;
-		GetParticleBounds(lower, upper);
-		Vec3 filmCenter = (lower + upper) * 0.5f;
-
-		filmCenter.y += 0.8f;
-		filmCenter.z += 2.6f;
-
-		g_camPos[g_camIndex] = filmCenter;
 	}
 
  	void Update()
@@ -307,7 +291,7 @@ public:
 			  cudaFree(d_originalPositions);
 		  }
 
-		  if (0) // CPU way
+		  if (1) // CPU way
 		  {
         NvFlexVector<int> currentActiveIndices(g_flexLib);
         currentActiveIndices.resize(0);

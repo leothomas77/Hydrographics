@@ -371,13 +371,8 @@ float horizontalInvMass = 0.9f;
 float verticalInvMass = 0.9f;
 
 std::vector<Vec3> g_camPos;
-//Vec3 g_bottomCam;
-int g_camIndex = 0;
-
-//Vec3 g_camPos(6.0f, 8.0f, 18.0f);
 std::vector<Vec3> g_camAngle;
-//Vec3 g_camAngle(0.0f, -DegToRad(20.0f), 0.0f);
-
+int g_camIndex = 0;
 Vec3 g_camVel(0.0f);
 Vec3 g_camSmoothVel(0.0f);
 Vector3 g_meshCenter = Vector3(0.0f);

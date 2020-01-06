@@ -190,12 +190,12 @@ void Init(int scene, bool centerCamera = true)
 	g_lightDistance = 2.0f;
 	g_fogDistance = 0.005f;
 
-  Vec3 perspectiveCam = Vec3(6.0f, 8.0f, 18.0f);
+  //Vec3 perspectiveCam = Vec3(6.0f, 8.0f, 18.0f);
   g_camPos.resize(0);
-  g_camPos.push_back(perspectiveCam);
-  g_camIndex = g_camPos.size() - 1;
+  //g_camPos.push_back(perspectiveCam);
+  //g_camIndex = g_camPos.size() - 1;
 
-  g_camAngle.push_back(Vec3(0.0f, -DegToRad(20.0f), 0.0f));
+  //g_camAngle.push_back(Vec3(0.0f, -DegToRad(20.0f), 0.0f));
 
 	g_camSpeed = 0.05f;//0.075f;
 	g_camNear = 0.01f;
@@ -322,6 +322,15 @@ void Init(int scene, bool centerCamera = true)
 	// calculate particle bounds
 	Vec3 particleLower, particleUpper;
 	GetParticleBounds(particleLower, particleUpper);
+  // centering the main camera with perspective front view
+  Vec3 filmCenter = (particleLower + particleUpper) * 0.5f;
+  g_camPos.push_back(filmCenter);
+  g_camAngle.push_back(Vec3(0.0f, -DegToRad(15.0f), 0.0f));
+  //generate a bottom position and bottom angle for camera
+  g_camPos.push_back(Vec3(g_meshCenter.x, -2.4f, g_meshCenter.z));
+  g_camAngle.push_back(Vec3(0.0f, DegToRad(90.0f), 0.0f));
+
+  g_camIndex = 0; // select main cam view
 
 	// accommodate shapes
 	Vec3 shapeLower, shapeUpper;
@@ -419,8 +428,8 @@ void Init(int scene, bool centerCamera = true)
 	// center camera on particles
 	if (centerCamera)
 	{
-		g_camPos[g_camIndex] = Vec3((g_sceneLower.x + g_sceneUpper.x)*0.5f, min(g_sceneUpper.y*1.25f, 6.0f), g_sceneUpper.z + min(g_sceneUpper.y, 6.0f)*2.0f);
-		g_camAngle[g_camIndex] = Vec3(0.0f, -DegToRad(15.0f), 0.0f);
+		g_camPos[g_camIndex] = Vec3((g_sceneLower.x + g_sceneUpper.x)*0.5f, min(g_sceneUpper.y*1.25f, 6.0f), g_sceneUpper.z + min(g_sceneUpper.y, 6.0f));
+		//g_camAngle[g_camIndex] = Vec3(0.0f, -DegToRad(15.0f), 0.0f); // rever aqui
 
 		// give scene a chance to modify camera position
 		g_scenes[g_scene]->CenterCamera();
@@ -570,7 +579,7 @@ void Init(int scene, bool centerCamera = true)
 
 void Reset()
 {
-	Init(g_scene, false);
+	Init(g_scene, true);
 }
 
 void Shutdown()
