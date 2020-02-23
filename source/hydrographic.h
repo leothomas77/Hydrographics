@@ -193,6 +193,8 @@ public:
       } else {
         mesh = ImportMesh(GetFilePathByPlatform(models[selectedModel].path).c_str());
       }
+
+      triangles = mesh->m_triangles; // copy the triangle array
       //g_meshVertices = mesh->m_positions.size();
       cout << "Mesh positions:" << mesh->m_positions.size() << endl;
       cout << "Mesh triangles:" << mesh->m_indices.size()/3 << endl;
@@ -208,7 +210,9 @@ public:
 
     // entry in the collision->render map
 #ifdef RENDER_V2
+    // gpu mesh created by assimp import optimized for loading a full texture atlas features and rendering
     g_gpu_mesh = CreateGpuMesh(GetFilePathByPlatform(models[selectedModel].path).c_str(), transf, sdfMargin);
+    SetGpuMeshTriangles(g_gpu_mesh, triangles);
 #else
     g_fields[sdf] = CreateGpuMesh(mesh);
 #endif
@@ -255,7 +259,7 @@ public:
 #ifdef TRACK_DISPLACEMENTS
 
     float epsilon = 0.0f;
-    float displacementThreshold = 0.01f;
+    float displacementThreshold = 0.0f;
     float displacementFactor = 1.0f;
     if (lower.y <= gridY && !g_pause)  // is dipping
     {
@@ -291,15 +295,15 @@ public:
 			  cudaFree(d_originalPositions);
 		  }
 
-		  if (1) // CPU way
+		  if (0) // CPU way
 		  {
         NvFlexVector<int> currentActiveIndices(g_flexLib);
         currentActiveIndices.resize(0);
         currentActiveIndices.reserve(g_buffers->activeIndices.size());
-        unsigned int activeCount = 0;
-		    for (unsigned int activeIndex = 0; activeIndex < g_buffers->activeIndices.size(); activeIndex++)
+        int activeCount = 0;
+		    for (int activeIndex = 0; activeIndex < g_buffers->activeIndices.size(); activeIndex++)
 		    {
-          unsigned int i = g_buffers->activeIndices[activeIndex];
+          int i = g_buffers->activeIndices[activeIndex];
 
 			    Vec3 originalPos = g_displacement_buffers->originalPositions[i];
 			    Vec3 displacedPos = Vec3(g_buffers->positions[i]);
@@ -322,6 +326,8 @@ public:
 			    }
 		    }
 
+        /*
+        // Remove collided vertices from active indices to improve peformance
         NvFlexBuffer* activeBuffer = NvFlexAllocBuffer(g_flexLib, currentActiveIndices.count, sizeof(int), eNvFlexBufferHost);
         int* activeIndices = (int*)NvFlexMap(activeBuffer, eNvFlexMapWait);
 
@@ -336,7 +342,7 @@ public:
         copyDesc.elementCount = currentActiveIndices.count;
 
         NvFlexSetActive(g_solver, activeBuffer, &copyDesc);
-
+        */
 		  }
     }
 #endif
@@ -493,5 +499,6 @@ public:
 	Vec3 angle = Vec3(0.0f);
 	std::vector<ModelData> models;
   bool tracking = false;
-
+  //
+  std::vector<Triangle> triangles;
 };

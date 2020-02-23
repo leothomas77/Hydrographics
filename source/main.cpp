@@ -652,33 +652,42 @@ void RenderSceneV2()
   Vec4 diffuseColor = Vec4(1.0f, 1.0f, 1.0f, 1.0f);
   Vec4 specularColor = Vec4(1.0f, 1.0f, 1.0f, 1.0f);
   unsigned int specularExpoent = 40;
-  bool showTexture = true;
+  bool showTexture = false;
   BindSolidShaderV2(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], lightColor, ambientColor, specularColor, specularExpoent, diffuseColor, showTexture);
   int i = 0; // rigid shape index
   const Quat rotation = g_buffers->shapePrevRotations[i];
-  const Vec3 position = Vec3(g_buffers->shapePrevPositions[i]);
+  const Vec3 translation = Vec3(g_buffers->shapePrevPositions[i]);
   NvFlexCollisionGeometry geo = g_buffers->shapeGeometry[i];
-  Matrix44 modelMatrix = TranslationMatrix(Point3(position))*RotationMatrix(Quat(rotation))*ScaleMatrix(geo.sdf.scale);
+  Matrix44 modelMatrix = TranslationMatrix(Point3(translation))*RotationMatrix(Quat(rotation))*ScaleMatrix(geo.sdf.scale);
   SetCullMode(false);
   SetFillMode(g_wireframe);
-  DrawGpuMeshV2(g_gpu_mesh, modelMatrix);
 
-  if (1) // draw film
+  if (g_drawHydrographicCollisionMesh) // draw rigid body
   {
-    BindFilmShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], lightColor, ambientColor, specularColor, specularExpoent, diffuseColor, showTexture);
-    SetCullMode(false);
-    //EnableTexture(GetHydrographicTextureId());
-    DrawHydrographicV2(g_film_mesh, &g_buffers->positions[0], &g_buffers->normals[0], &g_buffers->uvs[0], &g_buffers->triangles[0], g_buffers->triangles.size(), g_buffers->positions.size());
+    DrawGpuMeshV2(g_gpu_mesh, modelMatrix, showTexture);
   }
 
-  if (0)
+  if (g_drawHydrographic) // draw film
   {
+    showTexture = 1;
     BindFilmShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], lightColor, ambientColor, specularColor, specularExpoent, diffuseColor, showTexture);
-    SetCullMode(false);
-    //EnableTexture(GetHydrographicTextureId());
-    DrawHydrographicV2(g_film_mesh, &g_displacement_buffers->positions[0], &g_displacement_buffers->normals[0], &g_buffers->uvs[0], &g_buffers->triangles[0], g_buffers->triangles.size(), g_displacement_buffers->positions.size());
+    DrawHydrographicV2(g_film_mesh, &g_buffers->positions[0], &g_buffers->normals[0], &g_buffers->uvs[0], &g_buffers->triangles[0], g_buffers->triangles.size(), g_buffers->positions.size(), showTexture);
   }
 
+  
+  if (g_drawDisplacements) // draw displacements
+  {
+    // setup the film texture to mesh texture
+    BindFilmShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], lightColor, ambientColor, specularColor, specularExpoent, diffuseColor, showTexture);
+    DrawHydrographicV2(g_film_mesh, &g_displacement_buffers->positions[0], &g_displacement_buffers->normals[0], &g_buffers->uvs[0], &g_buffers->triangles[0], g_buffers->triangles.size(), g_displacement_buffers->positions.size(), showTexture);
+  }
+  
+
+  if (g_drawContacts) // draw displacements
+  {
+    BindFilmShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], lightColor, ambientColor, specularColor, specularExpoent, diffuseColor, showTexture);
+    DrawDistortion(g_film_mesh, &g_displacement_buffers->positions[0], &g_displacement_buffers->normals[0], &g_buffers->uvs[0], &g_buffers->triangles[0], g_buffers->triangles.size(), g_displacement_buffers->positions.size(), showTexture);
+  }
 
 }
 
@@ -769,10 +778,10 @@ void RenderDebug()
 	}
 
 	// visualize contacts against the environment
+  // all arrays are iterated in CPU
 	if (g_drawContacts)
 	{
 		const int maxContactsPerParticle = 6;
-
 		NvFlexVector<Vec4> contactPlanes(g_flexLib, g_buffers->positions.size()*maxContactsPerParticle);
 		NvFlexVector<Vec4> contactVelocities(g_flexLib, g_buffers->positions.size()*maxContactsPerParticle);
 		NvFlexVector<int> contactIndices(g_flexLib, g_buffers->positions.size());
@@ -799,12 +808,28 @@ void RenderDebug()
 			for (unsigned int c = 0; c < count; ++c)
 			{
 				Vec4 plane = contactPlanes[contactIndex*maxContactsPerParticle + c];
-				DrawLine(Vec3(g_buffers->positions[g_buffers->activeIndices[i]]),
-					Vec3(g_buffers->positions[g_buffers->activeIndices[i]]) + Vec3(plane)*scale,
-					Vec4(0.0f, 1.0f, 0.0f, 0.0f));
+				//DrawLine(Vec3(g_buffers->positions[g_buffers->activeIndices[i]]),
+					//Vec3(g_buffers->positions[g_buffers->activeIndices[i]]) + Vec3(plane)*scale,
+					//Vec4(0.0f, 1.0f, 0.0f, 0.0f));
+
+        if (1) // enable find mesh contacts
+        {
+          int shapeIndex = 0; // rigid shape index
+          const Quat rotation = g_buffers->shapePrevRotations[shapeIndex];
+          const Vec3 translation = Vec3(g_buffers->shapePrevPositions[shapeIndex]);
+          NvFlexCollisionGeometry geo = g_buffers->shapeGeometry[shapeIndex];
+          Matrix44 modelMatrix = TranslationMatrix(Point3(translation))*RotationMatrix(Quat(rotation))*ScaleMatrix(geo.sdf.scale);
+          int filmIndex = g_buffers->activeIndices[i];
+          FindMeshContacts(Vec3(g_buffers->positions[filmIndex]), filmIndex, Vec3(plane), g_gpu_mesh, g_film_mesh, modelMatrix);
+        }
+
 			}
 		}
+
 		EndLines();
+
+    //SetupFilmMesh(g_gpu_mesh, g_film_mesh);
+
 	}
 
   if (g_drawNeighbors)
@@ -863,7 +888,7 @@ void RenderDebug()
   }
 
 #ifdef TRACK_DISPLACEMENTS
-	if (g_drawDisplacements && false)
+	if (g_drawDisplacements)
   {
     BeginPoints(2.0f);
     Vec4 color = Vec4(0.0f, 1.0f, 0.0f, 0.8f);
@@ -2385,7 +2410,7 @@ int main(int argc, char* argv[])
 	else
 		str = "Flex Demo (Compute: DX11) ";
 #else
-	str = "Hydrographics Simulator v4.0";
+	str = "Hydrographics Simulator v4.0 ";
 #endif
 	switch (g_graphics)
 	{

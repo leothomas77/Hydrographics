@@ -236,7 +236,7 @@ int g_numSubsteps;
 // a setting of -1 means Flex will use the device specified in the NVIDIA control panel
 int g_device = -1;
 char g_deviceName[256];
-bool g_vsync = true;
+bool g_vsync = false; // 0 for immediate updates, 1 for updates synchronized with the vertical retrace.
 
 // para os testes
 bool g_filmStepTest = false;
@@ -421,7 +421,7 @@ float g_expandCloth;	// amount to expand cloth along normal (to account for part
 bool g_drawOpaque;
 int g_drawSprings;		// 0: no draw, 1: draw stretch 2: draw tether
 bool g_drawBases = false;
-bool g_drawDisplacements = true;
+bool g_drawDisplacements = false;
 bool g_drawContacts = false;
 bool g_drawNeighbors = false;
 bool g_drawAxis = false;

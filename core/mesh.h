@@ -32,6 +32,13 @@
 #include "core.h"
 #include "maths.h"
 
+struct Triangle {
+  int indexV0;
+  int indexV1;
+  int indexV2;
+  Point3 center;
+};
+
 struct Mesh
 {
   void AddMesh(const Mesh& m);
@@ -48,6 +55,7 @@ struct Mesh
   void GetBounds(Vector3& minExtents, Vector3& maxExtents) const;
 
   std::vector<Point3> m_positions;
+  std::vector<Triangle> m_triangles;
   std::vector<Vector3> m_normals;
   std::vector<Vector2> m_texcoords[2];
   std::vector<Colour> m_colours;

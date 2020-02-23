@@ -313,55 +313,55 @@ Mesh* ImportMeshFromPly(const char* path)
     // read indices
     for (uint32_t f=0; f < numFaces; ++f)
     {
-        uint32_t numIndices = (format == eAscii)?PlyRead<uint32_t>(file, format):PlyRead<uint8_t>(file, format);
-		uint32_t indices[4];
+      uint32_t numIndices = (format == eAscii)?PlyRead<uint32_t>(file, format):PlyRead<uint8_t>(file, format);
+		  uint32_t indices[4];
 
-		for (uint32_t i=0; i < numIndices; ++i)
-		{
-			indices[i] = PlyRead<uint32_t>(file, format);
-		}
+		  for (uint32_t i=0; i < numIndices; ++i)
+		  {
+			  indices[i] = PlyRead<uint32_t>(file, format);
+		  }
 
-		switch (numIndices)
-		{
-		case 3:
-			mesh->m_indices.push_back(indices[0]);
-			mesh->m_indices.push_back(indices[1]);
-			mesh->m_indices.push_back(indices[2]);
-			break;
-		case 4:
-			mesh->m_indices.push_back(indices[0]);
-			mesh->m_indices.push_back(indices[1]);
-			mesh->m_indices.push_back(indices[2]);
+		  switch (numIndices)
+		  {
+		  case 3:
+			  mesh->m_indices.push_back(indices[0]);
+			  mesh->m_indices.push_back(indices[1]);
+			  mesh->m_indices.push_back(indices[2]);
+			  break;
+		  case 4:
+			  mesh->m_indices.push_back(indices[0]);
+			  mesh->m_indices.push_back(indices[1]);
+			  mesh->m_indices.push_back(indices[2]);
 
-			mesh->m_indices.push_back(indices[2]);
-			mesh->m_indices.push_back(indices[3]);
-			mesh->m_indices.push_back(indices[0]);
-			break;
+			  mesh->m_indices.push_back(indices[2]);
+			  mesh->m_indices.push_back(indices[3]);
+			  mesh->m_indices.push_back(indices[0]);
+			  break;
 
-		default:
-			assert(!"invalid number of indices, only support tris and quads");
-			break;
-		};
+		  default:
+			  assert(!"invalid number of indices, only support tris and quads");
+			  break;
+		  };
 
-		// calculate vertex normals as we go
-        Point3& v0 = mesh->m_positions[indices[0]];
-        Point3& v1 = mesh->m_positions[indices[1]];
-        Point3& v2 = mesh->m_positions[indices[2]];
+		  // calculate vertex normals as we go
+      Point3& v0 = mesh->m_positions[indices[0]];
+      Point3& v1 = mesh->m_positions[indices[1]];
+      Point3& v2 = mesh->m_positions[indices[2]];
 
-        Vector3 n = SafeNormalize(Cross(v1-v0, v2-v0), Vector3(0.0f, 1.0f, 0.0f));
+      Vector3 n = SafeNormalize(Cross(v1-v0, v2-v0), Vector3(0.0f, 1.0f, 0.0f));
 
-		for (uint32_t i=0; i < numIndices; ++i)
-		{
-	        mesh->m_normals[indices[i]] += n;
+		  for (uint32_t i=0; i < numIndices; ++i)
+		  {
+	          mesh->m_normals[indices[i]] += n;
 	    }
-	}
+	  }
 
     for (uint32_t i=0; i < numVertices; ++i)
     {
         mesh->m_normals[i] = SafeNormalize(mesh->m_normals[i], Vector3(0.0f, 1.0f, 0.0f));
     }
 
-    //cout << "Imported mesh " << path << " in " << (GetSeconds()-startTime)*1000.f << "ms" << endl;
+    // cout << "Imported mesh " << path << " in " << (GetSeconds()-startTime)*1000.f << "ms" << endl;
 
     return mesh;
 
@@ -581,6 +581,14 @@ Mesh* ImportMeshFromObj(const char* path)
         Point3& v0 = m->m_positions[a];
         Point3& v1 = m->m_positions[b];
         Point3& v2 = m->m_positions[c];
+
+        Triangle triangle;
+        triangle.indexV0 = a;
+        triangle.indexV1 = b;
+        triangle.indexV2 = c;
+        triangle.center = Point3((v0.x + v1.x + v2.x) / 3, (v0.y + v1.y + v2.y) / 3, (v0.z + v1.z + v2.z) / 3);
+
+        m->m_triangles.push_back(triangle);
 
         Vector3 n = SafeNormalize(Cross(v1-v0, v2-v0), Vector3(0.0f, 1.0f, 0.0f));
 

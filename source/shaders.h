@@ -127,6 +127,10 @@ struct RenderTexture;
 // void DestroyRenderTexture(RenderTexture* tex);
 
 // void SetRenderTarget(RenderTexture* target);
+void FindMeshContacts(Vec3 position, int positionIndex, Vec3 contactPlane, GpuMesh* gpuMesh, GpuMesh* filmMesh, Mat44 modelMatrix);
+void SetupFilmMesh(GpuMesh* gpuMesh, GpuMesh* filmMesh);
+void DrawDistortion(GpuMesh* mesh, const Vec4* positions, const Vec4* normals, const Vec4* uvs, const int* indices, int nIndices, int numPositions, bool showTexture);
+void SetGpuMeshTriangles(GpuMesh* gpuMesh, std::vector<Triangle> triangles);
 
 struct RenderMaterial
 {
@@ -171,7 +175,7 @@ void DrawCloth(const Vec4* positions, const Vec4* normals, const float* uvs, con
 // void DrawBuffer(float* buffer, Vec3 camPos, Vec3 lightPos);
 void DrawRope(Vec4* positions, int* indices, int numIndices, float radius, int color);
 void DrawHydrographic(const Vec4* positions, const Vec4* normals, const float* uvs, const int* indices, int numTris, int numPositions, int colorIndex = 3, float expand = 0.0f, bool twosided = true, bool smooth = true);
-void DrawHydrographicV2(GpuMesh* m, const Vec4* positions, const Vec4* normals, const Vec4* uvs, const int* indices, int nIndices, int numPositions);
+void DrawHydrographicV2(GpuMesh* m, const Vec4* positions, const Vec4* normals, const Vec4* uvs, const int* indices, int nIndices, int numPositions, bool showTexture);
 //void SetupVertexArrays(const Vec4* positions, const Vec4* normals, const Vec3* uvs, const int* indices, int numTris, int numPositions);
 void DrawDisplacements(const Vec4* positions, const Vec4* normals, const Vec4* uvs, const int numPositions, const int* indices, int numTris);
 //void DrawBuffer(float* buffer, Vec3 camPos, Vec3 lightPos);
@@ -191,13 +195,13 @@ GpuMesh* CreateGpuMeshTex(const Mesh* m);
 GpuMesh* CreateGpuMeshTexV2(const Mesh* m);
 //GpuMesh* CreateGpuMeshTexV3(const char* meshFile);
 GpuMesh* CreateGpuFilm(Matrix44 model, Vec4* vertices, Vec4* normals, Vec4* uvs, int nVertices, int* indices, int nIndices);
-void DrawGpuMeshV2(GpuMesh* m, const Matrix44& modelMat);
+void DrawGpuMeshV2(GpuMesh* m, const Matrix44& modelMat, bool showTexture);
 size_t traverseScene(const aiScene *scene, const aiNode* node, Mesh* gpu_mesh, std::string basePath);
 void createVBOs(const aiScene *scene, GpuMesh* gpu_mesh, std::string basePath, Mat44 transformation, float margin);
 void get_bounding_box_for_node(const struct aiNode* nd, aiVector3D* min, aiVector3D* max, aiMatrix4x4* trafo);
 
 
-  //void DrawGpuMeshInstances(GpuMesh* m, const Matrix44* xforms, int n, const Vec3& color);
+//void DrawGpuMeshInstances(GpuMesh* m, const Matrix44* xforms, int n, const Vec3& color);
 
 // texture setup
 //void BindHeatmapTexture(Vec4 *pixels, int texWidth, int texHeight);
