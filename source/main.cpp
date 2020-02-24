@@ -652,7 +652,7 @@ void RenderSceneV2()
   Vec4 diffuseColor = Vec4(1.0f, 1.0f, 1.0f, 1.0f);
   Vec4 specularColor = Vec4(1.0f, 1.0f, 1.0f, 1.0f);
   unsigned int specularExpoent = 40;
-  bool showTexture = false;
+  bool showTexture = true;
   BindSolidShaderV2(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], lightColor, ambientColor, specularColor, specularExpoent, diffuseColor, showTexture);
   int i = 0; // rigid shape index
   const Quat rotation = g_buffers->shapePrevRotations[i];
@@ -669,7 +669,7 @@ void RenderSceneV2()
 
   if (g_drawHydrographic) // draw film
   {
-    showTexture = 1;
+    showTexture = false;
     BindFilmShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], lightColor, ambientColor, specularColor, specularExpoent, diffuseColor, showTexture);
     DrawHydrographicV2(g_film_mesh, &g_buffers->positions[0], &g_buffers->normals[0], &g_buffers->uvs[0], &g_buffers->triangles[0], g_buffers->triangles.size(), g_buffers->positions.size(), showTexture);
   }
@@ -678,6 +678,7 @@ void RenderSceneV2()
   if (g_drawDisplacements) // draw displacements
   {
     // setup the film texture to mesh texture
+    //showTexture = false;
     BindFilmShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], lightColor, ambientColor, specularColor, specularExpoent, diffuseColor, showTexture);
     DrawHydrographicV2(g_film_mesh, &g_displacement_buffers->positions[0], &g_displacement_buffers->normals[0], &g_buffers->uvs[0], &g_buffers->triangles[0], g_buffers->triangles.size(), g_displacement_buffers->positions.size(), showTexture);
   }
@@ -685,8 +686,9 @@ void RenderSceneV2()
 
   if (g_drawContacts) // draw displacements
   {
+    showTexture = true;
     BindFilmShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], lightColor, ambientColor, specularColor, specularExpoent, diffuseColor, showTexture);
-    DrawDistortion(g_film_mesh, &g_displacement_buffers->positions[0], &g_displacement_buffers->normals[0], &g_buffers->uvs[0], &g_buffers->triangles[0], g_buffers->triangles.size(), g_displacement_buffers->positions.size(), showTexture);
+    DrawDistortion(g_film_mesh, &g_buffers->positions[0], &g_buffers->normals[0], &g_buffers->uvs[0], &g_buffers->triangles[0], g_buffers->triangles.size(), g_displacement_buffers->positions.size(), showTexture);
   }
 
 }
@@ -819,8 +821,8 @@ void RenderDebug()
           const Vec3 translation = Vec3(g_buffers->shapePrevPositions[shapeIndex]);
           NvFlexCollisionGeometry geo = g_buffers->shapeGeometry[shapeIndex];
           Matrix44 modelMatrix = TranslationMatrix(Point3(translation))*RotationMatrix(Quat(rotation))*ScaleMatrix(geo.sdf.scale);
-          int filmIndex = g_buffers->activeIndices[i];
-          FindMeshContacts(Vec3(g_buffers->positions[filmIndex]), filmIndex, Vec3(plane), g_gpu_mesh, g_film_mesh, modelMatrix);
+          //int filmIndex = g_buffers->activeIndices[i];
+          FindMeshContacts(Vec3(g_buffers->positions[contactIndex]), contactIndex, Vec3(plane), g_gpu_mesh, g_film_mesh, modelMatrix);
         }
 
 			}
@@ -828,7 +830,7 @@ void RenderDebug()
 
 		EndLines();
 
-    //SetupFilmMesh(g_gpu_mesh, g_film_mesh);
+    SetupFilmMesh(g_gpu_mesh, g_film_mesh);
 
 	}
 

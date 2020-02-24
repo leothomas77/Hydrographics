@@ -3174,13 +3174,17 @@ void DrawGpuMeshV2(GpuMesh* m, const Matrix44& modelMat, bool showTexture)
 {
   if (m)
   {
-    //Enable texture
-    glVerify(glBindTexture(GL_TEXTURE_2D, m->mTextureId));
-    glVerify(glEnable(GL_TEXTURE_2D));
-    glVerify(glActiveTexture(GL_TEXTURE0));
-    glVerify(glUniform1i(glGetUniformLocation(s_diffuseProgramV2, "tex"), 0));
-    int hasTexture = showTexture ? 1 : 0;
-    glVerify(glUniform1i(glGetUniformLocation(s_diffuseProgramV2, "showTexture"), hasTexture));
+    int hasTexture = showTexture && m->texCoords.size() > 0 ? 1 : 0;
+    if (hasTexture) 
+    {
+      //Enable texture
+      glVerify(glBindTexture(GL_TEXTURE_2D, m->mTextureId));
+      glVerify(glEnable(GL_TEXTURE_2D));
+      glVerify(glActiveTexture(GL_TEXTURE0));
+      glVerify(glUniform1i(glGetUniformLocation(s_diffuseProgramV2, "tex"), 0));
+      //Consider if it has a texture loaded to bind it
+      glVerify(glUniform1i(glGetUniformLocation(s_diffuseProgramV2, "showTexture"), hasTexture));
+    }
     //Setup normal and model mat
     glVerify(glUniformMatrix4fv(glGetUniformLocation(s_diffuseProgramV2, "normalMat"), 1, false, Transpose(AffineInverse(modelMat))));
     glVerify(glUniformMatrix4fv(glGetUniformLocation(s_diffuseProgramV2, "model"), 1, false, modelMat));
@@ -3192,25 +3196,28 @@ void DrawGpuMeshV2(GpuMesh* m, const Matrix44& modelMat, bool showTexture)
     glBindBuffer(GL_ARRAY_BUFFER, m->mNormalsVBO);
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, 0);
     glEnableVertexAttribArray(1);
-    glBindBuffer(GL_ARRAY_BUFFER, m->mTexCoordsVBO);
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, 0);
-    glEnableVertexAttribArray(2);
+    if (hasTexture)
+    {
+      glBindBuffer(GL_ARRAY_BUFFER, m->mTexCoordsVBO);
+      glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, 0);
+      glEnableVertexAttribArray(2);
+    }
     
     glDrawArrays(GL_TRIANGLES, 0, m->mNumVertices);
 
-    //glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m->mIndicesIBO);
-    //glVerify(glDrawElements(GL_TRIANGLES, m->mNumIndices, GL_UNSIGNED_INT, 0));
-    
     glDisableVertexAttribArray(0);
     glDisableVertexAttribArray(1);
-    glDisableVertexAttribArray(2);
+    if (hasTexture)
+    {
+      // disable texture vertex attrib array
+      glDisableVertexAttribArray(2);
+      // disable texture
+      glActiveTexture(GL_TEXTURE0);
+      glDisable(GL_TEXTURE_2D);
+    }
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
-
-    //glVerify(glBindVertexArray(m->mVAO));
-    //glVerify(glDrawElements(GL_TRIANGLES, m->mNumIndices, GL_UNSIGNED_INT, 0));
-    //glVerify(glBindVertexArray(0));
   }
 }
 
@@ -3232,9 +3239,9 @@ void FindMeshContacts(Vec3 filmContactVertex, int filmContactVertexIndex, Vec3 f
     Vec3 positionW = modelMatrix * Vec4(gpuMesh->positions[i], 1.0f);
     float distance = Length(filmContactVertex - positionW);
     // found contact nearby a rigid mesh vertex
-    if (distance <= 0.4f && false) 
+    if (distance <= 0.4f) 
     {
-      //obter as coordenadas de textura do da malha rigida e transferir para a malha deformável
+      //get texture coords from rigid mesh and transfer to soft-body
       filmMesh->texCoords[filmContactVertexIndex] = gpuMesh->texCoords[i];
       //DrawLine(filmContactVertex, filmContactVertex + Vec3(filmContactPlane)*scale, Vec4(1.0f, 0.5f, 0.0f, 0.0f));
     }
@@ -3414,7 +3421,7 @@ size_t traverseScene(const aiScene *scene, const aiNode* node, Mesh* mesh, std::
       const aiFace* face = &assimp_mesh->mFaces[j];
       for (size_t k = 0; k < face->mNumIndices; k++) {
         int index = face->mIndices[k];
-        if (assimp_mesh->HasVertexColors(0)) // nao testado ainda
+        if (assimp_mesh->HasVertexColors(0)) // not tested yet
         {
           mesh->m_colours.push_back(Colour(assimp_mesh->mColors[0]->r, assimp_mesh->mColors[0]->g, assimp_mesh->mColors[0]->b, assimp_mesh->mColors[0]->a));
         }
@@ -3422,7 +3429,7 @@ size_t traverseScene(const aiScene *scene, const aiNode* node, Mesh* mesh, std::
         {
           mesh->m_colours.push_back(Colour(mesh->Ka));
         }
-        if (assimp_mesh->HasTextureCoords(0)) 
+        if (assimp_mesh->HasTextureCoords(0) && mesh->mTextureId) // load texture coords if has mTextureId
         {
           mesh->m_texcoords[0].push_back(Vec2(assimp_mesh->mTextureCoords[0][index][0], assimp_mesh->mTextureCoords[0][index][1]));
         }
@@ -3464,13 +3471,17 @@ void createVBOs(const aiScene *scene, GpuMesh* gpu_mesh, std::string basePath, M
   mesh->Normalize(1.0f - margin);
   mesh->Transform(TranslationMatrix(Point3(margin, margin, margin)*0.5f));
 
-  // can't copy directly because of type incompatibility between point and Vec3
-  // and also because m_texcoords is an array with dimensions [0][n];
   for (int i = 0; i < mesh->m_positions.size(); i++)
   {
+    // can't copy directly because of type incompatibility between point and Vec3
     gpu_mesh->positions.push_back((Vec3)mesh->m_positions[i]);
-    gpu_mesh->texCoords.push_back(mesh->m_texcoords[0][i]);
     gpu_mesh->normals.push_back(mesh->m_normals[i]);
+
+    // and also because m_texcoords is an array with dimensions [0][n];
+    if (mesh->m_texcoords[0].size() == mesh->m_positions.size())
+    {
+      gpu_mesh->texCoords.push_back(mesh->m_texcoords[0][i]);
+    }
   }
 
   glGenBuffers(1, &gpu_mesh->mPositionsVBO);
@@ -4042,10 +4053,10 @@ void DrawHydrographicV2(GpuMesh* mesh, const Vec4* positions, const Vec4* normal
   glVerify(glActiveTexture(GL_TEXTURE0));//
   glVerify(glBindTexture(GL_TEXTURE_2D, mesh->mTextureId));
   glVerify(glUniform1i(glGetUniformLocation(s_filmProgram, "tex"), 0));//
-  int hasTexture = showTexture ? 1 : 0;
+  int hasTexture = showTexture && mesh->texCoords.size() > 0 ? 1 : 0;
   glVerify(glUniform1i(glGetUniformLocation(s_filmProgram, "showTexture"), hasTexture));
   // update positions and normals
-  glVerify(glBindBuffer(GL_ARRAY_BUFFER, mesh->mPositionsVBO)); // parei aqui -> criar condicao para selecionar textura diferente, caso seja a transferencia do objeto para o filme
+  glVerify(glBindBuffer(GL_ARRAY_BUFFER, mesh->mPositionsVBO)); // 
   glVerify(glBufferSubData(GL_ARRAY_BUFFER, 0, mesh->mNumVertices * sizeof(Vec4), positions));
   glVerify(glBufferSubData(GL_ARRAY_BUFFER, mesh->mNumVertices * sizeof(Vec4), mesh->mNumVertices * sizeof(Vec4), normals));
   // draw VAO
@@ -4064,7 +4075,7 @@ void DrawDistortion(GpuMesh* mesh, const Vec4* positions, const Vec4* normals, c
   glVerify(glActiveTexture(GL_TEXTURE0));//
   glVerify(glBindTexture(GL_TEXTURE_2D, mesh->mTextureId));
   glVerify(glUniform1i(glGetUniformLocation(s_filmProgram, "tex"), 0));//
-  int hasTexture = showTexture ? 1 : 0;
+  int hasTexture = showTexture && mesh->texCoords.size() ? 1 : 0;
   glVerify(glUniform1i(glGetUniformLocation(s_filmProgram, "showTexture"), hasTexture));
   // update positions and normals
   glVerify(glBindBuffer(GL_ARRAY_BUFFER, mesh->mPositionsVBO)); // parei aqui -> criar condicao para selecionar textura diferente, caso seja a transferencia do objeto para o filme

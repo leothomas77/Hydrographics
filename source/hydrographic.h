@@ -76,7 +76,7 @@ public:
     }
     else
     {
-      selectedModel = 1;
+      selectedModel = 3;
     }
 
 
