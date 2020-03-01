@@ -32,11 +32,21 @@
 #include "core.h"
 #include "maths.h"
 
-struct Triangle {
+struct Triangle 
+{
+  int verticeIndexes[3];
+
   int indexV0;
   int indexV1;
   int indexV2;
   Point3 center;
+  
+};
+
+struct TriangleIndexes 
+{
+  int indexes[6] = {0, 0, 0, 0, 0, 0};
+  int count = 0;
 };
 
 struct Mesh
@@ -59,6 +69,7 @@ struct Mesh
   std::vector<Vector3> m_normals;
   std::vector<Vector2> m_texcoords[2];
   std::vector<Colour> m_colours;
+  std::vector<TriangleIndexes> m_triangle_index;
 
   std::vector<uint32_t> m_indices;    
 

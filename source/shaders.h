@@ -127,12 +127,15 @@ struct RenderTexture;
 // void DestroyRenderTexture(RenderTexture* tex);
 
 // void SetRenderTarget(RenderTexture* target);
-void FindMeshContacts(Vec3 position, int positionIndex, Vec3 contactPlane, GpuMesh* gpuMesh, GpuMesh* filmMesh, Mat44 modelMatrix);
+void FindMeshContacts(Vec3 position, int positionIndex, Vec3 contactPlane, int &contactCount, GpuMesh* gpuMesh, GpuMesh* filmMesh, Mat44 modelMatrix, int gridHeight, int gridWidth);
 void SetupFilmMesh(GpuMesh* gpuMesh, GpuMesh* filmMesh);
+void SetupContactsTexture(GpuMesh* filmMesh);
 void DrawDistortion(GpuMesh* mesh, const Vec4* positions, const Vec4* normals, const Vec4* uvs, const int* indices, int nIndices, int numPositions, bool showTexture);
-void SetGpuMeshTriangles(GpuMesh* gpuMesh, std::vector<Triangle> triangles);
+void SetGpuMeshTriangles(GpuMesh* gpuMesh, std::vector<Triangle> triangles, std::vector<TriangleIndexes> triangleIndexes);
+bool rayTriangleIntersectMT(Vec3 orig, Vec3 dir, Vec3 v0, Vec3 v1, Vec3 v2, float &t, float &u, float &v, float &w);
+//bool rayTriangleIntersect(Vec3 orig, Vec3 dir, Vec3 v0, Vec3 v1, Vec3 v2, float &t, float &u, float &v, float &w);
 
-struct RenderMaterial
+  struct RenderMaterial
 {
 	RenderMaterial()
 	{
@@ -242,19 +245,20 @@ void UnbindHydrographicShader();
 //void UnbindDisplacementShader();
 
 // new fluid renderer
-struct FluidRenderer;
+// struct FluidRenderer;
 
 // owns render targets and shaders associated with fluid rendering
-FluidRenderer* CreateFluidRenderer(uint32_t width, uint32_t height);
-void DestroyFluidRenderer(FluidRenderer*);
+// FluidRenderer* CreateFluidRenderer(uint32_t width, uint32_t height);
+// void DestroyFluidRenderer(FluidRenderer*);
 
-FluidRenderBuffers* CreateFluidRenderBuffers(int numParticles, bool enableInterop);
-void DestroyFluidRenderBuffers(FluidRenderBuffers* buffers);
+// FluidRenderBuffers* CreateFluidRenderBuffers(int numParticles, bool enableInterop);
+// void DestroyFluidRenderBuffers(FluidRenderBuffers* buffers);
 
 // update fluid particle buffers from a FlexSovler
-void UpdateFluidRenderBuffers(FluidRenderBuffers* buffers, NvFlexSolver* flex, bool anisotropy, bool density);
+// void UpdateFluidRenderBuffers(FluidRenderBuffers* buffers, NvFlexSolver* flex, bool anisotropy, bool density);
 
 // update fluid particle buffers from host memory
+/*
 void UpdateFluidRenderBuffers(FluidRenderBuffers* buffers, 
 	Vec4* particles, 
 	float* densities, 
@@ -264,7 +268,7 @@ void UpdateFluidRenderBuffers(FluidRenderBuffers* buffers,
 	int numParticles, 
 	int* indices, 
 	int numIndices);
-
+*/
 // owns diffuse particle vertex buffers
 DiffuseRenderBuffers* CreateDiffuseRenderBuffers(int numDiffuseParticles, bool& enableInterop);
 void DestroyDiffuseRenderBuffers(DiffuseRenderBuffers* buffers);

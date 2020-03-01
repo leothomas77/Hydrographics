@@ -29,7 +29,7 @@ class DemoContext
 
 	virtual void getViewRay(int x, int y, Vec3& origin, Vec3& dir) = 0;
 	virtual void setView(Matrix44 view, Matrix44 projection) = 0;
-	virtual void renderEllipsoids(FluidRenderer* renderer, FluidRenderBuffers* buffers, int n, int offset, float radius, float screenWidth, float screenAspect, float fov, Vec3 lightPos, Vec3 lightTarget, Matrix44 lightTransform, ::ShadowMap* shadowMap, Vec4 color, float blur, float ior, bool debug) = 0;
+	//virtual void renderEllipsoids(FluidRenderer* renderer, FluidRenderBuffers* buffers, int n, int offset, float radius, float screenWidth, float screenAspect, float fov, Vec3 lightPos, Vec3 lightTarget, Matrix44 lightTransform, ::ShadowMap* shadowMap, Vec4 color, float blur, float ior, bool debug) = 0;
 	
 	virtual void drawMesh(const Mesh* m, Vec3 color) = 0;
 	virtual void drawCloth(const Vec4* positions, const Vec4* normals, const float* uvs, const int* indices, int numTris, int numPositions, int colorIndex, float expand, bool twosided, bool smooth) = 0;
@@ -50,8 +50,8 @@ class DemoContext
 	virtual void shadowBegin(ShadowMap* map) = 0;
 	virtual void shadowEnd() = 0;
 
-	virtual FluidRenderer* createFluidRenderer(uint32_t width, uint32_t height) = 0;
-	virtual void destroyFluidRenderer(FluidRenderer* renderer) = 0;
+	//virtual FluidRenderer* createFluidRenderer(uint32_t width, uint32_t height) = 0;
+	//virtual void destroyFluidRenderer(FluidRenderer* renderer) = 0;
 
 	virtual FluidRenderBuffers* createFluidRenderBuffers(int numParticles, bool enableInterop) = 0;
 	virtual void drawPoints(FluidRenderBuffers* buffers, int n, int offset, float radius, float screenWidth, float screenAspect, float fov, Vec3 lightPos, Vec3 lightTarget, Matrix44 lightTransform, ::ShadowMap* shadowTex, bool showDensity) = 0;
@@ -70,7 +70,7 @@ class DemoContext
 	virtual void updateDiffuseRenderBuffers(DiffuseRenderBuffers* buffers, NvFlexSolver* solver) = 0;
 	virtual int getNumDiffuseRenderParticles(DiffuseRenderBuffers* buffers) = 0;
 
-	virtual void drawDiffuse(FluidRenderer* render, const DiffuseRenderBuffers* buffers, int n, float radius, float screenWidth, float screenAspect, float fov, Vec4 color, Vec3 lightPos, Vec3 lightTarget, Matrix44 lightTransform, ::ShadowMap* shadowMap, float motionBlur, float inscatter, float outscatter, bool shadowEnabled, bool front) = 0;
+	//virtual void drawDiffuse(FluidRenderer* render, const DiffuseRenderBuffers* buffers, int n, float radius, float screenWidth, float screenAspect, float fov, Vec4 color, Vec3 lightPos, Vec3 lightTarget, Matrix44 lightTransform, ::ShadowMap* shadowMap, float motionBlur, float inscatter, float outscatter, bool shadowEnabled, bool front) = 0;
 
 	virtual void beginLines() = 0;
 	virtual void drawLine(const Vec3& p, const Vec3& q, const Vec4& color) = 0;

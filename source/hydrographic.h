@@ -52,10 +52,11 @@ public:
 
     //modelos centro
 		  ModelData tetra = ModelData("../../data/tetrahedron2.obj", Vec3(0.0f, 0.0f, 0.0f), 0.216f, Vec3(0.0f, 90.0f, 0.0f));//fator escala medido 0.216
-      ModelData sphere = ModelData("../../data/sphere.obj", Vec3(0.0f, 0.0f, 0.0f), 0.17f, Vec3(0.0f)); //.17
+      ModelData sphere = ModelData("../../data/sphere.obj", Vec3(0.0f, 0.0f, 0.0f), 0.3f, Vec3(0.0f)); //.17
       ModelData turtle = ModelData("../../data/tartaruga_centro.obj", Vec3(0.0f, 0.0f, 0.0f), 0.125f, Vec3(0.0f, -95.5f, 0.0f)); //fator escala fixa medida 0.14
       ModelData onca = ModelData("../../data/Onca_Poisson_15_16_0.obj", Vec3(0.0f, -1.8f, 0.0f), 0.125f, Vec3(0.0f, 0.0f, 0.0f)); //fator escala fixa medida 0.14
       ModelData bunny = ModelData("../../data/bunny.obj", Vec3(0.0f, 0.0f, 0.0f), 0.125f, Vec3(0.0f, -95.5f, 0.0f)); //fator escala fixa medida 0.14
+      ModelData earth = ModelData("../../data/Earth.obj", Vec3(0.0f, 0.0f, 0.0f), 0.2f, Vec3(0.0f, 0.0f, 0.0f)); //fator escala fixa medida 0.14
 
     //modelos alinhados - NÃO REMOVER                                                                                                                                 //modelos alinhados trasladados
       //ModelData tetra = ModelData("../../data/tetrahedron2.obj", Vec3(-0.02f, 0.0f, 0.3f), 0.216f, Vec3(0.0f, -90.0f, 0.0f));//fator escala medido 0.216
@@ -69,6 +70,7 @@ public:
 		models.push_back(turtle);
     models.push_back(onca);
     models.push_back(bunny);
+    models.push_back(earth);
 
     if (g_selectedModel >= 0 && g_selectedModel < models.size())
     {
@@ -76,14 +78,18 @@ public:
     }
     else
     {
-      selectedModel = 3;
+      // without texture
+      //0: tetraedro 1: sphere 2: turtle
+      // with texture
+      //3: onca 4: bunny 5: earth 
+      selectedModel = 5;
     }
 
 
     g_fps = 0.0f;
     g_frame = 0;
 		//float stretchStiffness = 1.0f; // default tartaruga esfera tetra
-    float stretchStiffness = 0.5f; // onca 
+    float stretchStiffness = 1.0f; // onca: 0.2 
     float bendStiffness = 0.75f; // not used
 		float shearStiffness = 0.5f; // not used
 		verticalInvMass = 1.0f;
@@ -126,11 +132,11 @@ public:
 		// general params
     float radius = 0.012f;
 		g_params.radius = radius;//0.012f;   //radius*1.0f; // raio max de interação entre partículas
-    g_params.numIterations = 3; // onca
+    g_params.numIterations = 5; //onca: 3
     g_numSubsteps = 2;
-    //g_params.numIterations = 5; // iteracoes pbd default
+    // g_params.numIterations = 5; // iteracoes pbd default
 
-    g_params.gravity[0] = 0.0f; //gravidade x, y, z
+    g_params.gravity[0] = 0.0f; // gravidade x, y, z
 		g_params.gravity[1] = 0.0f;
 		g_params.gravity[2] = 0.0f;
 		// common params
@@ -184,35 +190,37 @@ public:
 
 		Vec3 pos = Vec3(0.0f, initialY, 0.0f);
 		Quat rot = QuatFromAxisAngle(Vec3(1.0f), 0.0f);
-		if (1) {
-      Mesh* mesh = NULL; // mesh model for Flex simulator
-      GpuMesh* gpuMesh = NULL; // mesh for GPU and rendering
-      if (g_meshStepTest) {
-        cout << "Selecting sphere mesh with " << sphereSectors << " segments and " << sphereSectors << " slices " << endl;
-        mesh = CreateSphere(sphereSectors, sphereSectors, 1.0f);
-      } else {
-        mesh = ImportMesh(GetFilePathByPlatform(models[selectedModel].path).c_str());
-      }
 
-      triangles = mesh->m_triangles; // copy the triangle array
-      //g_meshVertices = mesh->m_positions.size();
-      cout << "Mesh positions:" << mesh->m_positions.size() << endl;
-      cout << "Mesh triangles:" << mesh->m_indices.size()/3 << endl;
+    Mesh* mesh = NULL; // mesh model for Flex simulator
+    GpuMesh* gpuMesh = NULL; // mesh for GPU and rendering
+    if (g_meshStepTest) {
+      cout << "Selecting sphere mesh with " << sphereSectors << " segments and " << sphereSectors << " slices " << endl;
+      mesh = CreateSphere(sphereSectors, sphereSectors, 1.0f);
+    } else {
+      mesh = ImportMesh(GetFilePathByPlatform(models[selectedModel].path).c_str());
+    }
 
+    triangles = mesh->m_triangles; // copy the triangle array
+    triangleIndexes = mesh->m_triangle_index;
+    cout << "Mesh positions:" << mesh->m_positions.size() << endl;
+    cout << "Mesh triangles:" << mesh->m_indices.size()/3 << endl;
+
+    // define collision mesh type
+    if (1) {
 		  sdfMesh = CreateHydrographicSDF(mesh, GetFilePathByPlatform(models[selectedModel].path).c_str(), createFile, voxelDim, transf, sdfMargin, expand);
 			AddSDF(sdfMesh, pos, rot, 1.0f);
-
 		}
 		else {
+      // para usar esta malha,tem que ajustar as transformacoes de escala
 		  triangleMesh = CreateTriangleMesh(ImportMesh(GetFilePathByPlatform(models[selectedModel].path).c_str()));
-		  AddTriangleMesh(triangleMesh, pos, rot, 0.5f);
+		  AddTriangleMesh(triangleMesh, pos, rot, 1.0f);
 		}
 
     // entry in the collision->render map
 #ifdef RENDER_V2
     // gpu mesh created by assimp import optimized for loading a full texture atlas features and rendering
     g_gpu_mesh = CreateGpuMesh(GetFilePathByPlatform(models[selectedModel].path).c_str(), transf, sdfMargin);
-    SetGpuMeshTriangles(g_gpu_mesh, triangles);
+    //SetGpuMeshTriangles(g_gpu_mesh, triangles, triangleIndexes);
 #else
     g_fields[sdf] = CreateGpuMesh(mesh);
 #endif
@@ -229,6 +237,13 @@ public:
     Matrix44 filmModel = TranslationMatrix(Point3(gridPosition));
 
 		CreateHydrographicSpringGrid(gridPosition, g_meshCenter, gridDimX, gridDimZ, 1, spacing, phase, stretchStiffness, bendStiffness, shearStiffness, 0.0f, 1.0f, horizontalInvMass, verticalInvMass, false);
+    filmContactCount.resize(g_buffers->positions.size());
+    for (int i = 0; i < g_buffers->positions.size(); i++)
+    {
+      filmContactCount[i] = 0;
+      g_buffers->uvs[i] = Vec4(0.0f);
+    }
+    
 #ifdef RENDER_V2
     g_film_mesh = CreateGpuFilm(filmModel, &g_buffers->positions[0], &g_buffers->normals[0], g_buffers->uvs.size() ? &g_buffers->uvs[0] : NULL, g_buffers->positions.size(), &g_buffers->triangles[0], g_buffers->triangles.size());
 #endif    
@@ -489,7 +504,7 @@ public:
   int sphereSectors = 160;
 	//Film params
   float gridY = 0.5f;
-  int factor = 5; //15
+  int factor = 15;//5; 
 	float A4_Spacing = 0.17f;//default spacing based on sphere model
 	int A4_Width = 7;
 	int A4_Height = 11;
@@ -501,4 +516,5 @@ public:
   bool tracking = false;
   //
   std::vector<Triangle> triangles;
+  std::vector<TriangleIndexes> triangleIndexes;
 };

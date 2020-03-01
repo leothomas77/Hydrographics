@@ -4,11 +4,11 @@
 
 struct PngImage
 {
-	uint16_t m_width;
-	uint16_t m_height;
+	uint16_t m_width = 0;
+	uint16_t m_height = 0;
 
 	// pixels are always assumed to be 32 bit
-	uint32_t* m_data;
+	uint32_t* m_data = nullptr;
 };
 
 bool PngLoad(const char* filename, PngImage& image);

@@ -128,6 +128,9 @@ void Init(int scene, bool centerCamera = true)
   displacements.resize(0);
 #endif
 
+  //
+  filmContactCount.resize(0);
+
 	// alloc buffers
 	g_buffers = AllocBuffers(g_flexLib);
 
@@ -658,7 +661,24 @@ void RenderSceneV2()
   const Quat rotation = g_buffers->shapePrevRotations[i];
   const Vec3 translation = Vec3(g_buffers->shapePrevPositions[i]);
   NvFlexCollisionGeometry geo = g_buffers->shapeGeometry[i];
-  Matrix44 modelMatrix = TranslationMatrix(Point3(translation))*RotationMatrix(Quat(rotation))*ScaleMatrix(geo.sdf.scale);
+
+  int type = g_buffers->shapeFlags[i] & eNvFlexShapeFlagTypeMask;
+  Matrix44 modelMatrix;
+  switch (type)
+  {
+    case eNvFlexShapeSDF:
+    {
+      modelMatrix = TranslationMatrix(Point3(translation))*RotationMatrix(Quat(rotation))*ScaleMatrix(geo.sdf.scale);
+      break;
+    }
+
+    case eNvFlexShapeTriangleMesh:
+    {
+      modelMatrix = TranslationMatrix(Point3(translation))*RotationMatrix(Quat(rotation))*ScaleMatrix(geo.triMesh.scale);
+      break;
+    }
+  }
+
   SetCullMode(false);
   SetFillMode(g_wireframe);
 
@@ -669,11 +689,10 @@ void RenderSceneV2()
 
   if (g_drawHydrographic) // draw film
   {
-    showTexture = false;
+    showTexture = true;
     BindFilmShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], lightColor, ambientColor, specularColor, specularExpoent, diffuseColor, showTexture);
     DrawHydrographicV2(g_film_mesh, &g_buffers->positions[0], &g_buffers->normals[0], &g_buffers->uvs[0], &g_buffers->triangles[0], g_buffers->triangles.size(), g_buffers->positions.size(), showTexture);
   }
-
   
   if (g_drawDisplacements) // draw displacements
   {
@@ -682,14 +701,14 @@ void RenderSceneV2()
     BindFilmShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], lightColor, ambientColor, specularColor, specularExpoent, diffuseColor, showTexture);
     DrawHydrographicV2(g_film_mesh, &g_displacement_buffers->positions[0], &g_displacement_buffers->normals[0], &g_buffers->uvs[0], &g_buffers->triangles[0], g_buffers->triangles.size(), g_displacement_buffers->positions.size(), showTexture);
   }
-  
 
   if (g_drawContacts) // draw displacements
   {
     showTexture = true;
     BindFilmShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], lightColor, ambientColor, specularColor, specularExpoent, diffuseColor, showTexture);
-    DrawDistortion(g_film_mesh, &g_buffers->positions[0], &g_buffers->normals[0], &g_buffers->uvs[0], &g_buffers->triangles[0], g_buffers->triangles.size(), g_displacement_buffers->positions.size(), showTexture);
+    DrawDistortion(g_film_mesh, &g_displacement_buffers->positions[0], &g_displacement_buffers->normals[0], &g_buffers->uvs[0], &g_buffers->triangles[0], g_buffers->triangles.size(), g_displacement_buffers->positions.size(), showTexture);
   }
+
 
 }
 
@@ -802,35 +821,41 @@ void RenderDebug()
 		for (int i = 0; i < int(g_buffers->activeIndices.size()); ++i)
 		{
 			// each active particle can have up to 6 contact points on NVIDIA Flex 1.1.0
-			const int contactIndex = contactIndices[g_buffers->activeIndices[i]];
+      const int filmIndex = g_buffers->activeIndices[i];
+      Vec3 filmContactVertex = Vec3(g_buffers->positions[filmIndex]);
+			const int contactIndex = contactIndices[filmIndex];
 			const unsigned int count = contactCounts[contactIndex];
 			const float scale = 0.1f;
 
 			//retrieve contact planes for each particle 
 			for (unsigned int c = 0; c < count; ++c)
 			{
-				Vec4 plane = contactPlanes[contactIndex*maxContactsPerParticle + c];
-				//DrawLine(Vec3(g_buffers->positions[g_buffers->activeIndices[i]]),
-					//Vec3(g_buffers->positions[g_buffers->activeIndices[i]]) + Vec3(plane)*scale,
-					//Vec4(0.0f, 1.0f, 0.0f, 0.0f));
+				Vec4 filmContactPlane = contactPlanes[contactIndex*maxContactsPerParticle + c];
+        //DrawLine(filmContactVertex, filmContactVertex + Vec3(filmContactPlane)*scale, Vec4(1.0f, 0.5f, 0.0f, 0.0f));
 
         if (1) // enable find mesh contacts
         {
-          int shapeIndex = 0; // rigid shape index
-          const Quat rotation = g_buffers->shapePrevRotations[shapeIndex];
-          const Vec3 translation = Vec3(g_buffers->shapePrevPositions[shapeIndex]);
-          NvFlexCollisionGeometry geo = g_buffers->shapeGeometry[shapeIndex];
-          Matrix44 modelMatrix = TranslationMatrix(Point3(translation))*RotationMatrix(Quat(rotation))*ScaleMatrix(geo.sdf.scale);
-          //int filmIndex = g_buffers->activeIndices[i];
-          FindMeshContacts(Vec3(g_buffers->positions[contactIndex]), contactIndex, Vec3(plane), g_gpu_mesh, g_film_mesh, modelMatrix);
-        }
 
+          int shapeIndex = 0; // rigid shape index
+          const Quat rotation = g_buffers->shapeRotations[shapeIndex];
+          const Vec3 translation = Vec3(g_buffers->shapePositions[shapeIndex]);
+          NvFlexCollisionGeometry geo = g_buffers->shapeGeometry[shapeIndex];
+
+          Matrix44 modelMatrix = TranslationMatrix(Point3(translation))*RotationMatrix(Quat(rotation))*ScaleMatrix(geo.sdf.scale);
+          
+          //TODO smooth normal vector to improve generated image
+          FindMeshContacts(filmContactVertex, filmIndex, -Vec3(filmContactPlane), filmContactCount[filmIndex], g_gpu_mesh, g_film_mesh, modelMatrix, gridDimZ, gridDimX);
+        }
 			}
 		}
 
 		EndLines();
+    
+    // setup dynamic texture
+    //SetupContactsTexture(g_film_mesh);
 
-    SetupFilmMesh(g_gpu_mesh, g_film_mesh);
+    // swap film texture to gpu_mesh texture
+    // SetupFilmMesh(g_gpu_mesh, g_film_mesh);
 
 	}
 
@@ -1190,8 +1215,10 @@ int DoUI()
 			if (imguiCheck("Draw Springs", bool(g_drawSprings != 0)))
 				g_drawSprings = (g_drawSprings) ? 0 : 1;
 
-			if (imguiCheck("Draw Contacts", g_drawContacts))
-				g_drawContacts = !g_drawContacts;
+      if (imguiCheck("Draw Contacts", g_drawContacts))
+      {
+        g_drawContacts = !g_drawContacts;
+      }
 
 			if (imguiCheck("Draw Displacements", g_drawDisplacements))
 				g_drawDisplacements = !g_drawDisplacements;
@@ -1724,12 +1751,12 @@ void ReshapeWindow(int width, int height)
 
 	ReshapeRender(g_window);
 
-	if (!g_fluidRenderer || (width != g_screenWidth || height != g_screenHeight))
-	{
-		if (g_fluidRenderer)
-			DestroyFluidRenderer(g_fluidRenderer);
-		g_fluidRenderer = CreateFluidRenderer(width, height);
-	}
+	//if (!g_fluidRenderer || (width != g_screenWidth || height != g_screenHeight))
+	//{
+		//if (g_fluidRenderer)
+			//DestroyFluidRenderer(g_fluidRenderer);
+		//g_fluidRenderer = CreateFluidRenderer(width, height);
+	//}
 
 	g_screenWidth = width;
 	g_screenHeight = height;

@@ -205,9 +205,12 @@ struct GpuMesh
   std::vector<Vec3> positions;
   std::vector<Vec3> normals;
   std::vector<Vec4> colors;
-  std::vector<Vec2> texCoords;
+  std::vector<Vec2> texCoordsRigid;
+  std::vector<Vec4> texCoordsFilm;
   std::vector<Triangle> triangles;
+  std::vector<TriangleIndexes> triangleIndexes;
   Matrix44 modelTransform;
+  Vec3 center;
 
   Vec4 Ka, Kd, Ks;
 };
@@ -219,6 +222,9 @@ aiVector3D scene_min, scene_max, scene_center;
 
 // texture pool
 #include "../core/png.h"
+
+PngImage g_dynamic_texture;
+GLuint g_dynamic_texture_ID = 0;
 
 GLuint LoadTexture(const char* filename)
 {
@@ -252,6 +258,82 @@ GLuint LoadTexture(const char* filename)
         return NULL;
     }
 }
+
+GLuint LoadTexture_Original(const char* filename)
+{
+  PngImage img;
+  if (PngLoad(filename, img))
+  {
+    GLuint tex;
+
+    glVerify(glGenTextures(1, &tex));
+    glVerify(glActiveTexture(GL_TEXTURE0));
+    glVerify(glBindTexture(GL_TEXTURE_2D, tex));
+
+    glTexStorage2D(GL_TEXTURE_2D, 2 /* mip map levels */, GL_RGB8, img.m_width, img.m_height);
+    glTexSubImage2D(GL_TEXTURE_2D, 0 /* mip map level */, 0 /* xoffset */, 0 /* yoffset */, img.m_width, img.m_height, GL_RGBA, GL_UNSIGNED_BYTE, img.m_data);
+    glGenerateMipmap(GL_TEXTURE_2D);
+
+
+    glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR));
+    glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR));
+    glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
+    glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
+    //glVerify(glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, GL_TRUE));
+    //glVerify(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img.m_width, img.m_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, img.m_data));
+
+    PngFree(img);
+
+    return tex;
+  }
+  else
+  {
+    return NULL;
+  }
+}
+
+GLuint CreateDynamicTexture(PngImage &img, GLuint &textID)
+{
+  img.m_height = 256;
+  img.m_width = 256;
+
+  //if (img.m_height <= 0 || img.m_width <= 0) 
+    //return NULL;
+
+  img.m_data = new uint32_t[img.m_height * img.m_width];
+
+  //initialize pixel color for dynamic texture 
+  for (int col = 0; col < img.m_width; col++)
+  {
+    for (int row = 0; row < img.m_height; row++)
+    {
+      glm::ivec4 color = glm::ivec4(255, 255, 255, 255);
+      uint32_t pixel = (BYTE(color.a) << 24) + (BYTE(color.b) << 16) + (BYTE(color.g) << 8) + BYTE(color.r);
+
+      int index = img.m_height * col + row;
+      img.m_data[index] = pixel;
+    }
+  }
+
+  glGenTextures(1, &textID);
+  glBindTexture(GL_TEXTURE_2D, textID);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img.m_width, img.m_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, (GLvoid*)NULL);
+  glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
+  glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
+
+  return textID;
+}
+
+GLuint LoadDynamicTexture(PngImage img, GLuint &textID)
+{
+  glBindTexture(GL_TEXTURE_2D, textID);
+  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, img.m_width, img.m_height, GL_RGBA, GL_UNSIGNED_BYTE, img.m_data);
+
+  return textID;
+}
+
 
 struct RenderTexture
 {
@@ -340,12 +422,15 @@ namespace OGL_Renderer
 
     texHydrographicId = LoadTexture(GetFilePathByPlatform("../../textures/malha_rgb.jpg").c_str());
 
+    CreateDynamicTexture(g_dynamic_texture, g_dynamic_texture_ID);
+    
 	  g_msaaSamples = msaaSamples;
 	  g_window = window;
   }
 
   void DestroyRender()
   {
+    delete[] g_dynamic_texture.m_data;
   }
 
   void StartFrame(Vec4 clearColor)
@@ -3174,7 +3259,7 @@ void DrawGpuMeshV2(GpuMesh* m, const Matrix44& modelMat, bool showTexture)
 {
   if (m)
   {
-    int hasTexture = showTexture && m->texCoords.size() > 0 ? 1 : 0;
+    int hasTexture = showTexture && m->texCoordsRigid.size() > 0 ? 1 : 0;
     if (hasTexture) 
     {
       //Enable texture
@@ -3226,27 +3311,95 @@ void SetupFilmMesh(GpuMesh* gpuMesh, GpuMesh* filmMesh)
   // update texture id
   filmMesh->mTextureId = gpuMesh->mTextureId;
   // update texture coords
-  glVerify(glBindBuffer(GL_ARRAY_BUFFER, filmMesh->mPositionsVBO));
-  glVerify(glBufferSubData(GL_ARRAY_BUFFER, filmMesh->mNumVertices * (sizeof(Vec4) + sizeof(Vec4)), filmMesh->mNumVertices * sizeof(Vec4), filmMesh->texCoords.data()));
+  //glVerify(glBindBuffer(GL_ARRAY_BUFFER, filmMesh->mPositionsVBO));
+  //glVerify(glBufferSubData(GL_ARRAY_BUFFER, filmMesh->mNumVertices * (sizeof(Vec4) + sizeof(Vec4)), filmMesh->mNumVertices * sizeof(Vec4), filmMesh->texCoordsFilm.data()));
   
 }
 
-void FindMeshContacts(Vec3 filmContactVertex, int filmContactVertexIndex, Vec3 filmContactPlane, GpuMesh* gpuMesh, GpuMesh* filmMesh, Mat44 modelMatrix)
+// get texture coords from baricentric coordinates
+Vec2 InterpolateTextureCoordinates(Vec2 textCoordV0, Vec2 textCoordV1, Vec2 textCoordV2, float u, float v, float w)
 {
-  const float scale = 0.1f;
-  for (int i = 0; i < gpuMesh->positions.size(); i++)
+  return w * textCoordV0 + u * textCoordV1 + v * textCoordV2;
+}
+
+//#define DEBUG_CONTACTS
+void FindMeshContacts(Vec3 filmContactVertex, int filmContactVertexIndex, Vec3 filmContactPlane, int &contactCount, GpuMesh* gpuMesh, GpuMesh* filmMesh, Mat44 modelMatrix, int gridHeight, int gridWidth)
+{
+  //const float scale = 0.01f;
+  filmMesh->mTextureId = gpuMesh->mTextureId; // swap texture id rigid -> film
+  if (1) //
   {
-    Vec3 positionW = modelMatrix * Vec4(gpuMesh->positions[i], 1.0f);
-    float distance = Length(filmContactVertex - positionW);
-    // found contact nearby a rigid mesh vertex
-    if (distance <= 0.4f) 
+    // TODO considerar apenas a face voltada para baixo da malha
+    // parece que está encontrando duas intersecoes, e considerando o ultimo triangulo 
+    for (int i = 0; i < gpuMesh->triangles.size(); ++i)
     {
-      //get texture coords from rigid mesh and transfer to soft-body
-      filmMesh->texCoords[filmContactVertexIndex] = gpuMesh->texCoords[i];
-      //DrawLine(filmContactVertex, filmContactVertex + Vec3(filmContactPlane)*scale, Vec4(1.0f, 0.5f, 0.0f, 0.0f));
+      Vec3 v0 = Vec3(modelMatrix * Vec4(gpuMesh->positions[i * 3 + 0], 1.0f));
+      Vec3 v1 = Vec3(modelMatrix * Vec4(gpuMesh->positions[i * 3 + 1], 1.0f));
+      Vec3 v2 = Vec3(modelMatrix * Vec4(gpuMesh->positions[i * 3 + 2], 1.0f));
+
+      //Vec3 n = Normalize(Cross(v1 - v0, v2 - v0));
+
+      float t = INFINITY;
+      float u, v, w;
+
+      if (gpuMesh->texCoordsRigid.size() && rayTriangleIntersectMT(filmContactVertex, filmContactPlane, v0, v1, v2, t, u, v, w))
+      {
+#ifdef DEBUG_CONTACTS
+        BeginPoints(2.0f);
+        Vec4 color = Vec4(0.0f, 1.0f, 0.0f, 0.8f);
+        Vec3 contactPoint = filmContactVertex + t * filmContactPlane;
+        DrawPoint(contactPoint, color);
+        EndPoints();
+#endif
+      // get texture coords from rigid mesh and transfer to soft-body
+        Vec2 texCoordsRigid = InterpolateTextureCoordinates(gpuMesh->texCoordsRigid[i * 3], 
+          gpuMesh->texCoordsRigid[i * 3 + 1], gpuMesh->texCoordsRigid[i * 3 + 2], u, v, w);
+
+        if (filmMesh->texCoordsFilm[filmContactVertexIndex].x == .0f && filmMesh->texCoordsFilm[filmContactVertexIndex].y == .0f)
+        {
+          filmMesh->texCoordsFilm[filmContactVertexIndex] = Vec4(texCoordsRigid);
+        }
+        else {
+          return;
+        }
+      }
     }
-    
   }
+
+  /*
+  OLD CODE USED FOR PRIOR TESTS - KEEP FOR DEBUGGING AND REFERENCE
+  if (0)
+  {
+    for (int i = 0; i < gpuMesh->positions.size(); i++)
+    {
+
+      Vec3 positionW = modelMatrix * Vec4(gpuMesh->positions[i], 1.0f);
+
+      float distance = Length(filmContactVertex - positionW);
+      // found contact nearby a rigid mesh vertex
+      if (distance <= 0.1f) 
+      {
+        //get texture coords from rigid mesh and transfer to soft-body
+        filmMesh->texCoordsFilm[filmContactVertexIndex] = Vec4(gpuMesh->texCoordsRigid[i]);
+
+        if (0)
+        {
+          float filmRow = floor(filmContactVertexIndex / gridWidth);
+          float filmCol = filmContactVertexIndex % gridWidth;
+      
+          int row = (filmRow / gridHeight) * g_dynamic_texture.m_height;
+          int col = (filmCol / gridWidth) * g_dynamic_texture.m_width;
+
+          glm::ivec4 color = glm::ivec4(0, 0, 0, 255);
+          uint32_t pixel = (BYTE(color.a) << 24) + (BYTE(color.b) << 16) + (BYTE(color.g) << 8) + BYTE(color.r);
+
+          int index = g_dynamic_texture.m_width * row + col;
+          g_dynamic_texture.m_data[index] = pixel;
+        }
+      }
+    }
+  }
+  */
 }
 
 void ReadDisplacements(int* backbuffer, int width, int height)
@@ -3419,8 +3572,17 @@ size_t traverseScene(const aiScene *scene, const aiNode* node, Mesh* mesh, std::
 
     for (size_t j = 0; j < assimp_mesh->mNumFaces; j++) {
       const aiFace* face = &assimp_mesh->mFaces[j];
+
+      Triangle triangle;
+
       for (size_t k = 0; k < face->mNumIndices; k++) {
         int index = face->mIndices[k];
+
+        if (k < 3)
+        {
+          triangle.verticeIndexes[k] = face->mIndices[k];
+        }
+
         if (assimp_mesh->HasVertexColors(0)) // not tested yet
         {
           mesh->m_colours.push_back(Colour(assimp_mesh->mColors[0]->r, assimp_mesh->mColors[0]->g, assimp_mesh->mColors[0]->b, assimp_mesh->mColors[0]->a));
@@ -3438,8 +3600,12 @@ size_t traverseScene(const aiScene *scene, const aiNode* node, Mesh* mesh, std::
           mesh->m_normals.push_back(Vec3(assimp_mesh->mNormals[index].x, assimp_mesh->mNormals[index].y, assimp_mesh->mNormals[index].z));
         }
         mesh->m_positions.push_back(Point3(assimp_mesh->mVertices[index].x, assimp_mesh->mVertices[index].y, assimp_mesh->mVertices[index].z));
+        TriangleIndexes triangleIndexes;
+
+        mesh->m_triangle_index.push_back(triangleIndexes);
         nVertices++;
       }
+      mesh->m_triangles.push_back(triangle);
     }
   }
 
@@ -3459,6 +3625,7 @@ void createVBOs(const aiScene *scene, GpuMesh* gpu_mesh, std::string basePath, M
   Mesh* mesh = new Mesh();
   gpu_mesh->mNumVertices = GLuint(traverseScene(scene, scene->mRootNode, mesh, basePath));
   gpu_mesh->mTextureId = GLuint(mesh->mTextureId);
+  gpu_mesh->triangles = mesh->m_triangles;
 
   std::cout << "           #Vertices   = " << gpu_mesh->mNumVertices << std::endl;
   std::cout << "           #vboVertices= " << mesh->m_positions.size() << std::endl;
@@ -3480,7 +3647,7 @@ void createVBOs(const aiScene *scene, GpuMesh* gpu_mesh, std::string basePath, M
     // and also because m_texcoords is an array with dimensions [0][n];
     if (mesh->m_texcoords[0].size() == mesh->m_positions.size())
     {
-      gpu_mesh->texCoords.push_back(mesh->m_texcoords[0][i]);
+      gpu_mesh->texCoordsRigid.push_back(mesh->m_texcoords[0][i]);
     }
   }
 
@@ -3546,7 +3713,6 @@ GpuMesh* CreateGpuMesh(const char* filename, Mat44 transformation, float margin)
   aiPropertyStore* props = aiCreatePropertyStore(); aiSetImportPropertyInteger(props, "PP_PTV_NORMALIZE", 1);
   scene = (aiScene*)aiImportFileExWithProperties(filename, aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenSmoothNormals | aiProcess_JoinIdenticalVertices | aiProcess_PreTransformVertices, NULL, props);
   aiReleasePropertyStore(props);
-  //scene = (aiScene*)aiImportFileExWithProperties(filename, aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenSmoothNormals | aiProcess_JoinIdenticalVertices | aiProcess_PreTransformVertices, NULL, props); aiReleasePropertyStore(props);
   //scene = aiImportFile(filename, aiProcessPreset_TargetRealtime_MaxQuality);
   if (!scene) {
     std::cout << "## ERROR loading mesh" << std::endl;
@@ -3584,12 +3750,53 @@ GpuMesh* CreateGpuMesh(const char* filename, Mat44 transformation, float margin)
 
   std::cout << "Bounding Box: " << " (" << scene_min.x << " , " << scene_min.y << " , " << scene_min.z << ") - (" << scene_max.x << " , " << scene_max.y << " , " << scene_max.z << ")" << std::endl;
   std::cout << "Bounding Box: " << " (" << scene_center.x << " , " << scene_center.y << " , " << scene_center.z << ")" << std::endl;
+  
+  gpu_mesh->center.x = scene_center.x;
+  gpu_mesh->center.y = scene_center.y;
+  gpu_mesh->center.z = scene_center.z;
 
   return gpu_mesh;
 }
 
-void SetGpuMeshTriangles(GpuMesh* gpuMesh, std::vector<Triangle> triangles) {
+void SetGpuMeshTriangles(GpuMesh* gpuMesh, std::vector<Triangle> triangles, std::vector<TriangleIndexes> triangleIndexes) {
   gpuMesh->triangles = triangles;
+  gpuMesh->triangleIndexes = triangleIndexes;
+}
+
+#define CULLING
+/*
+  Möller - Trumbore algorithm
+  https://www.scratchapixel.com/lessons/3d-basic-rendering/ray-tracing-rendering-a-triangle/moller-trumbore-ray-triangle-intersection
+*/
+bool rayTriangleIntersectMT(Vec3 orig, Vec3 dir, Vec3 v0, Vec3 v1, Vec3 v2, float &t, float &u, float &v, float &w)
+{
+  float kEpsilon = 1e-8;
+  Vec3 v0v1 = v1 - v0;
+  Vec3 v0v2 = v2 - v0;
+  Vec3 pvec = Cross(dir, v0v2);
+  float det = Dot(v0v1, pvec);
+#ifdef CULLING 
+  // if the determinant is negative the triangle is backfacing
+  // if the determinant is close to 0, the ray misses the triangle
+  if (det < kEpsilon) return false;
+#else 
+  // ray and triangle are parallel if det is close to 0
+  if (fabs(det) < kEpsilon) return false;
+#endif 
+  float invDet = 1 / det;
+
+  Vec3 tvec = orig - v0;
+  u = Dot(tvec, pvec) * invDet;
+  if (u < 0 || u > 1) return false;
+
+  Vec3 qvec = Cross(tvec, v0v1);
+  v = Dot(dir, qvec) * invDet;
+  if (v < 0 || u + v > 1) return false;
+
+  w = 1 - u - v;
+  t = Dot(v0v2, qvec) * invDet;
+
+  return true;
 }
 
 GpuMesh* CreateGpuFilm(Matrix44 model, Vec4* positions, Vec4* normals, Vec4* uvs, int nVertices, int* indices, int nIndices)
@@ -3602,10 +3809,10 @@ GpuMesh* CreateGpuFilm(Matrix44 model, Vec4* positions, Vec4* normals, Vec4* uvs
   mesh->mNumIndices = nIndices;
   mesh->modelTransform = model;
   mesh->mTextureId = GetHydrographicTextureId(); //set texture ID for film
-  mesh->texCoords.resize(0);
+  mesh->texCoordsFilm.resize(0);
   for (int i = 0; i < nVertices; i++)
   {
-    mesh->texCoords.push_back(Vec2(uvs[i].x, uvs[i].y));
+    mesh->texCoordsFilm.push_back(uvs[i]);
   }
 
   // configure plane VAO
@@ -3925,7 +4132,6 @@ void UnbindHydrographicShader()
 	glActiveTexture(GL_TEXTURE1);
 	glDisable(GL_TEXTURE_2D);
 	glActiveTexture(GL_TEXTURE0);
-
 	glUseProgram(0);
 }
 
@@ -4053,7 +4259,7 @@ void DrawHydrographicV2(GpuMesh* mesh, const Vec4* positions, const Vec4* normal
   glVerify(glActiveTexture(GL_TEXTURE0));//
   glVerify(glBindTexture(GL_TEXTURE_2D, mesh->mTextureId));
   glVerify(glUniform1i(glGetUniformLocation(s_filmProgram, "tex"), 0));//
-  int hasTexture = showTexture && mesh->texCoords.size() > 0 ? 1 : 0;
+  int hasTexture = showTexture && mesh->texCoordsFilm.size() > 0 ? 1 : 0;
   glVerify(glUniform1i(glGetUniformLocation(s_filmProgram, "showTexture"), hasTexture));
   // update positions and normals
   glVerify(glBindBuffer(GL_ARRAY_BUFFER, mesh->mPositionsVBO)); // 
@@ -4070,22 +4276,37 @@ void DrawHydrographicV2(GpuMesh* mesh, const Vec4* positions, const Vec4* normal
 
 void DrawDistortion(GpuMesh* mesh, const Vec4* positions, const Vec4* normals, const Vec4* uvs, const int* indices, int nIndices, int numPositions, bool showTexture)
 {
-  // Enable texture
-  glVerify(glEnable(GL_TEXTURE_2D));//
-  glVerify(glActiveTexture(GL_TEXTURE0));//
-  glVerify(glBindTexture(GL_TEXTURE_2D, mesh->mTextureId));
-  glVerify(glUniform1i(glGetUniformLocation(s_filmProgram, "tex"), 0));//
-  int hasTexture = showTexture && mesh->texCoords.size() ? 1 : 0;
-  glVerify(glUniform1i(glGetUniformLocation(s_filmProgram, "showTexture"), hasTexture));
+  int hasTexture = showTexture && mesh->texCoordsFilm.size() ? 1 : 0;
+  if (hasTexture)
+  {
+    // Enable texture
+    glVerify(glEnable(GL_TEXTURE_2D));//
+    glVerify(glActiveTexture(GL_TEXTURE0));//
+    glVerify(glBindTexture(GL_TEXTURE_2D, mesh->mTextureId));
+    glVerify(glUniform1i(glGetUniformLocation(s_filmProgram, "tex"), 0));//
+    glVerify(glUniform1i(glGetUniformLocation(s_filmProgram, "showTexture"), hasTexture));
+
+  }
   // update positions and normals
   glVerify(glBindBuffer(GL_ARRAY_BUFFER, mesh->mPositionsVBO)); // parei aqui -> criar condicao para selecionar textura diferente, caso seja a transferencia do objeto para o filme
   glVerify(glBufferSubData(GL_ARRAY_BUFFER, 0, mesh->mNumVertices * sizeof(Vec4), positions));
   glVerify(glBufferSubData(GL_ARRAY_BUFFER, mesh->mNumVertices * sizeof(Vec4), mesh->mNumVertices * sizeof(Vec4), normals));
+  // update texture coords
+  glVerify(glBufferSubData(GL_ARRAY_BUFFER, mesh->mNumVertices * (sizeof(Vec4) + sizeof(Vec4)), mesh->mNumVertices * sizeof(Vec4), mesh->texCoordsFilm.data()));
   // draw VAO
   glVerify(glBindVertexArray(mesh->mVAO));
   glVerify(glDrawElements(GL_TRIANGLES, nIndices, GL_UNSIGNED_INT, 0));
   glVerify(glBindVertexArray(0));
   // disable texture
-  glActiveTexture(GL_TEXTURE0);
-  glDisable(GL_TEXTURE_2D);
+  if (hasTexture)
+  {
+    glActiveTexture(GL_TEXTURE0);
+    glDisable(GL_TEXTURE_2D);
+  }
+}
+
+void SetupContactsTexture(GpuMesh* filmMesh)
+{
+  LoadDynamicTexture(g_dynamic_texture, g_dynamic_texture_ID);
+  filmMesh->mTextureId = g_dynamic_texture_ID;
 }

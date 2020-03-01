@@ -20,7 +20,7 @@ void main(void) {
 	vec4 lColor	 = uLColor;
 	// material properties
 	vec4 matAmb	 = uAmbient;
-	vec4 matDif  = showTexture ? vec4(texture(tex, vTexCoords).rgb, 1.0) : uColor;
+	vec4 matDif  = showTexture ? texture(tex, vTexCoords) : uColor;
 	vec4 matSpec = uSpecular;
 	//ambient
 	vec4 ambient = matAmb;
@@ -40,6 +40,7 @@ void main(void) {
 	{
 	  specular = matSpec * pow(RdotV, uSpecularExpoent);
 	}
-	outFragColor = clamp((ambient + diffuse + specular) * lColor, 0.0, 1.0);
+	//outFragColor = clamp((ambient + diffuse + specular) * lColor, 0.0, 1.0);
+	outFragColor = matDif;
 }
 //

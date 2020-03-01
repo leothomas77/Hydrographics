@@ -571,6 +571,9 @@ Mesh* ImportMeshFromObj(const char* path)
     // calculate normals if none specified in file
     m->m_normals.resize(m->m_positions.size());
 
+    // resize triangle indices 
+    m->m_triangle_index.resize(m->m_positions.size());
+
     const uint32_t numFaces = uint32_t(indices.size())/3;
     for (uint32_t i=0; i < numFaces; ++i)
     {
@@ -589,6 +592,65 @@ Mesh* ImportMeshFromObj(const char* path)
         triangle.center = Point3((v0.x + v1.x + v2.x) / 3, (v0.y + v1.y + v2.y) / 3, (v0.z + v1.z + v2.z) / 3);
 
         m->m_triangles.push_back(triangle);
+
+        int triangleIndex = m->m_triangles.size() - 1;
+
+        if (m->m_triangle_index[a].count <= 6)
+        {
+          bool alreadyExists = false;
+          for (int count = 0; count < m->m_triangle_index[a].count; count++)
+          {
+            int existingIndex = m->m_triangle_index[a].indexes[count];
+            if (triangleIndex == existingIndex)
+            {
+              alreadyExists = true;
+            }
+          }
+
+          if (!alreadyExists)
+          {
+            m->m_triangle_index[a].count++;
+            m->m_triangle_index[a].indexes[m->m_triangle_index[a].count - 1] = triangleIndex;
+          }
+        }
+        
+        if (m->m_triangle_index[b].count <= 6)
+        {
+          bool alreadyExists = false;
+          for (int count = 0; count < m->m_triangle_index[b].count; count++)
+          {
+            int existingIndex = m->m_triangle_index[b].indexes[count];
+            if (triangleIndex == existingIndex)
+            {
+              alreadyExists = true;
+            }
+          }
+
+          if (!alreadyExists)
+          {
+            m->m_triangle_index[b].count++;
+            m->m_triangle_index[b].indexes[m->m_triangle_index[b].count - 1] = triangleIndex;
+          }
+        }
+
+        if (m->m_triangle_index[c].count <= 6)
+        {
+          bool alreadyExists = false;
+          for (int count = 0; count < m->m_triangle_index[c].count; count++)
+          {
+            int existingIndex = m->m_triangle_index[c].indexes[count];
+            if (triangleIndex == existingIndex)
+            {
+              alreadyExists = true;
+            }
+          }
+
+          if (!alreadyExists)
+          {
+            m->m_triangle_index[c].count++;
+            m->m_triangle_index[c].indexes[m->m_triangle_index[c].count - 1] = triangleIndex;
+          }
+        }
 
         Vector3 n = SafeNormalize(Cross(v1-v0, v2-v0), Vector3(0.0f, 1.0f, 0.0f));
 

@@ -91,7 +91,6 @@ struct SimBuffers
 
 	NvFlexVector<Vec4>  originalPositions;	// for compute displacement heatmap
 
-
 	// convexes
 	NvFlexVector<NvFlexCollisionGeometry> shapeGeometry;
 	NvFlexVector<Vec4> shapePositions;
@@ -107,6 +106,7 @@ struct SimBuffers
 	NvFlexVector<int> triangles;
 	NvFlexVector<Vec3> triangleNormals;
 	NvFlexVector<Vec4> uvs;
+
 
 	SimBuffers(NvFlexLibrary* l) :
 		positions(l), restPositions(l), velocities(l), phases(l), normals(l), activeIndices(l), diffuseCount(l),
@@ -278,8 +278,8 @@ bool g_useAsyncCompute = true;
 bool g_increaseGfxLoadForAsyncComputeTesting = false;
 int g_graphics = 0;	// 0=ogl, 1=DX11, 2=DX12
 
-FluidRenderer* g_fluidRenderer;
-FluidRenderBuffers* g_fluidRenderBuffers;
+//FluidRenderer* g_fluidRenderer;
+//FluidRenderBuffers* g_fluidRenderBuffers;
 DiffuseRenderBuffers* g_diffuseRenderBuffers;
 
 
@@ -297,6 +297,10 @@ vector<float> displacements;		// for compute hydrographic distortion
 									//std::map<int, float> frameTracking;
 									//bool g_tracking;
 #endif
+
+                  //
+std::vector<int> filmContactCount;
+
 NvFlexParams g_params;
 NvFlexTimers g_timers;
 int g_numDetailTimers;

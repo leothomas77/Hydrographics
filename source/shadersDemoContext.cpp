@@ -77,9 +77,9 @@ void SetCullMode(bool enabled) { s_context->setCullMode(enabled); }
 
 void SetView(Matrix44 view, Matrix44 projection) { return s_context->setView(view, projection); }
 
-FluidRenderer* CreateFluidRenderer(uint32_t width, uint32_t height) { return s_context->createFluidRenderer(width, height); }
+//FluidRenderer* CreateFluidRenderer(uint32_t width, uint32_t height) { return s_context->createFluidRenderer(width, height); }
 
-void DestroyFluidRenderer(FluidRenderer* renderer) { return s_context->destroyFluidRenderer(renderer); }
+//void DestroyFluidRenderer(FluidRenderer* renderer) { return s_context->destroyFluidRenderer(renderer); }
 
 FluidRenderBuffers* CreateFluidRenderBuffers(int numParticles, bool enableInterop) { return s_context->createFluidRenderBuffers(numParticles, enableInterop); }
 
@@ -140,10 +140,12 @@ void DrawPoints(FluidRenderBuffers* buffers, int n, int offset, float radius, fl
 	s_context->drawPoints(buffers, n, offset, radius, screenWidth, screenAspect, fov, lightPos, lightTarget, lightTransform, shadowTex, showDensity);
 }
 
+/*
 void RenderEllipsoids(FluidRenderer* renderer, FluidRenderBuffers* buffers, int n, int offset, float radius, float screenWidth, float screenAspect, float fov, Vec3 lightPos, Vec3 lightTarget, Matrix44 lightTransform, ShadowMap* shadowMap, Vec4 color, float blur, float ior, bool debug)
 {
 	s_context->renderEllipsoids(renderer, buffers, n, offset, radius, screenWidth, screenAspect, fov, lightPos, lightTarget, lightTransform, shadowMap, color, blur, ior, debug);
 }
+*/
 
 DiffuseRenderBuffers* CreateDiffuseRenderBuffers(int numDiffuseParticles, bool& enableInterop) { return s_context->createDiffuseRenderBuffers(numDiffuseParticles, enableInterop); }
 
@@ -158,10 +160,12 @@ void UpdateDiffuseRenderBuffers(DiffuseRenderBuffers* buffers, NvFlexSolver* sol
 
 int GetNumDiffuseRenderParticles(DiffuseRenderBuffers* buffers) { return s_context->getNumDiffuseRenderParticles(buffers); }
 
+/*
 void RenderDiffuse(FluidRenderer* render, DiffuseRenderBuffers* buffers, int n, float radius, float screenWidth, float screenAspect, float fov, Vec4 color, Vec3 lightPos, Vec3 lightTarget, Matrix44 lightTransform, ShadowMap* shadowMap, float motionBlur, float inscatter, float outscatter, bool shadowEnabled, bool front)
 {
 	s_context->drawDiffuse(render, buffers, n, radius, screenWidth, screenAspect, fov, color, lightPos, lightTarget, lightTransform, shadowMap, motionBlur, inscatter, outscatter, shadowEnabled, front);
 }
+*/
 
 void BeginLines() {	s_context->beginLines(); }
 
