@@ -542,49 +542,47 @@ void CreateHydrographicSpringGrid(Vec3 lower, Vec3 meshCenter, int dx, int dy, i
 	}
 
 	// horizontal
-	if (1) {
-		for (int y = 0; y < dy; ++y)
-		{
-			for (int x = 0; x < dx; ++x)
-			{
-				int index0 = y*dx + x;
-
-				if (x > 0)
-				{
-					int index1 = y*dx + x - 1;
-					Vec4 mean = 0.5f * (g_buffers->positions[baseIndex + index0] + g_buffers->positions[baseIndex + index1]);
-					float d = computeDistance(distortionCenter, Vec3(mean));
-					CreateSpring(baseIndex + index0, baseIndex + index1, computeStiffness(d, min(dx * radius, dy * radius), mean.x, distortionCenter.x, mean.z, distortionCenter.z));
-        }
-
-				if (isBendShiftess && x > 1)
-				{
-					int index2 = y*dx + x - 2;
-					CreateSpring(baseIndex + index0, baseIndex + index2, bendStiffness);
-				}
-			
-			}
-		}
-		// vertical
+	for (int y = 0; y < dy; ++y)
+	{
 		for (int x = 0; x < dx; ++x)
 		{
-			for (int y = 0; y < dy; ++y)
+			int index0 = y*dx + x;
+
+			if (x > 0)
 			{
-				int index0 = y*dx + x;
+				int index1 = y*dx + x - 1;
+				Vec4 mean = 0.5f * (g_buffers->positions[baseIndex + index0] + g_buffers->positions[baseIndex + index1]);
+				float d = computeDistance(distortionCenter, Vec3(mean));
+				CreateSpring(baseIndex + index0, baseIndex + index1, computeStiffness(d, min(dx * radius, dy * radius), mean.x, distortionCenter.x, mean.z, distortionCenter.z));
+      }
 
-				if (y > 0)
-				{
-					int index1 = (y - 1)*dx + x;
-					Vec4 mean = 0.5f * (g_buffers->positions[baseIndex + index0] + g_buffers->positions[baseIndex + index1]);
-					float d = computeDistance(distortionCenter, Vec3(mean));
-					CreateSpring(baseIndex + index0, baseIndex + index1, computeStiffness(d, min(dx * radius, dy * radius), mean.x, distortionCenter.x, mean.z, distortionCenter.z));
-				}
+			if (isBendShiftess && x > 1)
+			{
+				int index2 = y*dx + x - 2;
+				CreateSpring(baseIndex + index0, baseIndex + index2, bendStiffness);
+			}
+			
+		}
+	}
+	// vertical
+	for (int x = 0; x < dx; ++x)
+	{
+		for (int y = 0; y < dy; ++y)
+		{
+			int index0 = y*dx + x;
 
-				if (isBendShiftess && y > 1)
-				{
-					int index2 = (y - 2)*dx + x;
-					CreateSpring(baseIndex + index0, baseIndex + index2, bendStiffness);
-				}
+			if (y > 0)
+			{
+				int index1 = (y - 1)*dx + x;
+				Vec4 mean = 0.5f * (g_buffers->positions[baseIndex + index0] + g_buffers->positions[baseIndex + index1]);
+				float d = computeDistance(distortionCenter, Vec3(mean));
+				CreateSpring(baseIndex + index0, baseIndex + index1, computeStiffness(d, min(dx * radius, dy * radius), mean.x, distortionCenter.x, mean.z, distortionCenter.z));
+			}
+
+			if (isBendShiftess && y > 1)
+			{
+				int index2 = (y - 2)*dx + x;
+				CreateSpring(baseIndex + index0, baseIndex + index2, bendStiffness);
 			}
 		}
 	}

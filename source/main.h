@@ -120,9 +120,8 @@ struct SimBuffers
 
 SimBuffers* g_buffers;
 
-
 #ifdef TRACK_DISPLACEMENTS
-SimBuffers* g_displacement_buffers;
+  SimBuffers* g_displacement_buffers;
 #endif
 
 void MapBuffers(SimBuffers* buffers)
@@ -229,6 +228,8 @@ unsigned int g_windowId;	// window id
 
 int g_screenWidth = 1280;
 int g_screenHeight = 720;
+float g_aspect = float(g_screenWidth) / g_screenHeight;
+
 int g_msaaSamples = 8;
 
 int g_numSubsteps;
@@ -238,7 +239,7 @@ int g_device = -1;
 char g_deviceName[256];
 bool g_vsync = false; // 0 for immediate updates, 1 for updates synchronized with the vertical retrace.
 
-// para os testes
+// for tests
 bool g_filmStepTest = false;
 bool g_meshStepTest = false;
 bool g_voxelStepTest = false;
@@ -299,7 +300,11 @@ vector<float> displacements;		// for compute hydrographic distortion
 #endif
 
                   //
-std::vector<int> filmContactCount;
+std::vector<TriangleIndexes> g_triangles_by_vertex;
+
+std::vector<Vec4> g_contact_positions;
+std::vector<Vec4> g_contact_normals;
+std::vector<Vec4> g_contact_uvs;
 
 NvFlexParams g_params;
 NvFlexTimers g_timers;
@@ -316,10 +321,11 @@ int g_maxContactsPerParticle;
 string g_basePath;
 Mesh* g_mesh;
 GpuMesh* g_film_mesh;
+//GpuMesh* g_contact_mesh;
 GpuMesh* g_gpu_mesh;
 
-vector<Point3> g_meshRestPositions;
-const int g_numSkinWeights = 4;
+//vector<Point3> g_meshRestPositions;
+//const int g_numSkinWeights = 4;
 
 vector<float> frametimes;
 vector<float> update_times;
@@ -380,8 +386,9 @@ int g_camIndex = 0;
 Vec3 g_camVel(0.0f);
 Vec3 g_camSmoothVel(0.0f);
 Vector3 g_meshCenter = Vector3(0.0f);
-Mat44 g_view, g_proj;
+Mat44 g_model, g_view, g_proj;
 
+float g_fov = kPi / 4.0f;
 float g_camSpeed;
 float g_camNear;
 float g_camFar;

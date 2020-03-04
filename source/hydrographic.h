@@ -1,6 +1,3 @@
-#ifndef TRACK_DISPLACEMENTS
-  #define TRACK_DISPLACEMENTS
-#endif
 //#define DEBUG_GRID
 #define PATH_SIZE 256
 
@@ -26,24 +23,24 @@ public:
 	Hydrographic(const char* name) :
 	  Scene(name) {}
 	/**
-		Método para o ajuste das constantes para calibrar o simulador
-		O modelo SDF terá sempre um bounding box de 1x1, podendo ser aplicada rotação. Com a quina para a origem dos eixos.
-		0.0 Executar o experimento físico com alinhamento (usando nivel de bolha) e com aparelho eletromecânico, com contenções de bordas para o filme.
-			0.0 Nivelar qualquer rotação em x e z. Em y possívelmente poderá ocorrer, mas pode ser desfeita virtualmente.
-		0. Medir com escala em cm a relação entre o tam dos quadrados na folha plana e o modelo real.
+		Mï¿½todo para o ajuste das constantes para calibrar o simulador
+		O modelo SDF terï¿½ sempre um bounding box de 1x1, podendo ser aplicada rotaï¿½ï¿½o. Com a quina para a origem dos eixos.
+		0.0 Executar o experimento fï¿½sico com alinhamento (usando nivel de bolha) e com aparelho eletromecï¿½nico, com contenï¿½ï¿½es de bordas para o filme.
+			0.0 Nivelar qualquer rotaï¿½ï¿½o em x e z. Em y possï¿½velmente poderï¿½ ocorrer, mas pode ser desfeita virtualmente.
+		0. Medir com escala em cm a relaï¿½ï¿½o entre o tam dos quadrados na folha plana e o modelo real.
 		1. Fotografar o modelo real com o xadrez alinhado .
-		2. Rodar a simulação, sem a colisão, com o modelo atravessando o filme. -> no metodo Update, comentar UpdateShapes();
-			2.1 Alinhar o modelo para que a lateral coincida com a borda do filme (translação do filme)
-			2.2	Ajustar o fator de escala da lateral do quadrado para coincidir com a medição real.
-			Caso não coincida, rodar novamente até coincidir.
+		2. Rodar a simulaï¿½ï¿½o, sem a colisï¿½o, com o modelo atravessando o filme. -> no metodo Update, comentar UpdateShapes();
+			2.1 Alinhar o modelo para que a lateral coincida com a borda do filme (translaï¿½ï¿½o do filme)
+			2.2	Ajustar o fator de escala da lateral do quadrado para coincidir com a mediï¿½ï¿½o real.
+			Caso nï¿½o coincida, rodar novamente atï¿½ coincidir.
 		3. Posicionar o filme novamente para que o modelo fique ao centro
-			3.1 Rodar a simulação, e alinhar x e z do filme para coincidir no ponto de colisão do xadrez 
-			3.2 Verificar a necessidade de rotação em (x, y, z), de acordo com pontos de referência da maior dimensão x, y, z da imagem e seu alinhamento com a linha x e z do xadrez
-			3.2 Caso não ajuste, modificar: stretch, fator de relaxamento, drag e lift de forma a modificar o esticamento
-			3.3 Ainda é possível modificar a fixação das bordas variando de 0 a 1.
+			3.1 Rodar a simulaï¿½ï¿½o, e alinhar x e z do filme para coincidir no ponto de colisï¿½o do xadrez 
+			3.2 Verificar a necessidade de rotaï¿½ï¿½o em (x, y, z), de acordo com pontos de referï¿½ncia da maior dimensï¿½o x, y, z da imagem e seu alinhamento com a linha x e z do xadrez
+			3.2 Caso nï¿½o ajuste, modificar: stretch, fator de relaxamento, drag e lift de forma a modificar o esticamento
+			3.3 Ainda ï¿½ possï¿½vel modificar a fixaï¿½ï¿½o das bordas variando de 0 a 1.
 		4. Trazer a imagem para um editor de imagens em camadas. 
 			4.1 Trazer a foto nivelada para o editor de imagens em camadas
-			4.2 Trazer a foto da simulação para o editor de imagens em camadas, com transparência de 30 a 50%
+			4.2 Trazer a foto da simulaï¿½ï¿½o para o editor de imagens em camadas, com transparï¿½ncia de 30 a 50%
 			4.3 Comparar os pontos do xadrez da foto com a imagem e tirar as medidas
 
 	*/
@@ -58,7 +55,7 @@ public:
       ModelData bunny = ModelData("../../data/bunny.obj", Vec3(0.0f, 0.0f, 0.0f), 0.125f, Vec3(0.0f, -95.5f, 0.0f)); //fator escala fixa medida 0.14
       ModelData earth = ModelData("../../data/Earth.obj", Vec3(0.0f, 0.0f, 0.0f), 0.2f, Vec3(0.0f, 0.0f, 0.0f)); //fator escala fixa medida 0.14
 
-    //modelos alinhados - NÃO REMOVER                                                                                                                                 //modelos alinhados trasladados
+    //modelos alinhados - Nï¿½O REMOVER                                                                                                                                 //modelos alinhados trasladados
       //ModelData tetra = ModelData("../../data/tetrahedron2.obj", Vec3(-0.02f, 0.0f, 0.3f), 0.216f, Vec3(0.0f, -90.0f, 0.0f));//fator escala medido 0.216
 		  //ModelData sphere = ModelData("../../data/sphere.obj", Vec3(0.0f, 0.0f, 0.0f), 0.17f, Vec3(0.0f)); //.17
 		  //ModelData turtle = ModelData("../../data/tartaruga_centro.obj", Vec3(0.09f, 0.0f, 0.1f), 0.125f, Vec3(0.0f, -95.5f, 0.0f)); //fator escala fixa medida 0.14
@@ -89,7 +86,7 @@ public:
     g_fps = 0.0f;
     g_frame = 0;
 		//float stretchStiffness = 1.0f; // default tartaruga esfera tetra
-    float stretchStiffness = 1.0f; // onca: 0.2 
+    float stretchStiffness = 0.8f; // onca: 0.2 
     float bendStiffness = 0.75f; // not used
 		float shearStiffness = 0.5f; // not used
 		verticalInvMass = 1.0f;
@@ -131,7 +128,7 @@ public:
 		
 		// general params
     float radius = 0.012f;
-		g_params.radius = radius;//0.012f;   //radius*1.0f; // raio max de interação entre partículas
+		g_params.radius = radius;//0.012f;   //radius*1.0f; // raio max de interaï¿½ï¿½o entre partï¿½culas
     g_params.numIterations = 5; //onca: 3
     g_numSubsteps = 2;
     // g_params.numIterations = 5; // iteracoes pbd default
@@ -140,11 +137,11 @@ public:
 		g_params.gravity[1] = 0.0f;
 		g_params.gravity[2] = 0.0f;
 		// common params
-		g_params.dynamicFriction = 1.0f;// coefs de friccao - altos valores substituem o recurso de adesão
+		g_params.dynamicFriction = 1.0f;// coefs de friccao - altos valores substituem o recurso de adesï¿½o
 		g_params.staticFriction = 1.0;
 		g_params.particleFriction = 1.0f;
 		g_params.restitution = 0.0f; // coef. restituicao (colisao totalmente inelastica, corpos seguem juntos)
-		//g_params.adhesion = 0.032f; // coef de adesão
+		//g_params.adhesion = 0.032f; // coef de adesï¿½o
 		//g_params.sleepThreshold
 
 		//g_params.maxSpeed
@@ -157,10 +154,10 @@ public:
 		// fluid params
 		g_params.viscosity = 0.0f;
 		// cloth params
-		g_params.drag = 0.3f;//3.5f;//força de arrasto ao tecido. aumenta sensação de elasticidade
+		g_params.drag = 0.3f;//3.5f;//forï¿½a de arrasto ao tecido. aumenta sensaï¿½ï¿½o de elasticidade
 		g_params.lift = 0.2f;//1.8f;
 		// collision params
-		g_params.collisionDistance = 0.012f;	//distância mantida entre a partícula e o shape após colisão
+		g_params.collisionDistance = 0.012f;	//distï¿½ncia mantida entre a partï¿½cula e o shape apï¿½s colisï¿½o
 		g_params.particleCollisionMargin = radius*0.5f;//
 		g_params.shapeCollisionMargin = radius*0.5f;//
 		g_params.numPlanes = 0;
@@ -190,6 +187,8 @@ public:
 
 		Vec3 pos = Vec3(0.0f, initialY, 0.0f);
 		Quat rot = QuatFromAxisAngle(Vec3(1.0f), 0.0f);
+    // define model matrix to start simulation
+    g_model = TranslationMatrix(Point3(pos))*RotationMatrix(Quat(rot))*ScaleMatrix(1.0f);
 
     Mesh* mesh = NULL; // mesh model for Flex simulator
     GpuMesh* gpuMesh = NULL; // mesh for GPU and rendering
@@ -209,6 +208,7 @@ public:
     if (1) {
 		  sdfMesh = CreateHydrographicSDF(mesh, GetFilePathByPlatform(models[selectedModel].path).c_str(), createFile, voxelDim, transf, sdfMargin, expand);
 			AddSDF(sdfMesh, pos, rot, 1.0f);
+
 		}
 		else {
       // para usar esta malha,tem que ajustar as transformacoes de escala
@@ -220,7 +220,6 @@ public:
 #ifdef RENDER_V2
     // gpu mesh created by assimp import optimized for loading a full texture atlas features and rendering
     g_gpu_mesh = CreateGpuMesh(GetFilePathByPlatform(models[selectedModel].path).c_str(), transf, sdfMargin);
-    //SetGpuMeshTriangles(g_gpu_mesh, triangles, triangleIndexes);
 #else
     g_fields[sdf] = CreateGpuMesh(mesh);
 #endif
@@ -237,10 +236,10 @@ public:
     Matrix44 filmModel = TranslationMatrix(Point3(gridPosition));
 
 		CreateHydrographicSpringGrid(gridPosition, g_meshCenter, gridDimX, gridDimZ, 1, spacing, phase, stretchStiffness, bendStiffness, shearStiffness, 0.0f, 1.0f, horizontalInvMass, verticalInvMass, false);
-    filmContactCount.resize(g_buffers->positions.size());
+    //filmContactCount.resize(g_buffers->positions.size());
     for (int i = 0; i < g_buffers->positions.size(); i++)
     {
-      filmContactCount[i] = 0;
+      //filmContactCount[i] = 0;
       g_buffers->uvs[i] = Vec4(0.0f);
     }
     
@@ -367,6 +366,9 @@ public:
 
 		Quat rot = QuatFromAxisAngle(Vec3(1.0f), 0.0f);
 		Quat prevRot = QuatFromAxisAngle(Vec3(1.0f), 0.0f);
+    
+    // updates model matrix for rendering
+    g_model = TranslationMatrix(Point3(pos))*RotationMatrix(Quat(rot))*ScaleMatrix(1.0f);
 
 		g_buffers->shapePositions[meshIndex] = Vec4(pos, 0.0f);
 		g_buffers->shapeRotations[meshIndex] = rot;
@@ -376,6 +378,7 @@ public:
 
 		UpdateShapes(); // update data to flex check colision
 
+    /*
 		if (0)
 		{
 
@@ -436,7 +439,7 @@ public:
 				}
 			}
 		}
-
+    */
 	}
 
 	void DoGui()

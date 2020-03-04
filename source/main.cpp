@@ -25,7 +25,7 @@
 //
 // Copyright (c) 2013-2017 NVIDIA Corporation. All rights reserved.
 #ifndef TRACK_DISPLACEMENTS
-  #define TRACK_DISPLACEMENTS
+  //#define TRACK_DISPLACEMENTS
 #endif
 #ifndef RENDER_V2
   #define RENDER_V2
@@ -112,7 +112,9 @@ void Init(int scene, bool centerCamera = true)
   }
   //displacements init
   g_displacement_buffers = AllocBuffers(g_flexLib);
+
   MapBuffers(g_displacement_buffers);
+
 
   g_displacement_buffers->positions.resize(0);
   g_displacement_buffers->velocities.resize(0);
@@ -125,11 +127,11 @@ void Init(int scene, bool centerCamera = true)
   // for compute hydrographic distortion 
   g_displacement_buffers->originalPositions.resize(0);
   //displacedPositions.resize(0);
-  displacements.resize(0);
-#endif
+  //displacements.resize(0);
 
   //
   filmContactCount.resize(0);
+#endif
 
 	// alloc buffers
 	g_buffers = AllocBuffers(g_flexLib);
@@ -156,6 +158,9 @@ void Init(int scene, bool centerCamera = true)
 	g_buffers->shapePrevRotations.resize(0);
 	g_buffers->shapeFlags.resize(0);
 
+  g_contact_positions.resize(0);
+  g_contact_normals.resize(0);
+  g_contact_uvs.resize(0);
 
   // for compute fps
   g_avgFPS = g_avgUpdateTime = g_avgRenderTime = g_avgWaitTime = g_avgLatencyTime = 0.0;
@@ -381,6 +386,16 @@ void Init(int scene, bool centerCamera = true)
 		g_buffers->normals[i] = Vec4(SafeNormalize(Vec3(g_buffers->normals[i]), Vec3(0.0f, 1.0f, 0.0f)), 0.0f);
   }
 
+  // initialize contact structures for rendering
+  g_contact_positions.resize(g_buffers->positions.size());
+  g_contact_normals.resize(g_buffers->positions.size());
+  g_contact_uvs.resize(g_buffers->positions.size());
+
+  g_buffers->positions.copyto(&g_contact_positions[0], g_buffers->positions.size());
+  g_buffers->normals.copyto(&g_contact_normals[0], g_buffers->positions.size());
+  // uvs are updated when the contacts are tracked and remaped using the rigid model texture
+  g_buffers->uvs.copyto(&g_contact_uvs[0], g_buffers->positions.size());
+
 #ifdef TRACK_DISPLACEMENTS
   g_displacement_buffers->normals.resize(0);
   g_displacement_buffers->normals.resize(maxParticles);
@@ -405,7 +420,8 @@ void Init(int scene, bool centerCamera = true)
   }
 #endif
 	// save mesh positions for skinning
-	if (g_mesh)
+  /*
+  if (g_mesh)
 	{
 		g_meshRestPositions = g_mesh->m_positions;
 	}
@@ -413,6 +429,7 @@ void Init(int scene, bool centerCamera = true)
 	{
 		g_meshRestPositions.resize(0);
 	}
+  */
 
 	g_solverDesc.maxParticles = maxParticles;
 	g_solverDesc.maxDiffuseParticles = g_maxDiffuseParticles;
@@ -643,10 +660,15 @@ void UpdateScene()
 
 void RenderSceneV2()
 {
-  float fov = kPi / 4.0f;
-  float aspect = float(g_screenWidth) / g_screenHeight;
+  g_proj = ProjectionMatrix(RadToDeg(g_fov), g_aspect, g_camNear, g_camFar);
+  if (0) // swap to orthogonal projection
+  {
+    float max = MAX(g_sceneUpper.x, g_sceneUpper.y);
+    float r = max * g_aspect, t = max;
+    float l = -r, b = -t;
+    g_proj = OrthographicMatrix(l, r, b, t, g_camNear, g_camFar);
+  }
 
-  g_proj = ProjectionMatrix(RadToDeg(fov), aspect, g_camNear, g_camFar);
   g_view = RotationMatrix(-g_camAngle[g_camIndex].x, Vec3(0.0f, 1.0f, 0.0f))*RotationMatrix(-g_camAngle[g_camIndex].y, Vec3(cosf(-g_camAngle[g_camIndex].x), 0.0f, sinf(-g_camAngle[g_camIndex].x)))*TranslationMatrix(-Point3(g_camPos[g_camIndex]));
 
   g_lightPos = Vec3(0.0f, -10.0f, 0.0f);//g_camPos;// +g_lightDir * g_lightDistance;
@@ -657,34 +679,34 @@ void RenderSceneV2()
   unsigned int specularExpoent = 40;
   bool showTexture = true;
   BindSolidShaderV2(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], lightColor, ambientColor, specularColor, specularExpoent, diffuseColor, showTexture);
-  int i = 0; // rigid shape index
-  const Quat rotation = g_buffers->shapePrevRotations[i];
-  const Vec3 translation = Vec3(g_buffers->shapePrevPositions[i]);
-  NvFlexCollisionGeometry geo = g_buffers->shapeGeometry[i];
+  //int i = 0; // rigid shape index
+  //const Quat rotation = g_buffers->shapePrevRotations[i];
+  //const Vec3 translation = Vec3(g_buffers->shapePrevPositions[i]);
+  //NvFlexCollisionGeometry geo = g_buffers->shapeGeometry[i];
 
-  int type = g_buffers->shapeFlags[i] & eNvFlexShapeFlagTypeMask;
-  Matrix44 modelMatrix;
-  switch (type)
-  {
-    case eNvFlexShapeSDF:
-    {
-      modelMatrix = TranslationMatrix(Point3(translation))*RotationMatrix(Quat(rotation))*ScaleMatrix(geo.sdf.scale);
-      break;
-    }
+  //int type = g_buffers->shapeFlags[i] & eNvFlexShapeFlagTypeMask;
+  //Matrix44 modelMatrix;
+  //switch (type)
+  //{
+    //case eNvFlexShapeSDF:
+    //{
+      //modelMatrix = TranslationMatrix(Point3(translation))*RotationMatrix(Quat(rotation))*ScaleMatrix(geo.sdf.scale);
+      //break;
+    //}
 
-    case eNvFlexShapeTriangleMesh:
-    {
-      modelMatrix = TranslationMatrix(Point3(translation))*RotationMatrix(Quat(rotation))*ScaleMatrix(geo.triMesh.scale);
-      break;
-    }
-  }
+    //case eNvFlexShapeTriangleMesh:
+    //{
+      //modelMatrix = TranslationMatrix(Point3(translation))*RotationMatrix(Quat(rotation))*ScaleMatrix(geo.triMesh.scale);
+      //break;
+    //}
+  //}
 
   SetCullMode(false);
   SetFillMode(g_wireframe);
 
   if (g_drawHydrographicCollisionMesh) // draw rigid body
   {
-    DrawGpuMeshV2(g_gpu_mesh, modelMatrix, showTexture);
+    DrawGpuMeshV2(g_gpu_mesh, g_model, showTexture);
   }
 
   if (g_drawHydrographic) // draw film
@@ -694,19 +716,21 @@ void RenderSceneV2()
     DrawHydrographicV2(g_film_mesh, &g_buffers->positions[0], &g_buffers->normals[0], &g_buffers->uvs[0], &g_buffers->triangles[0], g_buffers->triangles.size(), g_buffers->positions.size(), showTexture);
   }
   
+#ifdef TRACK_DISPLACEMENTS
   if (g_drawDisplacements) // draw displacements
   {
     // setup the film texture to mesh texture
-    //showTexture = false;
+    showTexture = false;
     BindFilmShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], lightColor, ambientColor, specularColor, specularExpoent, diffuseColor, showTexture);
     DrawHydrographicV2(g_film_mesh, &g_displacement_buffers->positions[0], &g_displacement_buffers->normals[0], &g_buffers->uvs[0], &g_buffers->triangles[0], g_buffers->triangles.size(), g_displacement_buffers->positions.size(), showTexture);
   }
+#endif
 
   if (g_drawContacts) // draw displacements
   {
     showTexture = true;
     BindFilmShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], lightColor, ambientColor, specularColor, specularExpoent, diffuseColor, showTexture);
-    DrawDistortion(g_film_mesh, &g_displacement_buffers->positions[0], &g_displacement_buffers->normals[0], &g_buffers->uvs[0], &g_buffers->triangles[0], g_buffers->triangles.size(), g_displacement_buffers->positions.size(), showTexture);
+    DrawDistortion(g_film_mesh, &g_contact_positions[0], &g_contact_normals[0], &g_contact_uvs[0], &g_buffers->triangles[0], g_buffers->triangles.size(), g_contact_positions.size(), showTexture, g_model);
   }
 
 
@@ -800,7 +824,7 @@ void RenderDebug()
 
 	// visualize contacts against the environment
   // all arrays are iterated in CPU
-	if (g_drawContacts)
+	if (g_drawContacts && false)
 	{
 		const int maxContactsPerParticle = 6;
 		NvFlexVector<Vec4> contactPlanes(g_flexLib, g_buffers->positions.size()*maxContactsPerParticle);
@@ -816,7 +840,6 @@ void RenderDebug()
 		contactIndices.map();
 		contactCounts.map();
 
-		BeginLines();
 		// each active particle of simulation
 		for (int i = 0; i < int(g_buffers->activeIndices.size()); ++i)
 		{
@@ -831,25 +854,27 @@ void RenderDebug()
 			for (unsigned int c = 0; c < count; ++c)
 			{
 				Vec4 filmContactPlane = contactPlanes[contactIndex*maxContactsPerParticle + c];
+        //BeginLines();
         //DrawLine(filmContactVertex, filmContactVertex + Vec3(filmContactPlane)*scale, Vec4(1.0f, 0.5f, 0.0f, 0.0f));
+        //EndLines();
 
         if (1) // enable find mesh contacts
         {
 
-          int shapeIndex = 0; // rigid shape index
-          const Quat rotation = g_buffers->shapeRotations[shapeIndex];
-          const Vec3 translation = Vec3(g_buffers->shapePositions[shapeIndex]);
-          NvFlexCollisionGeometry geo = g_buffers->shapeGeometry[shapeIndex];
+          //int shapeIndex = 0; // rigid shape index (is zero because the scene have only one rigid shape)
+          //const Quat rotation = g_buffers->shapeRotations[shapeIndex];
+          //const Vec3 translation = Vec3(g_buffers->shapePositions[shapeIndex]);
+          //NvFlexCollisionGeometry geo = g_buffers->shapeGeometry[shapeIndex];
 
-          Matrix44 modelMatrix = TranslationMatrix(Point3(translation))*RotationMatrix(Quat(rotation))*ScaleMatrix(geo.sdf.scale);
+          //Matrix44 modelMatrix = TranslationMatrix(Point3(translation))*RotationMatrix(Quat(rotation))*ScaleMatrix(geo.sdf.scale);
           
-          //TODO smooth normal vector to improve generated image
-          FindMeshContacts(filmContactVertex, filmIndex, -Vec3(filmContactPlane), filmContactCount[filmIndex], g_gpu_mesh, g_film_mesh, modelMatrix, gridDimZ, gridDimX);
+          // for a better smooth efect it is better to use the film normals instead the filmContactPlane
+          Vec3 filmNormal = g_buffers->normals[filmIndex];
+          FindContacts(filmContactVertex, filmIndex, -filmNormal, g_gpu_mesh, g_film_mesh, g_model, gridDimZ, gridDimX);
         }
 			}
 		}
 
-		EndLines();
     
     // setup dynamic texture
     //SetupContactsTexture(g_film_mesh);
@@ -883,7 +908,8 @@ void RenderDebug()
     //DrawLine(Vec3(0.0f), Vec3(0.0f) + Vec3(0.0f, 1.0f, 0.0f)* 0.1f ,yellowColor);
 
 
-    for (int i = 0; i < int(g_buffers->positions.size()); ++i)
+    //for (int i = 0; i < int(g_buffers->positions.size()); ++i)
+    int i = 10800;
     {
       // find offset in the neighbors buffer
       int offset = apiToInternal[i];
@@ -1215,6 +1241,9 @@ int DoUI()
 			if (imguiCheck("Draw Springs", bool(g_drawSprings != 0)))
 				g_drawSprings = (g_drawSprings) ? 0 : 1;
 
+      if (imguiCheck("Draw Neighbors", g_drawNeighbors))
+        g_drawNeighbors = !g_drawNeighbors;
+
       if (imguiCheck("Draw Contacts", g_drawContacts))
       {
         g_drawContacts = !g_drawContacts;
@@ -1465,8 +1494,68 @@ void UpdateFrame(bool &quit)
   //render();
   RenderDebug();
   // generate displacements 2d texture
-  if (g_pause)
+  if (g_pause && g_drawContacts)
   {
+    // visualize contacts against the environment
+    // all arrays are iterated in CPU
+    const int maxContactsPerParticle = 6;
+    NvFlexVector<Vec4> contactPlanes(g_flexLib, g_buffers->positions.size()*maxContactsPerParticle);
+    NvFlexVector<Vec4> contactVelocities(g_flexLib, g_buffers->positions.size()*maxContactsPerParticle);
+    NvFlexVector<int> contactIndices(g_flexLib, g_buffers->positions.size());
+    NvFlexVector<unsigned int> contactCounts(g_flexLib, g_buffers->positions.size());
+
+    NvFlexGetContacts(g_solver, contactPlanes.buffer, contactVelocities.buffer, contactIndices.buffer, contactCounts.buffer);
+
+    // ensure transfers have finished
+    contactPlanes.map();
+    contactVelocities.map();
+    contactIndices.map();
+    contactCounts.map();
+
+    // each active particle of simulation
+    for (int i = 0; i < int(g_buffers->activeIndices.size()); ++i)
+    {
+      // each active particle can have up to 6 contact points on NVIDIA Flex 1.1.0
+      const int filmIndex = g_buffers->activeIndices[i];
+      Vec3 filmContactVertex = Vec3(g_buffers->positions[filmIndex]);
+      const int contactIndex = contactIndices[filmIndex];
+      const unsigned int count = contactCounts[contactIndex];
+      const float scale = 0.1f;
+
+      //retrieve contact planes for each particle 
+      for (unsigned int c = 0; c < count; ++c)
+      {
+        Vec4 filmContactPlane = contactPlanes[contactIndex*maxContactsPerParticle + c];
+        //BeginLines();
+        //DrawLine(filmContactVertex, filmContactVertex + Vec3(filmContactPlane)*scale, Vec4(1.0f, 0.5f, 0.0f, 0.0f));
+        //EndLines();
+
+        if (1) // enable find mesh contacts
+        {
+
+          //int shapeIndex = 0; // rigid shape index (is zero because the scene have only one rigid shape)
+          //const Quat rotation = g_buffers->shapeRotations[shapeIndex];
+          //const Vec3 translation = Vec3(g_buffers->shapePositions[shapeIndex]);
+          //NvFlexCollisionGeometry geo = g_buffers->shapeGeometry[shapeIndex];
+
+          //Matrix44 modelMatrix = TranslationMatrix(Point3(translation))*RotationMatrix(Quat(rotation))*ScaleMatrix(geo.sdf.scale);
+
+          // for a better smooth efect it is better to use the film normals instead the filmContactPlane
+          Vec3 filmNormal = g_buffers->normals[filmIndex];
+          FindContacts(filmContactVertex, filmIndex, -filmNormal, g_gpu_mesh, g_film_mesh, g_model, gridDimZ, gridDimX);
+        }
+      }
+    }
+
+
+    // setup dynamic texture
+    //SetupContactsTexture(g_film_mesh);
+
+    // swap film texture to gpu_mesh texture
+    // SetupFilmMesh(g_gpu_mesh, g_film_mesh);
+
+
+
     //TgaImage img;
     //img.m_width = g_screenWidth;
     //img.m_height = g_screenHeight;
@@ -1760,6 +1849,7 @@ void ReshapeWindow(int width, int height)
 
 	g_screenWidth = width;
 	g_screenHeight = height;
+  g_aspect = float(g_screenWidth) / g_screenHeight;
 }
 
 void ReshapeWindowV2(int width, int height)
@@ -1771,6 +1861,7 @@ void ReshapeWindowV2(int width, int height)
 
   g_screenWidth = width;
   g_screenHeight = height;
+  g_aspect = float(g_screenWidth) / g_screenHeight;
 }
 
 void InputArrowKeysDown(int key, int x, int y)
