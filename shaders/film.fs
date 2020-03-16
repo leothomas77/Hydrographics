@@ -2,6 +2,8 @@
 in vec3 vNormal;
 in vec3 vPosW;
 in vec2 vTexCoords;
+//in vec2 uv0;
+//in vec2 uv1;
 uniform vec3 uLPos;
 uniform vec4 uLColor;
 uniform vec4 uColor;
@@ -14,13 +16,27 @@ uniform sampler2D tex;
 out vec4 outFragColor;
 void main(void) {
 	vec4 diffuse  = vec4(0.0);
-	vec4 specular = vec4(0.0); 
-
-	vec3 normal  = normalize(vNormal);
+	vec4 specular = vec4(0.0);
+  //vec4 textureBorderColor = vec4(0.0, 0.0, 0.0, 0.0);
+  vec4 textureBorderColor = vec4(0.0, 0.0, 0.0, 0.0);
+  // always show front facing (avoid black color showing)
+	vec3 normal  = gl_FrontFacing ? normalize(-vNormal) : normalize(vNormal);
 	vec4 lColor	 = uLColor;
 	// material properties
 	vec4 matAmb	 = uAmbient;
-	vec4 matDif  = showTexture ? texture(tex, vTexCoords) : uColor;
+
+  vec4 matDif;
+	//vec2 seamlessCoords;
+
+	//seamlessCoords.x = ( fwidth( uv0.x ) < fwidth( uv1.x )-0.001 )? uv0.x : uv1.x ;
+	//seamlessCoords.y = ( fwidth( uv0.y ) < fwidth( uv1.y )-0.001 )? uv0.y : uv1.y ;
+
+	//vec4 colorRedGreen = vec4(1.0, 1.0, 0.0, 1.0);
+	
+	//colorRedGreen.r *= vTexCoords.x;
+	//colorRedGreen.g *= vTexCoords.y;
+	matDif  = showTexture ? texture(tex, vTexCoords) : uColor;
+
 	vec4 matSpec = uSpecular;
 	//ambient
 	vec4 ambient = matAmb;

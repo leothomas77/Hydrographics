@@ -10,11 +10,19 @@ uniform bool showTexture;
 out vec3 vNormal;
 out vec3 vPosW;
 out vec2 vTexCoords;
+//out vec2 uv0;
+//out vec2 uv1;
+
 void main()
 {
 	vNormal = (normalize(normalMat * vec4(aNormal.xyz, 1.0))).xyz;
 	vPosW = (model * vec4(aPosition.xyz, 1.0)).xyz;
 	vTexCoords = showTexture ? vTexCoords = aTexCoords.xy : vec2(0.0);
+  
+  //float delta = 0.01f;
+  //uv0 = fract(aTexCoords.xy);
+  //uv1 = fract(aTexCoords.xy + vec2(delta, delta)) - vec2(delta, delta);
+
 	gl_Position = proj * view * model * vec4(aPosition.xyz, 1.0);
 }				
 //

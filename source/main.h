@@ -305,6 +305,8 @@ std::vector<TriangleIndexes> g_triangles_by_vertex;
 std::vector<Vec4> g_contact_positions;
 std::vector<Vec4> g_contact_normals;
 std::vector<Vec4> g_contact_uvs;
+std::vector<int> g_contact_indexes;
+
 
 NvFlexParams g_params;
 NvFlexTimers g_timers;
@@ -376,7 +378,7 @@ int gridDimX = 0;
 int gridDimZ = 0;
 float gridSpacing = 0.0f;
 unsigned int texHeatmapId;
-float dippingVelocity = -0.3f;
+float dippingVelocity = -0.08f;
 float horizontalInvMass = 0.9f;
 float verticalInvMass = 0.9f;
 
@@ -434,6 +436,7 @@ int g_drawSprings;		// 0: no draw, 1: draw stretch 2: draw tether
 bool g_drawBases = false;
 bool g_drawDisplacements = false;
 bool g_drawContacts = false;
+bool g_generateContactsTexture = false;
 bool g_drawNeighbors = false;
 bool g_drawAxis = false;
 bool g_drawNormals = false;
@@ -463,7 +466,7 @@ int g_scene = 0;
 int g_selectedScene = g_scene;
 int g_levelScroll;			// offset for level selection scroll area
 bool g_resetScene = false;  //if the user clicks the reset button or presses the reset key this is set to true;
-
+bool g_resetSolver = false;
 int g_frame = -1;
 int g_numSolidParticles = 0;
 

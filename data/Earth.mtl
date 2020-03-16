@@ -10,7 +10,8 @@ Ke 0.000000 0.000000 0.000000
 Ni 1.000000
 d 1.000000
 illum 1
-map_Kd xadrez_template.tga
+# xadrez_template.tga
 # map_Kd Earth_TEXTURE_CM.tga
-# map_Kd EPRek.png
+# map_Kd EPRek_test.png
+map_Kd check_texture.png
 # map_Kd earth_chess.tga

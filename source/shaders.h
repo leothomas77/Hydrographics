@@ -35,6 +35,7 @@
 #ifndef MAX
   #define MAX(x, y) (y > x ? y : x)
 #endif
+#include <map>
 
 #include <assimp/cimport.h>
 #include <assimp/scene.h>
@@ -128,6 +129,8 @@ struct RenderTexture;
 
 // void SetRenderTarget(RenderTexture* target);
 void FindContacts(Vec3 position, int positionIndex, Vec3 contactPlane, GpuMesh* gpuMesh, GpuMesh* filmMesh, Mat44 modelMatrix, int gridHeight, int gridWidth);
+void PostProcessNearbyTexture(GpuMesh* filmMesh, std::vector<Vec4> &positions, std::vector<int> &indices);
+//void PostProcessNearbyTexture(GpuMesh* filmMesh, int particleIndex, const int neighborCount, const int offset, const int stride, const int* internalToApi, const int* neighbors);
 void SetupFilmMesh(GpuMesh* gpuMesh, GpuMesh* filmMesh);
 void SetupContactsTexture(GpuMesh* filmMesh);
 void DrawDistortion(GpuMesh* mesh, const Vec4* positions, const Vec4* normals, const Vec4* uvs, const int* indices, int nIndices, int numPositions, bool showTexture, Mat44 model);

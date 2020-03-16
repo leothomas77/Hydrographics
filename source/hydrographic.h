@@ -53,7 +53,7 @@ public:
       ModelData turtle = ModelData("../../data/tartaruga_centro.obj", Vec3(0.0f, 0.0f, 0.0f), 0.125f, Vec3(0.0f, -95.5f, 0.0f)); //fator escala fixa medida 0.14
       ModelData onca = ModelData("../../data/Onca_Poisson_15_16_0.obj", Vec3(0.0f, -1.8f, 0.0f), 0.125f, Vec3(0.0f, 0.0f, 0.0f)); //fator escala fixa medida 0.14
       ModelData bunny = ModelData("../../data/bunny.obj", Vec3(0.0f, 0.0f, 0.0f), 0.125f, Vec3(0.0f, -95.5f, 0.0f)); //fator escala fixa medida 0.14
-      ModelData earth = ModelData("../../data/Earth.obj", Vec3(0.0f, 0.0f, 0.0f), 0.2f, Vec3(0.0f, 0.0f, 0.0f)); //fator escala fixa medida 0.14
+      ModelData earth = ModelData("../../data/Earth.obj", Vec3(0.0f, 0.0f, 0.0f), 0.5f, Vec3(0.0f, 0.0f, 0.0f)); //fator escala fixa medida 0.14
 
     //modelos alinhados - N�O REMOVER                                                                                                                                 //modelos alinhados trasladados
       //ModelData tetra = ModelData("../../data/tetrahedron2.obj", Vec3(-0.02f, 0.0f, 0.3f), 0.216f, Vec3(0.0f, -90.0f, 0.0f));//fator escala medido 0.216
@@ -86,11 +86,11 @@ public:
     g_fps = 0.0f;
     g_frame = 0;
 		//float stretchStiffness = 1.0f; // default tartaruga esfera tetra
-    float stretchStiffness = 0.8f; // onca: 0.2 
+    float stretchStiffness = 0.01f; // onca: 0.2 
     float bendStiffness = 0.75f; // not used
 		float shearStiffness = 0.5f; // not used
-		verticalInvMass = 1.0f;
-		horizontalInvMass = 1.0f;
+		verticalInvMass = .0f;
+		horizontalInvMass = .0f;
 
 		//float radius = 0.05f;
 
@@ -127,10 +127,8 @@ public:
 		int phase = NvFlexMakePhase(0, eNvFlexPhaseSelfCollide | eNvFlexPhaseSelfCollideFilter);
 		
 		// general params
-    float radius = 0.012f;
-		g_params.radius = radius;//0.012f;   //radius*1.0f; // raio max de intera��o entre part�culas
-    g_params.numIterations = 5; //onca: 3
-    g_numSubsteps = 2;
+    g_params.numIterations = 3; //onca: 3
+    g_numSubsteps = 20;
     // g_params.numIterations = 5; // iteracoes pbd default
 
     g_params.gravity[0] = 0.0f; // gravidade x, y, z
@@ -154,16 +152,18 @@ public:
 		// fluid params
 		g_params.viscosity = 0.0f;
 		// cloth params
-		g_params.drag = 0.3f;//3.5f;//for�a de arrasto ao tecido. aumenta sensa��o de elasticidade
-		g_params.lift = 0.2f;//1.8f;
+    //g_params.drag = 3.0f;//0.3f;//3.5f;//força de arrasto ao tecido. aumenta sensa��o de elasticidade
+    //g_params.lift = 1.8f;//0.2f;//1.8f;// forca de sustentação
 		// collision params
-		g_params.collisionDistance = 0.012f;	//dist�ncia mantida entre a part�cula e o shape ap�s colis�o
+    float radius = 0.012f;
+    g_params.radius = radius;//0.012f;   //radius*1.0f; // raio max de intera��o entre part�culas
+    g_params.collisionDistance = 0.012f;	//dist�ncia mantida entre a part�cula e o shape ap�s colis�o
 		g_params.particleCollisionMargin = radius*0.5f;//
 		g_params.shapeCollisionMargin = radius*0.5f;//
 		g_params.numPlanes = 0;
 		// relaxation solver params
-		//g_params.relaxationMode = eNvFlexRelaxationGlobal;
-		//g_params.relaxationFactor = 0.25f;
+		g_params.relaxationMode = eNvFlexRelaxationGlobal;
+		g_params.relaxationFactor = 0.25f;
 		//g_params.relaxationMode = eNvFlexRelaxationLocal;
 		//g_params.relaxationFactor = 1.2f;
 		// plastic params
@@ -235,12 +235,12 @@ public:
 
     Matrix44 filmModel = TranslationMatrix(Point3(gridPosition));
 
-		CreateHydrographicSpringGrid(gridPosition, g_meshCenter, gridDimX, gridDimZ, 1, spacing, phase, stretchStiffness, bendStiffness, shearStiffness, 0.0f, 1.0f, horizontalInvMass, verticalInvMass, false);
+		CreateHydrographicSpringGrid(gridPosition, g_meshCenter, gridDimX, gridDimZ, 1, spacing, phase, stretchStiffness, bendStiffness, shearStiffness, 0.0f, 1.0f, horizontalInvMass, verticalInvMass, false, false);
     //filmContactCount.resize(g_buffers->positions.size());
     for (int i = 0; i < g_buffers->positions.size(); i++)
     {
       //filmContactCount[i] = 0;
-      g_buffers->uvs[i] = Vec4(0.0f);
+      g_buffers->uvs[i] = Vec4(-1.0f);
     }
     
 #ifdef RENDER_V2
@@ -250,9 +250,8 @@ public:
 		g_drawSprings = false;
 		g_drawHydrographic = true;
 		g_drawShadows = false;
-
+    g_generateContactsTexture = true;
 		mTime = 0.0f;
-
 	}
 
  	void Update()
@@ -265,13 +264,12 @@ public:
 		GetShapeBounds(lower, upper);
 
 		// stop animation when hidrographics is complete
-		if (upper.y < gridY)
+		if (upper.y + 0.2f < gridY)
 		{
 			g_pause = true;
 		}
 
-#ifdef TRACK_DISPLACEMENTS
-
+#ifdef TRACK_DISPLACEMENTS // old way for tracking distortion
     float epsilon = 0.0f;
     float displacementThreshold = 0.0f;
     float displacementFactor = 1.0f;
@@ -378,10 +376,9 @@ public:
 
 		UpdateShapes(); // update data to flex check colision
 
-    /*
-		if (0)
+   
+		if (1)
 		{
-
 			//get contacted particles
 			int  maxContactsPerParticle = 6;
 			NvFlexVector<Vec4> contactPlanes(g_flexLib, g_buffers->positions.size()*maxContactsPerParticle);
@@ -404,25 +401,24 @@ public:
 				const int contactIndex = contactIndices[g_buffers->activeIndices[i]];
 				const unsigned int count = contactCounts[contactIndex];
 
-				float lowerY = g_buffers->positions[g_buffers->activeIndices[i]].y;
-
-				if (!count && lowerY < gridY)
+				Vec3 position = g_buffers->positions[g_buffers->activeIndices[i]];
+        float positionW = g_buffers->positions[g_buffers->activeIndices[i]].w;
+				if (!count && position.y < gridY) // not touched particle
 				{
-					Vec3 direction = g_buffers->normals[g_buffers->activeIndices[i]];
-					//direction.y = 0;
-					//Normalize(direction);
-					g_buffers->velocities[g_buffers->activeIndices[i]] = 0.005f * direction;
+					Vec3 normal = g_buffers->normals[g_buffers->activeIndices[i]];
+          //normal.y = 0;
+          Normalize(normal);
 
-					//Vec4 position = g_buffers->positions[g_buffers->activeIndices[i]];
+          Vec3 newPosition = position - normal * (g_dt / g_numSubsteps);// parei aqui
 
-					//position.x += g_dt * direction.x;
-					//position.z += g_dt * direction.z;
-					//position.y = 0.5f;
+         // newPosition.y = gridY;
+         // g_buffers->velocities[g_buffers->activeIndices[i]] = Length(Vec3(newPosition - position)) * normal / (time - lastTime);
 
-					//g_buffers->positions[g_buffers->activeIndices[i]] = position;
+					g_buffers->positions[g_buffers->activeIndices[i]] = Vec4(newPosition, positionW);
 
-				}
-				else {
+				}				
+        else 
+        {
 					// each active particle can have up to 6 contact points on NVIDIA Flex 1.1.0
 					//retrieve contact planes for each particle 
 					for (unsigned int c = 0; c < count; ++c)
@@ -434,13 +430,13 @@ public:
 						position.w = 0.0f; //total adhesion
 
 						g_buffers->positions[g_buffers->activeIndices[i]] = position;
-
 					}
 				}
+        
 			}
 		}
-    */
-	}
+
+  }
 
 	void DoGui()
 	{
@@ -491,7 +487,7 @@ public:
 
 	//Time params
   float mTime;
-	float startTime = 1.0f;
+  float startTime = 1.0f; //GetSeconds();
 	//SDF mesh params
 	bool createFile = true;
 	int voxelDim = 128;
@@ -506,11 +502,11 @@ public:
 	NvFlexTriangleMeshId triangleMesh = NULL;
   int sphereSectors = 160;
 	//Film params
-  float gridY = 0.5f;
-  int factor = 15;//5; 
-	float A4_Spacing = 0.17f;//default spacing based on sphere model
-	int A4_Width = 7;
-	int A4_Height = 11;
+  float gridY = 0.3f; // grid position
+  int factor = 16;//16; 
+  float A4_Spacing = 0.17f;//default spacing based on sphere model
+  int A4_Width = 7;//7; //210
+  int A4_Height = 11;//11; //297
 	//Vec2 boundsX, boundsY, boundsZ;
 	Point3 translation = Point3(0.0f);
 	float scale = 1.0f;

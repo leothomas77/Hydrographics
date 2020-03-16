@@ -474,7 +474,7 @@ float computeDistance(Vec3 center, Vec3 position) {
 void CreateHydrographicSpringGrid(Vec3 lower, Vec3 meshCenter, int dx, int dy, int dz, 
 	float radius, int phase, float stretchStiffness, float bendStiffness, float shearStiffness, 
 	Vec3 velocity, float invMass, float invMassV = 1.0f, float invMassH = 1.0f, 
-	bool isBendShiftess = false)
+	bool hasBendShiftess = false, bool hasShearShtifness = false)
 {
 	int baseIndex = int(g_buffers->positions.size());
 	Vec3 higher = lower + radius * Vec3(float(dx), float(dz), float(dy));
@@ -523,19 +523,55 @@ void CreateHydrographicSpringGrid(Vec3 lower, Vec3 meshCenter, int dx, int dy, i
 				float v = (float)y / (dy - 1);
 				g_buffers->uvs.push_back(Vec4(u, v, 0.0f, 0.0f));
 
+        // triangle indexes
 				if (x > 0 && y > 0)
 				{
-					g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y - 1, dx));
-					g_buffers->triangles.push_back(baseIndex + GridIndex(x, y - 1, dx));
-					g_buffers->triangles.push_back(baseIndex + GridIndex(x, y, dx));
+          /*
+          Film mesh topology
+          *   *   *
+          | \ | / |
+          *   *   *
+          | / | \ |
+          *   *   *
+          */
+          if ((x % 2 == 1 && y % 2 == 1) || (x % 2 == 0 && y % 2 == 0))
+          {
+            /*
+            Four plane vertices produces two inverted triangles
+              v1 v3
+              | \ |
+              v2 v4
+            */
+            // 1st triangle
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y - 1, dx));
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x, y - 1, dx));
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x, y, dx));
+            // 2nd triangle
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y - 1, dx));
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x, y, dx));
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y, dx));
+          }
+          else 
+          {
+            /*
+            Four plane vertices produces two inverted triangles
+            v1 v3
+            | / |
+            v2 v4
+            */
+            // 1st triangle
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y - 1, dx));
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x, y - 1, dx));
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y, dx));
+            // 2nd triangle
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x, y - 1, dx));
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x, y, dx));
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y, dx));
+          }
 
-					g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y - 1, dx));
-					g_buffers->triangles.push_back(baseIndex + GridIndex(x, y, dx));
-					g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y, dx));
+          g_buffers->triangleNormals.push_back(Vec3(0.0f, 1.0f, 0.0f));
+          g_buffers->triangleNormals.push_back(Vec3(0.0f, 1.0f, 0.0f));
 
-					g_buffers->triangleNormals.push_back(Vec3(0.0f, 1.0f, 0.0f));
-					g_buffers->triangleNormals.push_back(Vec3(0.0f, 1.0f, 0.0f));
-          				
         }
 			}
 		}
@@ -551,16 +587,30 @@ void CreateHydrographicSpringGrid(Vec3 lower, Vec3 meshCenter, int dx, int dy, i
 			if (x > 0)
 			{
 				int index1 = y*dx + x - 1;
-				Vec4 mean = 0.5f * (g_buffers->positions[baseIndex + index0] + g_buffers->positions[baseIndex + index1]);
-				float d = computeDistance(distortionCenter, Vec3(mean));
-				CreateSpring(baseIndex + index0, baseIndex + index1, computeStiffness(d, min(dx * radius, dy * radius), mean.x, distortionCenter.x, mean.z, distortionCenter.z));
+				//Vec4 mean = 0.5f * (g_buffers->positions[baseIndex + index0] + g_buffers->positions[baseIndex + index1]);
+				//float d = computeDistance(distortionCenter, Vec3(mean));
+				//CreateSpring(baseIndex + index0, baseIndex + index1, computeStiffness(d, min(dx * radius, dy * radius), mean.x, distortionCenter.x, mean.z, distortionCenter.z));
+        CreateSpring(baseIndex + index0, baseIndex + index1, stretchStiffness);
       }
 
-			if (isBendShiftess && x > 1)
+			if (hasBendShiftess && x > 1)
 			{
 				int index2 = y*dx + x - 2;
 				CreateSpring(baseIndex + index0, baseIndex + index2, bendStiffness);
 			}
+
+      
+      if (hasShearShtifness && y > 0 && x < dx - 1)
+      {
+        int indexDiag = (y - 1)*dx + x + 1;
+        CreateSpring(baseIndex + index0, baseIndex + indexDiag, shearStiffness);
+      }
+
+      if (hasShearShtifness && y > 0 && x > 0)
+      {
+        int indexDiag = (y - 1)*dx + x - 1;
+        CreateSpring(baseIndex + index0, baseIndex + indexDiag, shearStiffness);
+      }
 			
 		}
 	}
@@ -574,12 +624,13 @@ void CreateHydrographicSpringGrid(Vec3 lower, Vec3 meshCenter, int dx, int dy, i
 			if (y > 0)
 			{
 				int index1 = (y - 1)*dx + x;
-				Vec4 mean = 0.5f * (g_buffers->positions[baseIndex + index0] + g_buffers->positions[baseIndex + index1]);
-				float d = computeDistance(distortionCenter, Vec3(mean));
-				CreateSpring(baseIndex + index0, baseIndex + index1, computeStiffness(d, min(dx * radius, dy * radius), mean.x, distortionCenter.x, mean.z, distortionCenter.z));
-			}
+				//Vec4 mean = 0.5f * (g_buffers->positions[baseIndex + index0] + g_buffers->positions[baseIndex + index1]);
+				//float d = computeDistance(distortionCenter, Vec3(mean));
+				//CreateSpring(baseIndex + index0, baseIndex + index1, computeStiffness(d, min(dx * radius, dy * radius), mean.x, distortionCenter.x, mean.z, distortionCenter.z));
+        CreateSpring(baseIndex + index0, baseIndex + index1, stretchStiffness);
+      }
 
-			if (isBendShiftess && y > 1)
+			if (hasBendShiftess && y > 1)
 			{
 				int index2 = (y - 2)*dx + x;
 				CreateSpring(baseIndex + index0, baseIndex + index2, bendStiffness);

@@ -31,6 +31,9 @@
   #define RENDER_V2
 #endif
 
+//#define NEARBY_TEXTURE_COORECTION
+
+
 #include "../core/types.h"
 #include "../core/maths.h"
 #include "../core/platform.h"
@@ -140,9 +143,11 @@ void Init(int scene, bool centerCamera = true)
 	MapBuffers(g_buffers);
 
 	g_buffers->positions.resize(0);
-	g_buffers->velocities.resize(0);
+  g_buffers->velocities.resize(0);
 	g_buffers->phases.resize(0);
-
+  g_buffers->normals.resize(0);
+  g_buffers->activeIndices.resize(0);
+  
 	g_buffers->springIndices.resize(0);
 	g_buffers->springLengths.resize(0);
 	g_buffers->springStiffness.resize(0);
@@ -158,9 +163,11 @@ void Init(int scene, bool centerCamera = true)
 	g_buffers->shapePrevRotations.resize(0);
 	g_buffers->shapeFlags.resize(0);
 
+  // for draw distortions
   g_contact_positions.resize(0);
   g_contact_normals.resize(0);
   g_contact_uvs.resize(0);
+  g_contact_indexes.resize(0);
 
   // for compute fps
   g_avgFPS = g_avgUpdateTime = g_avgRenderTime = g_avgWaitTime = g_avgLatencyTime = 0.0;
@@ -178,7 +185,7 @@ void Init(int scene, bool centerCamera = true)
 	g_frame = 0;
 	g_pause = false;
 
-	g_dt = 1.0f / 60.0f;
+  g_dt = 1.0f / 60.0f;
 
 	g_blur = 1.0f;
 	//g_fluidColor = Vec4(0.1f, 0.4f, 0.8f, 1.0f);
@@ -330,15 +337,6 @@ void Init(int scene, bool centerCamera = true)
 	// calculate particle bounds
 	Vec3 particleLower, particleUpper;
 	GetParticleBounds(particleLower, particleUpper);
-  // centering the main camera with perspective front view
-  Vec3 filmCenter = (particleLower + particleUpper) * 0.5f;
-  g_camPos.push_back(filmCenter);
-  g_camAngle.push_back(Vec3(0.0f, -DegToRad(15.0f), 0.0f));
-  //generate a bottom position and bottom angle for camera
-  g_camPos.push_back(Vec3(g_meshCenter.x, -2.4f, g_meshCenter.z));
-  g_camAngle.push_back(Vec3(0.0f, DegToRad(90.0f), 0.0f));
-
-  g_camIndex = 0; // select main cam view
 
 	// accommodate shapes
 	Vec3 shapeLower, shapeUpper;
@@ -350,6 +348,17 @@ void Init(int scene, bool centerCamera = true)
 
 	g_sceneLower -= g_params.collisionDistance;
 	g_sceneUpper += g_params.collisionDistance;
+
+  Vec3 perspectiveCamPosition = Vec3((g_sceneLower.x + g_sceneUpper.x)*0.5f, min(g_sceneUpper.y*1.25f, 6.0f), g_sceneUpper.z + min(g_sceneUpper.y, 6.0f));
+  // center camera on particles
+  // centering the main camera with perspective front view
+  g_camPos.push_back(perspectiveCamPosition);
+  g_camAngle.push_back(Vec3(0.0f, DegToRad(-30.0f), 0.0f));
+  //generate a bottom position and bottom angle for camera
+  g_camPos.push_back(Vec3(g_meshCenter.x, -2.4f, g_meshCenter.z));
+  g_camAngle.push_back(Vec3(0.0f, DegToRad(90.0f), 0.0f));
+  g_camIndex = 0; // select main cam view
+
 
 	// update collision planes to match flexs
 	Vec3 up = Normalize(Vec3(-g_waveFloorTilt, 1.0f, 0.0f));
@@ -363,10 +372,10 @@ void Init(int scene, bool centerCamera = true)
 
   g_buffers->diffuseCount.resize(1, 0);
 
+	// initialize normals (just for rendering before simulation starts)
+  /*
 	g_buffers->normals.resize(0);
 	g_buffers->normals.resize(maxParticles);
-
-	// initialize normals (just for rendering before simulation starts)
 	int numTris = g_buffers->triangles.size() / 3;
 	for (int i = 0; i < numTris; ++i)
 	{
@@ -385,16 +394,18 @@ void Init(int scene, bool centerCamera = true)
   {
 		g_buffers->normals[i] = Vec4(SafeNormalize(Vec3(g_buffers->normals[i]), Vec3(0.0f, 1.0f, 0.0f)), 0.0f);
   }
+  */
 
   // initialize contact structures for rendering
   g_contact_positions.resize(g_buffers->positions.size());
-  g_contact_normals.resize(g_buffers->positions.size());
+  g_contact_normals.resize(g_buffers->normals.size());
+  g_contact_indexes.resize(g_buffers->triangles.size());
   g_contact_uvs.resize(g_buffers->positions.size());
 
   g_buffers->positions.copyto(&g_contact_positions[0], g_buffers->positions.size());
-  g_buffers->normals.copyto(&g_contact_normals[0], g_buffers->positions.size());
-  // uvs are updated when the contacts are tracked and remaped using the rigid model texture
-  g_buffers->uvs.copyto(&g_contact_uvs[0], g_buffers->positions.size());
+  g_buffers->normals.copyto(&g_contact_normals[0], g_buffers->normals.size());
+  g_buffers->uvs.copyto(&g_contact_uvs[0], g_buffers->uvs.size());
+  g_buffers->triangles.copyto(&g_contact_indexes[0], g_buffers->triangles.size());
 
 #ifdef TRACK_DISPLACEMENTS
   g_displacement_buffers->normals.resize(0);
@@ -419,18 +430,7 @@ void Init(int scene, bool centerCamera = true)
     g_displacement_buffers->normals[i] = Vec4(SafeNormalize(Vec3(g_displacement_buffers->normals[i]), Vec3(0.0f, 1.0f, 0.0f)), 0.0f);
   }
 #endif
-	// save mesh positions for skinning
-  /*
-  if (g_mesh)
-	{
-		g_meshRestPositions = g_mesh->m_positions;
-	}
-	else
-	{
-		g_meshRestPositions.resize(0);
-	}
-  */
-
+	
 	g_solverDesc.maxParticles = maxParticles;
 	g_solverDesc.maxDiffuseParticles = g_maxDiffuseParticles;
 	g_solverDesc.maxNeighborsPerParticle = g_maxNeighborsPerParticle;
@@ -445,12 +445,14 @@ void Init(int scene, bool centerCamera = true)
 	// give scene a chance to do some post solver initialization
 	g_scenes[g_scene]->PostInitialize();
 
-	// center camera on particles
+
+
 	if (centerCamera)
 	{
+    // reset the perspective cam
+    g_camIndex = 0;
 		g_camPos[g_camIndex] = Vec3((g_sceneLower.x + g_sceneUpper.x)*0.5f, min(g_sceneUpper.y*1.25f, 6.0f), g_sceneUpper.z + min(g_sceneUpper.y, 6.0f));
-		//g_camAngle[g_camIndex] = Vec3(0.0f, -DegToRad(15.0f), 0.0f); // rever aqui
-
+		g_camAngle[g_camIndex] = Vec3(0.0f, DegToRad(-30.0f), 0.0f);
 		// give scene a chance to modify camera position
 		g_scenes[g_scene]->CenterCamera();
 	}
@@ -671,7 +673,7 @@ void RenderSceneV2()
 
   g_view = RotationMatrix(-g_camAngle[g_camIndex].x, Vec3(0.0f, 1.0f, 0.0f))*RotationMatrix(-g_camAngle[g_camIndex].y, Vec3(cosf(-g_camAngle[g_camIndex].x), 0.0f, sinf(-g_camAngle[g_camIndex].x)))*TranslationMatrix(-Point3(g_camPos[g_camIndex]));
 
-  g_lightPos = Vec3(0.0f, -10.0f, 0.0f);//g_camPos;// +g_lightDir * g_lightDistance;
+  g_lightPos = g_camPos[g_camIndex]; // cam target always iluminated
   Vec4 lightColor = Vec4(1.0f, 1.0f, 1.0f, 1.0f);
   Vec4 ambientColor = Vec4(0.15f, 0.15f, 0.15f, 1.0f);
   Vec4 diffuseColor = Vec4(1.0f, 1.0f, 1.0f, 1.0f);
@@ -679,27 +681,6 @@ void RenderSceneV2()
   unsigned int specularExpoent = 40;
   bool showTexture = true;
   BindSolidShaderV2(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], lightColor, ambientColor, specularColor, specularExpoent, diffuseColor, showTexture);
-  //int i = 0; // rigid shape index
-  //const Quat rotation = g_buffers->shapePrevRotations[i];
-  //const Vec3 translation = Vec3(g_buffers->shapePrevPositions[i]);
-  //NvFlexCollisionGeometry geo = g_buffers->shapeGeometry[i];
-
-  //int type = g_buffers->shapeFlags[i] & eNvFlexShapeFlagTypeMask;
-  //Matrix44 modelMatrix;
-  //switch (type)
-  //{
-    //case eNvFlexShapeSDF:
-    //{
-      //modelMatrix = TranslationMatrix(Point3(translation))*RotationMatrix(Quat(rotation))*ScaleMatrix(geo.sdf.scale);
-      //break;
-    //}
-
-    //case eNvFlexShapeTriangleMesh:
-    //{
-      //modelMatrix = TranslationMatrix(Point3(translation))*RotationMatrix(Quat(rotation))*ScaleMatrix(geo.triMesh.scale);
-      //break;
-    //}
-  //}
 
   SetCullMode(false);
   SetFillMode(g_wireframe);
@@ -730,7 +711,7 @@ void RenderSceneV2()
   {
     showTexture = true;
     BindFilmShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], lightColor, ambientColor, specularColor, specularExpoent, diffuseColor, showTexture);
-    DrawDistortion(g_film_mesh, &g_contact_positions[0], &g_contact_normals[0], &g_contact_uvs[0], &g_buffers->triangles[0], g_buffers->triangles.size(), g_contact_positions.size(), showTexture, g_model);
+    DrawDistortion(g_film_mesh, &g_contact_positions[0], &g_contact_normals[0], &g_contact_uvs[0], &g_contact_indexes[0], g_contact_indexes.size(), g_contact_positions.size(), showTexture, g_model);
   }
 
 
@@ -824,7 +805,7 @@ void RenderDebug()
 
 	// visualize contacts against the environment
   // all arrays are iterated in CPU
-	if (g_drawContacts && false)
+	if (g_drawContacts && true)
 	{
 		const int maxContactsPerParticle = 6;
 		NvFlexVector<Vec4> contactPlanes(g_flexLib, g_buffers->positions.size()*maxContactsPerParticle);
@@ -845,35 +826,59 @@ void RenderDebug()
 		{
 			// each active particle can have up to 6 contact points on NVIDIA Flex 1.1.0
       const int filmIndex = g_buffers->activeIndices[i];
-      Vec3 filmContactVertex = Vec3(g_buffers->positions[filmIndex]);
+      Vec3 filmNormal = g_buffers->normals[filmIndex];
+      Vec3 filmPosition = Vec3(g_buffers->positions[filmIndex]);
 			const int contactIndex = contactIndices[filmIndex];
 			const unsigned int count = contactCounts[contactIndex];
 			const float scale = 0.1f;
 
-			//retrieve contact planes for each particle 
-			for (unsigned int c = 0; c < count; ++c)
-			{
-				Vec4 filmContactPlane = contactPlanes[contactIndex*maxContactsPerParticle + c];
-        //BeginLines();
-        //DrawLine(filmContactVertex, filmContactVertex + Vec3(filmContactPlane)*scale, Vec4(1.0f, 0.5f, 0.0f, 0.0f));
-        //EndLines();
+      //has contacts
+      if (count)
+      {
+			  //retrieve contact planes for each particle 
+			  for (unsigned int c = 0; c < count; ++c)
+			  {
+				  Vec4 filmContactPlane = contactPlanes[contactIndex*maxContactsPerParticle + c];
+          //BeginLines();
+          //DrawLine(filmContactVertex, filmContactVertex + Vec3(filmContactPlane)*scale, Vec4(1.0f, 0.5f, 0.0f, 0.0f));
+          //EndLines();
 
-        if (1) // enable find mesh contacts
-        {
-
-          //int shapeIndex = 0; // rigid shape index (is zero because the scene have only one rigid shape)
-          //const Quat rotation = g_buffers->shapeRotations[shapeIndex];
-          //const Vec3 translation = Vec3(g_buffers->shapePositions[shapeIndex]);
-          //NvFlexCollisionGeometry geo = g_buffers->shapeGeometry[shapeIndex];
-
-          //Matrix44 modelMatrix = TranslationMatrix(Point3(translation))*RotationMatrix(Quat(rotation))*ScaleMatrix(geo.sdf.scale);
-          
           // for a better smooth efect it is better to use the film normals instead the filmContactPlane
-          Vec3 filmNormal = g_buffers->normals[filmIndex];
-          FindContacts(filmContactVertex, filmIndex, -filmNormal, g_gpu_mesh, g_film_mesh, g_model, gridDimZ, gridDimX);
-        }
-			}
+          /*
+          int filmOffsetIndex = filmIndex % 3;
+          int filmBaseIndex;
+          switch (filmOffsetIndex) {
+          case 0:
+            filmBaseIndex = filmIndex;
+            break;
+          case 1:
+            filmBaseIndex = filmIndex - 1;
+            break;
+          case 2:
+            filmBaseIndex = filmIndex - 2;
+            break;
+          }
+
+          Vec3 filmNormal0 = g_buffers->normals[filmBaseIndex + 0];
+          Vec3 filmNormal1 = g_buffers->normals[filmBaseIndex + 1];
+          Vec3 filmNormal2 = g_buffers->normals[filmBaseIndex + 2];
+
+          Vec3 filmNormal = (filmNormal0 + filmNormal1 + filmNormal2) / 3;
+          */
+          //-filmNormal
+          FindContacts(filmPosition, filmIndex, -Vec3(filmContactPlane), g_gpu_mesh, g_film_mesh, g_model, gridDimZ, gridDimX);
+			  }
+      }
+      else {
+        // draw normals
+        //if (-filmNormal.y < 0.9f)
+        //BeginLines();
+        //DrawLine(filmPosition, filmPosition + Vec3(-filmNormal)*scale, Vec4(1.0f, 0.5f, 0.0f, 0.0f));
+        //EndLines();
+      }
 		}
+
+    //PostProcessNearbyTexture(g_film_mesh, g_contact_positions, g_contact_indexes);// 
 
     
     // setup dynamic texture
@@ -908,8 +913,8 @@ void RenderDebug()
     //DrawLine(Vec3(0.0f), Vec3(0.0f) + Vec3(0.0f, 1.0f, 0.0f)* 0.1f ,yellowColor);
 
 
-    //for (int i = 0; i < int(g_buffers->positions.size()); ++i)
-    int i = 10800;
+    for (int i = 0; i < int(g_buffers->positions.size()); ++i)
+    //int i = 8;
     {
       // find offset in the neighbors buffer
       int offset = apiToInternal[i];
@@ -972,7 +977,7 @@ void RenderDebug()
 	if (g_drawNormals)
 	{
 		NvFlexGetNormals(g_solver, g_buffers->normals.buffer, NULL);
-
+    float scale = .2f;
 		BeginLines();
 
 		for (int i = 0; i < g_buffers->normals.size(); ++i)
@@ -1227,13 +1232,20 @@ int DoUI()
 
 			imguiBeginScrollArea("Options", uiLeft, g_screenHeight - uiBorder - uiHeight - uiOffset - uiBorder, uiWidth, uiHeight, &scroll);
 
-			if (imguiCheck("Wireframe", g_wireframe))
+      if (imguiCheck("Wireframe", g_wireframe))
+      {
 				g_wireframe = !g_wireframe;
+      }
 
-			if (imguiCheck("Draw Mesh", g_drawMesh))
-			{
-				g_drawMesh = !g_drawMesh;
-			}
+      if (imguiCheck("Draw Normals", g_drawNormals))
+      {
+        g_drawNormals = !g_drawNormals;
+      }
+
+      //if (imguiCheck("Draw Mesh", g_drawMesh))
+			//{
+				//g_drawMesh = !g_drawMesh;
+			//}
 
 			if (imguiCheck("Draw Axis", g_drawAxis))
 				g_drawAxis = !g_drawAxis;
@@ -1249,9 +1261,6 @@ int DoUI()
         g_drawContacts = !g_drawContacts;
       }
 
-			if (imguiCheck("Draw Displacements", g_drawDisplacements))
-				g_drawDisplacements = !g_drawDisplacements;
-
 			imguiSeparatorLine();
 
 			// scene options
@@ -1260,12 +1269,16 @@ int DoUI()
 			imguiSeparatorLine();
 
 			float n = float(g_numSubsteps);
-			if (imguiSlider("Num Substeps", &n, 1, 10, 1))
-				g_numSubsteps = int(n);
-
+      if (imguiSlider("Num Substeps", &n, 1, 10, 1))
+      {
+        g_numSubsteps = int(n);
+        g_resetSolver = true;
+      }
 			n = float(g_params.numIterations);
-			if (imguiSlider("Num Iterations", &n, 1, 20, 1))
+      if (imguiSlider("Num Iterations", &n, 1, 20, 1))
+      {
 				g_params.numIterations = int(n);
+      }
 
 			imguiSeparatorLine();
 			imguiSlider("Radius", &g_params.radius, 0.01f, 0.5f, 0.01f);
@@ -1297,19 +1310,19 @@ int DoUI()
 			imguiSlider("Buoyancy", &g_params.buoyancy, -1.0f, 1.0f, 0.01f);
 
 			imguiSeparatorLine();
-			imguiSlider("Anisotropy Scale", &g_params.anisotropyScale, 0.0f, 30.0f, 0.01f);
-			imguiSlider("Smoothing", &g_params.smoothing, 0.0f, 1.0f, 0.01f);
+			//imguiSlider("Anisotropy Scale", &g_params.anisotropyScale, 0.0f, 30.0f, 0.01f);
+			//imguiSlider("Smoothing", &g_params.smoothing, 0.0f, 1.0f, 0.01f);
 
 			// diffuse params
-			imguiSeparatorLine();
-			imguiSlider("Diffuse Threshold", &g_params.diffuseThreshold, 0.0f, 1000.0f, 1.0f);
-			imguiSlider("Diffuse Buoyancy", &g_params.diffuseBuoyancy, 0.0f, 2.0f, 0.01f);
-			imguiSlider("Diffuse Drag", &g_params.diffuseDrag, 0.0f, 2.0f, 0.01f);
-			imguiSlider("Diffuse Scale", &g_diffuseScale, 0.0f, 1.5f, 0.01f);
-			imguiSlider("Diffuse Alpha", &g_diffuseColor.w, 0.0f, 3.0f, 0.01f);
-			imguiSlider("Diffuse Inscatter", &g_diffuseInscatter, 0.0f, 2.0f, 0.01f);
-			imguiSlider("Diffuse Outscatter", &g_diffuseOutscatter, 0.0f, 2.0f, 0.01f);
-			imguiSlider("Diffuse Motion Blur", &g_diffuseMotionScale, 0.0f, 5.0f, 0.1f);
+			//imguiSeparatorLine();
+			//imguiSlider("Diffuse Threshold", &g_params.diffuseThreshold, 0.0f, 1000.0f, 1.0f);
+			//imguiSlider("Diffuse Buoyancy", &g_params.diffuseBuoyancy, 0.0f, 2.0f, 0.01f);
+			//imguiSlider("Diffuse Drag", &g_params.diffuseDrag, 0.0f, 2.0f, 0.01f);
+			//imguiSlider("Diffuse Scale", &g_diffuseScale, 0.0f, 1.5f, 0.01f);
+			//imguiSlider("Diffuse Alpha", &g_diffuseColor.w, 0.0f, 3.0f, 0.01f);
+			//imguiSlider("Diffuse Inscatter", &g_diffuseInscatter, 0.0f, 2.0f, 0.01f);
+			//imguiSlider("Diffuse Outscatter", &g_diffuseOutscatter, 0.0f, 2.0f, 0.01f);
+			//imguiSlider("Diffuse Motion Blur", &g_diffuseMotionScale, 0.0f, 5.0f, 0.1f);
 
 			imguiEndScrollArea();
 		}
@@ -1493,9 +1506,12 @@ void UpdateFrame(bool &quit)
 #endif
   //render();
   RenderDebug();
-  // generate displacements 2d texture
-  if (g_pause && g_drawContacts)
+  if (g_pause && g_drawContacts && g_generateContactsTexture && false)
   {
+    // generate displacements 2d texture
+
+    g_generateContactsTexture = false; // avoid enter this loop again
+
     // visualize contacts against the environment
     // all arrays are iterated in CPU
     const int maxContactsPerParticle = 6;
@@ -1532,20 +1548,90 @@ void UpdateFrame(bool &quit)
 
         if (1) // enable find mesh contacts
         {
+          int filmOffsetIndex = filmIndex % 3;
+          int filmBaseIndex;
+          switch (filmOffsetIndex) {
+          case 0:
+            filmBaseIndex = filmIndex;
+            break;
+          case 1:
+            filmBaseIndex = filmIndex - 1;
+            break;
+          case 2:
+            filmBaseIndex = filmIndex - 2;
+            break;
+          }
 
-          //int shapeIndex = 0; // rigid shape index (is zero because the scene have only one rigid shape)
-          //const Quat rotation = g_buffers->shapeRotations[shapeIndex];
-          //const Vec3 translation = Vec3(g_buffers->shapePositions[shapeIndex]);
-          //NvFlexCollisionGeometry geo = g_buffers->shapeGeometry[shapeIndex];
-
-          //Matrix44 modelMatrix = TranslationMatrix(Point3(translation))*RotationMatrix(Quat(rotation))*ScaleMatrix(geo.sdf.scale);
-
-          // for a better smooth efect it is better to use the film normals instead the filmContactPlane
-          Vec3 filmNormal = g_buffers->normals[filmIndex];
+          Vec3 filmNormal0 = g_buffers->normals[filmBaseIndex + 0];
+          Vec3 filmNormal1 = g_buffers->normals[filmBaseIndex + 1];
+          Vec3 filmNormal2 = g_buffers->normals[filmBaseIndex + 2];
+          Vec3 filmNormal = (filmNormal0 + filmNormal1 + filmNormal2) / 3;//g_buffers->normals[filmIndex];
           FindContacts(filmContactVertex, filmIndex, -filmNormal, g_gpu_mesh, g_film_mesh, g_model, gridDimZ, gridDimX);
         }
       }
     }
+
+    PostProcessNearbyTexture(g_film_mesh, g_contact_positions, g_contact_indexes);
+
+
+#ifdef NEARBY_TEXTURE_COORECTION
+    //nearby find for post-processing of texture seams
+    NvFlexVector<int> neighbors(g_flexLib, g_solverDesc.maxParticles * g_solverDesc.maxNeighborsPerParticle);
+    NvFlexVector<int> neighborCounts(g_flexLib, g_solverDesc.maxParticles);
+    NvFlexVector<int> apiToInternal(g_flexLib, g_solverDesc.maxParticles);
+    NvFlexVector<int> internalToApi(g_flexLib, g_solverDesc.maxParticles);
+
+    NvFlexGetNeighbors(g_solver, neighbors.buffer, neighborCounts.buffer, apiToInternal.buffer, internalToApi.buffer);
+    // neighbors are stored in a strided format so that the first neighbor
+    // of each particle is stored sequentially, then the second, and so on
+
+    neighbors.map();
+    neighborCounts.map();
+    apiToInternal.map();
+    internalToApi.map();
+
+    int stride = g_solverDesc.maxParticles;
+
+    //BeginLines();
+    //Vec4 redColor = Vec4(1.0f, 0.0f, 0.0f, 1.0f);
+    //Vec4 yellowColor = Vec4(1.0f, 1.0f, 0.0f, 1.0f);
+    //DrawLine(Vec3(0.0f), Vec3(0.0f) + Vec3(0.0f, 1.0f, 0.0f)* 0.1f ,yellowColor);
+
+
+    for (int particleIndex = 0; particleIndex < int(g_buffers->positions.size()); ++particleIndex)
+    //int i = 10800;
+    {
+      // find offset in the neighbors buffer
+      int offset = apiToInternal[particleIndex];
+      int count = neighborCounts[offset];
+
+      PostProcessNearbyTexture(g_film_mesh, particleIndex, count, offset, stride, &internalToApi[0], &neighbors[0]);
+
+      //for (int c = 0; c < count; ++c)
+      //{
+        //int neighborIndex = internalToApi[neighbors[c*stride + offset]];
+
+        //Vec3 particle = Vec3(g_buffers->positions[particleIndex]);
+        //Vec3 normal = Vec3(g_buffers->normals[i]);
+
+        //Vec3 particleNeighbor = Vec3(g_buffers->positions[neighborIndex]);
+        //Vec3 neighborNormal = Vec3(g_buffers->normals[neighbor]);
+
+        //DrawLine(particle, particleNeighbor, redColor);
+
+        //DrawLine(particleNeighbor, particleNeighbor + normal * 0.05f, yellowColor);
+
+        //printf("Particle %d's neighbor %d is particle %d\n", i, c, neighbor);
+
+     // }
+    }
+    neighbors.destroy();
+    neighborCounts.destroy();
+    apiToInternal.destroy();
+    internalToApi.destroy();
+
+#endif
+    //EndLines();
 
 
     // setup dynamic texture
@@ -1621,6 +1707,15 @@ void UpdateFrame(bool &quit)
 		g_resetScene = false;
 	}
 
+  // reset solver
+  //if (g_resetSolver)
+  //{
+    //Shutdown();
+    //NvFlexParams copy = g_params;
+
+    //g_solver = NvFlexCreateSolver(g_flexLib, &g_solverDesc);
+
+  //}
 	//-------------------------------------------------------------------
 	// Flex Update
 
@@ -2071,17 +2166,8 @@ bool InputKeyboardDown(unsigned char key, int x, int y)
     } 
     else
     {
-      g_camIndex = 0; // to perspective cam
+      g_camIndex = 0; // reset to perspective cam
     }
-		//g_camPos = Vec3(g_meshCenter.x, -2.4f, g_meshCenter.z);
-		//g_camAngle = Vec3(0.0f, DegToRad(90.0f), 0.0f);
-		//g_lightDir = Normalize(Vec3(5.0f, -15.0f, 7.5f));
-		//g_centerLight = false;
-		break;
-	}
-	case 'm':
-	{
-		g_drawMesh = !g_drawMesh;
 		break;
 	}
 	case '.':
@@ -2556,9 +2642,10 @@ int main(int argc, char* argv[])
 
 	InitRender(options);
 
-	if (g_fullscreen)
-		SDL_SetWindowFullscreen(g_window, SDL_WINDOW_FULLSCREEN_DESKTOP);
-
+  if (g_fullscreen)
+  {
+    SDL_SetWindowFullscreen(g_window, SDL_WINDOW_FULLSCREEN_DESKTOP);
+  }
 #ifdef RENDER_V2
 	ReshapeWindowV2(g_screenWidth, g_screenHeight);
 #else
