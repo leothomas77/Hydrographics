@@ -241,11 +241,11 @@ GLuint LoadTexture(const char* filename)
         if (1)
         {
           glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img.m_width, img.m_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, img.m_data);
-          glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-          glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+          //glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+          //glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-          //glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-          //glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+          glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+          glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
           
 
           //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_LINEAR);
@@ -3329,10 +3329,6 @@ void SetupFilmMesh(GpuMesh* gpuMesh, GpuMesh* filmMesh)
 {
   // update texture id
   filmMesh->mTextureId = gpuMesh->mTextureId;
-  // update texture coords
-  //glVerify(glBindBuffer(GL_ARRAY_BUFFER, filmMesh->mPositionsVBO));
-  //glVerify(glBufferSubData(GL_ARRAY_BUFFER, filmMesh->mNumVertices * (sizeof(Vec4) + sizeof(Vec4)), filmMesh->mNumVertices * sizeof(Vec4), filmMesh->texCoordsFilm.data()));
-  
 }
 
 // get texture coords from baricentric coordinates
@@ -3344,19 +3340,139 @@ Vec2 InterpolateTextureCoordinates(Vec2 textCoordV0, Vec2 textCoordV1, Vec2 text
   return interpolatedTexCoords;
 }
 
+bool isSeam()
+{
+  return false;
+}
+
+void FindTextureSeamV2(Vec3 v0, Vec3 v1, Vec3 v2, Vec2 textCoordV0, Vec2 textCoordV1, Vec2 textCoordV2)
+{
+  // parameters
+  float epsilon = 0.08f;
+  float treshold = 0.4f;
+  // initial values
+  float w = 1.0f, u = 0.0f, v = 0.0f;
+  Vec2 textureAnt = w * textCoordV0 + u * textCoordV1 + v * textCoordV2;
+  BeginPoints(3.0f);
+  while (w > .0f)
+  {
+    while (u <= 1.0f)
+    {
+      v = .0f, w = 1 - (u + v);
+      while (v <= 1.0f)
+      {
+        Vec3 p = w * v0 + u * v1 + v * v2; // compute arbitrary position given barycentric coordinates
+
+                                           // Debug triangle sampler
+                                           // com o triangulo da malha rigida, encontrar o ponto de interseccao e reinterpolar as coordenadas
+                                           // detectar a descontinuidade na reinterpolacao
+        Vec2 textureP = InterpolateTextureCoordinates(textCoordV0, textCoordV1, textCoordV2, u, v, w);
+        if (Length(textureP - textureAnt) > treshold) // is a seam
+        {
+          // seam jump texture
+          DrawPoint(p, Vec4(1.0f, 0.0f, 0.0f, 1.0f));
+          //DrawPoint(v1, Vec4(1.0f, 0.0f, 0.0f, 1.0f));
+          //DrawPoint(v2, Vec4(1.0f, 0.0f, 0.0f, 1.0f));
+        }
+        else
+        {
+          DrawPoint(p, Vec4(0.0f, 1.0f, 0.0f, 1.0f));
+          //DrawPoint(v1, Vec4(0.0f, 1.0f, 0.0f, 1.0f));
+          //DrawPoint(v2, Vec4(0.0f, 1.0f, 0.0f, 1.0f));
+        }
+        textureAnt = textureP;
+        v += epsilon;
+        w = 1 - (u + v);
+      }
+      u += epsilon;
+    }
+  }
+  EndPoints();
+}
+
+void FindTextureSeam(Vec3 v0, Vec3 v1, Vec3 v2, Vec2 textCoordV0, Vec2 textCoordV1, Vec2 textCoordV2)
+{
+  // parameters
+  float epsilon = 0.0025f;
+  float treshold = 0.15f;
+  float wV0, uV1, vV2;
+  float u, v, w;
+  Vec2 textureAnt;
+  // initial values
+
+  BeginPoints(2.0f);
+  for (wV0 = 1.0f, uV1 = vV2 = 0.0f; wV0 >= .0f, vV2 <= 1.0f; wV0 -= epsilon, vV2 += epsilon)
+  {
+    for (u = .0f, v = vV2, w = wV0, textureAnt = wV0 * textCoordV0 + uV1 * textCoordV1 + vV2 * textCoordV2; u <= 1.0f, v <=1.0f, w >= .0f; u += epsilon, w -= epsilon, v = 1 - (u + w))
+    {
+      Vec3 p = w * v0 + u * v1 + v * v2; // compute arbitrary position given barycentric coordinates
+      // Debug triangle sampler
+      // com o triangulo da malha rigida, encontrar o ponto de interseccao e reinterpolar as coordenadas
+      // detectar a descontinuidade na reinterpolacao
+      Vec2 textureP = InterpolateTextureCoordinates(textCoordV0, textCoordV1, textCoordV2, u, v, w);
+      if (Length(textureP - textureAnt) > treshold) // is a seam
+      {
+        // seam jump texture
+        DrawPoint(p, Vec4(1.0f, 0.0f, 0.0f, 1.0f));
+        //DrawPoint(v1, Vec4(1.0f, 0.0f, 0.0f, 1.0f));
+        //DrawPoint(v2, Vec4(1.0f, 0.0f, 0.0f, 1.0f));
+      }
+      else
+      {
+        DrawPoint(p, Vec4(0.0f, 1.0f, 0.0f, 1.0f));
+        //DrawPoint(v1, Vec4(0.0f, 1.0f, 0.0f, 1.0f));
+        //DrawPoint(v2, Vec4(0.0f, 1.0f, 0.0f, 1.0f));
+      }
+
+      //if (u >= .98f || v >= .98f || w >= .98)
+      //{
+        //DrawPoint(p, Vec4(.0f, .0f, 1.0f, 1.0f));
+      //}
+
+      textureAnt = textureP;
+    }
+  }
+
+  EndPoints();
+}
+
+void FixTextureSeamsV2(int baseIndex, std::vector<Vec4> filmPositions, Vec2 texCoord0, Vec2 texCoord1, Vec2 texCoord2)
+{
+  float maxDistanceUV = .4f;
+
+
+  float distance01 = Length(texCoord0 - texCoord1);
+  float distance02 = Length(texCoord0 - texCoord2);
+  float distance12 = Length(texCoord1 - texCoord2);
+
+  //show texture seams
+
+  BeginPoints(4.0f); // parei aqui -> gerar codigo hard coded para debugar a criacao de vertice e indice
+  Vec4 red = Vec4(1.0f, 0.0f, 0.0f, 1.0f);
+  Vec4 blue = Vec4(0.0f, 0.0f, 1.0f, 1.0f);
+  if (distance01 > maxDistanceUV || distance02 > maxDistanceUV || distance12 > maxDistanceUV)
+  {
+
+    // montar previamente os triangulos candidatos da malha rigida
+    // passar para a funcao os triangulos candidatos da malha rigida
+    FindTextureSeam(Vec3(filmPositions[baseIndex]), Vec3(filmPositions[baseIndex + 1]), Vec3(filmPositions[baseIndex + 2]), Vec2(texCoord0), Vec2(texCoord1), Vec2(texCoord2));
+
+  }
+  EndPoints();
+
+}
+
 //#define DEBUG_CONTACTS
 //#define DEBUG_TEXCOORDS
-void FindContacts(Vec3 filmContactVertex, int filmContactVertexIndex, Vec3 filmContactPlane, GpuMesh* gpuMesh, GpuMesh* filmMesh, Mat44 modelMatrix, int gridHeight, int gridWidth)
+void FindContacts(Vec3 filmContactVertex, int filmContactVertexIndex, Vec3 filmContactPlane, GpuMesh* gpuMesh, GpuMesh* filmMesh, Mat44 modelMatrix, int gridHeight, int gridWidth, std::vector<Vec4> filmPositions)
 {
-  //const float scale = 0.01f;
-  filmMesh->mTextureId = gpuMesh->mTextureId; // swap texture id rigid -> film
   for (int i = 0; i < gpuMesh->triangles.size(); ++i)
   {
     // discard vertices with texture coordinates
-    if (filmMesh->texCoordsFilm[filmContactVertexIndex].x >= .0f)
-    {
-      continue;
-    }
+    //if (filmMesh->texCoordsFilm[filmContactVertexIndex].x >= .0f)
+    //{
+      //continue;
+    //}
 
     Vec3 v0 = Vec3(modelMatrix * Vec4(gpuMesh->positions[i * 3 + 0], 1.0f));
     Vec3 v1 = Vec3(modelMatrix * Vec4(gpuMesh->positions[i * 3 + 1], 1.0f));
@@ -3382,6 +3498,32 @@ void FindContacts(Vec3 filmContactVertex, int filmContactVertexIndex, Vec3 filmC
 
         filmMesh->texCoordsFilm[filmContactVertexIndex] = Vec4(texCoordsRigid.x, texCoordsRigid.y, 0.0f, 0.0f);
     }
+
+    /*
+    int filmOffsetIndex = filmContactVertexIndex % 3;
+    int filmBaseIndex;
+    switch (filmOffsetIndex) {
+    case 0:
+      filmBaseIndex = filmContactVertexIndex;
+      break;
+    case 1:
+      filmBaseIndex = filmContactVertexIndex - 1;
+      break;
+    case 2:
+      filmBaseIndex = filmContactVertexIndex - 2;
+      break;
+    }
+
+    Vec2 texCoord0 = Vec2(filmMesh->texCoordsFilm[filmBaseIndex + 0]);
+    Vec2 texCoord1 = Vec2(filmMesh->texCoordsFilm[filmBaseIndex + 1]);
+    Vec2 texCoord2 = Vec2(filmMesh->texCoordsFilm[filmBaseIndex + 2]);
+
+    if (texCoord0.x >= .0f && texCoord1.x >= .0f && texCoord2.x >= .0f)
+    {
+      // 
+      FixTextureSeamsV2(filmBaseIndex, filmPositions, texCoord0, texCoord1, texCoord2);
+    }
+    */
   }
 
   //BeginPoints(4);
@@ -3538,9 +3680,9 @@ void FindContacts(Vec3 filmContactVertex, int filmContactVertexIndex, Vec3 filmC
   */
 }
 
-void PostProcessNearbyTexture(GpuMesh* filmMesh, std::vector<Vec4> &positions, std::vector<int> &indices)
+void FixTextureSeams(GpuMesh* filmMesh, std::vector<Vec4> &positions, std::vector<int> &indices)
 {
-  float maxDistanceUV = .2f;
+  float maxDistanceUV = .3f;
   //std::map<int, int>::iterator it;
   //std::map<int, int> correctionList;
 
@@ -3567,117 +3709,17 @@ void PostProcessNearbyTexture(GpuMesh* filmMesh, std::vector<Vec4> &positions, s
       float distance01 = Length(texCoord0 - texCoord1);
       float distance02 = Length(texCoord0 - texCoord2);
       float distance12 = Length(texCoord1 - texCoord2);
-      
-      //show texture seams
-      
-      BeginPoints(4.0f); // parei aqui -> gerar codigo hard coded para debugar a criacao de vertice e indice
-      Vec4 red = Vec4(1.0f, 0.0f, 0.0f, 1.0f);
-      Vec4 blue = Vec4(0.0f, 0.0f, 1.0f, 1.0f);
+      // texture distance greather than treshold
       if (distance01 > maxDistanceUV || distance02 > maxDistanceUV || distance12 > maxDistanceUV)
-      {
-        if (texCoord0.x <= 0.01) {
-          DrawPoint(Vec3(positions[index0]), red);
-          texCoord0.x = 1.0f;
-          filmMesh->texCoordsFilm[index0] = Vec4(texCoord0);
-        }
-        if (texCoord1.x <= 0.01) {
-          DrawPoint(Vec3(positions[index1]), red);
-          texCoord1.x = 1.0f;
-          filmMesh->texCoordsFilm[index1] = Vec4(texCoord1);
-        }
-        if (texCoord2.x <= 0.01) {
-          DrawPoint(Vec3(positions[index2]), red);
-          texCoord2.x = 1.0f;
-          filmMesh->texCoordsFilm[index2] = Vec4(texCoord2);
-        }
-
-        if (texCoord0.x >= 0.99)
-        {
-          DrawPoint(Vec3(positions[index0]), blue);
-          texCoord0.x -= 1.0f;
-          filmMesh->texCoordsFilm[index0] = Vec4(texCoord0);
-        }
-        if (texCoord1.x >= 0.99)
-        {
-          DrawPoint(Vec3(positions[index1]), blue);
-          texCoord1.x -= 1.0f;
-          filmMesh->texCoordsFilm[index1] = Vec4(texCoord1);
-        }
-        if (texCoord2.x >= 0.99)
-        {
-          DrawPoint(Vec3(positions[index2]), blue);
-          texCoord2.x -= 1.0f;
-          filmMesh->texCoordsFilm[index2] = Vec4(texCoord2);
-        }
-
-        //DrawPoint(Vec3(positions[index0]), red);
-        //DrawPoint(Vec3(positions[index1]), red);
-        //DrawPoint(Vec3(positions[index2]), red);
+      {        
+        FindTextureSeam(Vec3(positions[index0]), Vec3(positions[index1]), Vec3(positions[index2]), Vec2(texCoord0), Vec2(texCoord1), Vec2(texCoord2));
       }
-      EndPoints();
-      
-
-      float minDistanceUV = Min(distance01, Min(distance02, distance12));
-      //std::vector<int> seamIndexes;
-      std::map<int, int> correctionList;
-
-      if (minDistanceUV == distance01 && (distance02 > maxDistanceUV || distance12 > maxDistanceUV))
-      {
-        correctionList.insert(std::make_pair(i, 2));
-        //if (correctionList.find(index2) == correctionList.end()) // not found
-        //{
-          //correctionList.insert(std::make_pair(index2, index2));
-        //}
-
-      }
-      if (minDistanceUV == distance02 && (distance01 > maxDistanceUV || distance12 > maxDistanceUV))
-      {
-        correctionList.insert(std::make_pair(i, 1));
-
-        //if (correctionList.find(index1) == correctionList.end()) // not found
-        //{
-          //correctionList.insert(std::make_pair(index1, index1));
-        //}
-      }
-      if (minDistanceUV == distance12 && (distance01 > maxDistanceUV || distance02 > maxDistanceUV))
-      {
-        correctionList.insert(std::make_pair(i, 0));
-
-        //if (correctionList.find(index0) == correctionList.end()) // not found
-        //{
-          //correctionList.insert(std::make_pair(index0, index0));
-        //}
-      }
-
-
-      /*
-      for (std::map<int, int>::iterator it = correctionList.begin(); it != correctionList.end(); ++it)
-      {
-        int triangleBaseIndex = filmMesh->triangleIntIndexes[it->first];
-
-        for (int j = triangleBaseIndex; j < triangleBaseIndex + 3; j++)
-        {
-          if (it->second == j - triangleBaseIndex)
-          {
-            // update texcoord
-            filmMesh->texCoordsFilm[j] = 1.0f;
-          }
-        }
-
-      }
-      */
     }    
   }
 
-  //for (std::map<int, int>::iterator it = correctionList.begin(); it != correctionList.end(); ++it)
-  //{
-    //std::cout << it->first << " => " << it->second << '\n';
-    //Vec4 newPosition = positions[it->second];
-    //positions.push_back(newPosition);
-    //int newPositionIndex = positions.size() - 1;
-    //indexes[]
-  //}
 }
+
+
 
 
 void ReadDisplacements(int* backbuffer, int width, int height)

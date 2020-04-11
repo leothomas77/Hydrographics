@@ -86,11 +86,11 @@ public:
     g_fps = 0.0f;
     g_frame = 0;
 		//float stretchStiffness = 1.0f; // default tartaruga esfera tetra
-    float stretchStiffness = 0.01f; // onca: 0.2 
+    float stretchStiffness = 1.0f; // onca: 0.2 
     float bendStiffness = 0.75f; // not used
 		float shearStiffness = 0.5f; // not used
-		verticalInvMass = .0f;
-		horizontalInvMass = .0f;
+		verticalInvMass = 1.0f;
+		horizontalInvMass = 1.0f;
 
 		//float radius = 0.05f;
 
@@ -127,8 +127,8 @@ public:
 		int phase = NvFlexMakePhase(0, eNvFlexPhaseSelfCollide | eNvFlexPhaseSelfCollideFilter);
 		
 		// general params
-    g_params.numIterations = 3; //onca: 3
-    g_numSubsteps = 20;
+    g_params.numIterations = 5; //onca: 3
+    g_numSubsteps = 2;
     // g_params.numIterations = 5; // iteracoes pbd default
 
     g_params.gravity[0] = 0.0f; // gravidade x, y, z
@@ -152,8 +152,8 @@ public:
 		// fluid params
 		g_params.viscosity = 0.0f;
 		// cloth params
-    //g_params.drag = 3.0f;//0.3f;//3.5f;//força de arrasto ao tecido. aumenta sensa��o de elasticidade
-    //g_params.lift = 1.8f;//0.2f;//1.8f;// forca de sustentação
+    g_params.drag = .2f;//0.3f;//3.5f;//força de arrasto ao tecido. aumenta sensa��o de elasticidade
+    g_params.lift = .8f;//0.2f;//1.8f;// forca de sustentação
 		// collision params
     float radius = 0.012f;
     g_params.radius = radius;//0.012f;   //radius*1.0f; // raio max de intera��o entre part�culas
@@ -162,10 +162,10 @@ public:
 		g_params.shapeCollisionMargin = radius*0.5f;//
 		g_params.numPlanes = 0;
 		// relaxation solver params
-		g_params.relaxationMode = eNvFlexRelaxationGlobal;
-		g_params.relaxationFactor = 0.25f;
-		//g_params.relaxationMode = eNvFlexRelaxationLocal;
-		//g_params.relaxationFactor = 1.2f;
+		//g_params.relaxationMode = eNvFlexRelaxationGlobal;
+		//g_params.relaxationFactor = 0.25f;
+		g_params.relaxationMode = eNvFlexRelaxationLocal;
+		g_params.relaxationFactor = 0.2f;
 		// plastic params
 		//g_params.plasticThreshold = 0.1f;
 		//g_params.plasticCreep = 0.3f;
@@ -377,7 +377,7 @@ public:
 		UpdateShapes(); // update data to flex check colision
 
    
-		if (1)
+		if (0)
 		{
 			//get contacted particles
 			int  maxContactsPerParticle = 6;
@@ -503,10 +503,10 @@ public:
   int sphereSectors = 160;
 	//Film params
   float gridY = 0.3f; // grid position
-  int factor = 16;//16; 
+  int factor = 4;//16; 
   float A4_Spacing = 0.17f;//default spacing based on sphere model
   int A4_Width = 7;//7; //210
-  int A4_Height = 11;//11; //297
+  int A4_Height = 7;//11; //297
 	//Vec2 boundsX, boundsY, boundsZ;
 	Point3 translation = Point3(0.0f);
 	float scale = 1.0f;

@@ -711,6 +711,7 @@ void RenderSceneV2()
   {
     showTexture = true;
     BindFilmShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], lightColor, ambientColor, specularColor, specularExpoent, diffuseColor, showTexture);
+    SetupFilmMesh(g_gpu_mesh, g_film_mesh);
     DrawDistortion(g_film_mesh, &g_contact_positions[0], &g_contact_normals[0], &g_contact_uvs[0], &g_contact_indexes[0], g_contact_indexes.size(), g_contact_positions.size(), showTexture, g_model);
   }
 
@@ -866,7 +867,7 @@ void RenderDebug()
           Vec3 filmNormal = (filmNormal0 + filmNormal1 + filmNormal2) / 3;
           */
           //-filmNormal
-          FindContacts(filmPosition, filmIndex, -Vec3(filmContactPlane), g_gpu_mesh, g_film_mesh, g_model, gridDimZ, gridDimX);
+          FindContacts(filmPosition, filmIndex, -Vec3(filmContactPlane), g_gpu_mesh, g_film_mesh, g_model, gridDimZ, gridDimX, g_contact_positions);
 			  }
       }
       else {
@@ -878,15 +879,8 @@ void RenderDebug()
       }
 		}
 
-    //PostProcessNearbyTexture(g_film_mesh, g_contact_positions, g_contact_indexes);// 
-
+    FixTextureSeams(g_film_mesh, g_contact_positions, g_contact_indexes);
     
-    // setup dynamic texture
-    //SetupContactsTexture(g_film_mesh);
-
-    // swap film texture to gpu_mesh texture
-    // SetupFilmMesh(g_gpu_mesh, g_film_mesh);
-
 	}
 
   if (g_drawNeighbors)
@@ -1218,7 +1212,7 @@ int DoUI()
 		for (int i = 0; i < int(g_scenes.size()); ++i)
 		{
 			unsigned int color = g_scene == i ? imguiRGBA(255, 151, 61, 255) : imguiRGBA(255, 255, 255, 200);
-      if (imguiItem(g_scenes[i]->GetName(), true, color)) // , i == g_selectedScene))
+      if (imguiItem(g_scenes[i]->GetName(), true, color))
       {
 				newScene = i;
 			}
@@ -1241,11 +1235,6 @@ int DoUI()
       {
         g_drawNormals = !g_drawNormals;
       }
-
-      //if (imguiCheck("Draw Mesh", g_drawMesh))
-			//{
-				//g_drawMesh = !g_drawMesh;
-			//}
 
 			if (imguiCheck("Draw Axis", g_drawAxis))
 				g_drawAxis = !g_drawAxis;
@@ -1541,37 +1530,38 @@ void UpdateFrame(bool &quit)
       //retrieve contact planes for each particle 
       for (unsigned int c = 0; c < count; ++c)
       {
-        Vec4 filmContactPlane = contactPlanes[contactIndex*maxContactsPerParticle + c];
+        Vec3 filmContactPlane = Vec3(contactPlanes[contactIndex*maxContactsPerParticle + c]);
         //BeginLines();
         //DrawLine(filmContactVertex, filmContactVertex + Vec3(filmContactPlane)*scale, Vec4(1.0f, 0.5f, 0.0f, 0.0f));
         //EndLines();
 
         if (1) // enable find mesh contacts
         {
-          int filmOffsetIndex = filmIndex % 3;
-          int filmBaseIndex;
-          switch (filmOffsetIndex) {
-          case 0:
-            filmBaseIndex = filmIndex;
-            break;
-          case 1:
-            filmBaseIndex = filmIndex - 1;
-            break;
-          case 2:
-            filmBaseIndex = filmIndex - 2;
-            break;
-          }
+          //int filmOffsetIndex = filmIndex % 3;
+          //int filmBaseIndex;
+          //switch (filmOffsetIndex) {
+          //case 0:
+            //filmBaseIndex = filmIndex;
+            //break;
+          //case 1:
+            //filmBaseIndex = filmIndex - 1;
+            //break;
+          //case 2:
+            //filmBaseIndex = filmIndex - 2;
+            //break;
+          //}
 
-          Vec3 filmNormal0 = g_buffers->normals[filmBaseIndex + 0];
-          Vec3 filmNormal1 = g_buffers->normals[filmBaseIndex + 1];
-          Vec3 filmNormal2 = g_buffers->normals[filmBaseIndex + 2];
-          Vec3 filmNormal = (filmNormal0 + filmNormal1 + filmNormal2) / 3;//g_buffers->normals[filmIndex];
-          FindContacts(filmContactVertex, filmIndex, -filmNormal, g_gpu_mesh, g_film_mesh, g_model, gridDimZ, gridDimX);
+          //Vec3 filmNormal0 = g_buffers->normals[filmBaseIndex + 0];
+          //Vec3 filmNormal1 = g_buffers->normals[filmBaseIndex + 1];
+          //Vec3 filmNormal2 = g_buffers->normals[filmBaseIndex + 2];
+          //Vec3 filmNormal = (filmNormal0 + filmNormal1 + filmNormal2) / 3;//g_buffers->normals[filmIndex];
+          
+          FindContacts(filmContactVertex, filmIndex, -Normalize(filmContactPlane), g_gpu_mesh, g_film_mesh, g_model, gridDimZ, gridDimX, g_contact_positions);
         }
       }
     }
 
-    PostProcessNearbyTexture(g_film_mesh, g_contact_positions, g_contact_indexes);
+    //FixTextureSeams(g_film_mesh, g_contact_positions, g_contact_indexes);
 
 
 #ifdef NEARBY_TEXTURE_COORECTION
@@ -1780,44 +1770,17 @@ void UpdateFrame(bool &quit)
 	NvFlexGetParticles(g_solver, g_buffers->positions.buffer, NULL);
 	NvFlexGetVelocities(g_solver, g_buffers->velocities.buffer, NULL);
 	NvFlexGetNormals(g_solver, g_buffers->normals.buffer, NULL);
+  if (g_buffers->triangles.size()) // dynamic triangles are mentioned when use drag and lift parameters
+  {
+    NvFlexGetDynamicTriangles(g_solver, g_buffers->triangles.buffer, g_buffers->triangleNormals.buffer, g_buffers->triangles.size() / 3);
+  }
 
 #ifdef TRACK_DISPLACEMENTS
   NvFlexGetParticles(g_displacements_solver, g_displacement_buffers->positions.buffer, NULL);
   NvFlexGetVelocities(g_displacements_solver, g_displacement_buffers->velocities.buffer, NULL);
   NvFlexGetNormals(g_displacements_solver, g_buffers->normals.buffer, NULL);
 #endif
-	//if (g_buffers->triangles.size()) ???? verificar
-		//NvFlexGetDynamicTriangles(g_solver, g_buffers->triangles.buffer, g_buffers->triangleNormals.buffer, g_buffers->triangles.size() / 3);
-
-	// readback rigid transforms
-	//if (g_buffers->rigidOffsets.size())
-		//NvFlexGetRigids(g_solver, NULL, NULL, NULL, NULL, NULL, NULL, NULL, g_buffers->rigidRotations.buffer, g_buffers->rigidTranslations.buffer);
-
-  /*
-	if (!g_interop)
-	{
-		// if not using interop then we read back fluid data to host
-		if (g_drawEllipsoids)
-		{
-			NvFlexGetSmoothParticles(g_solver, g_buffers->smoothPositions.buffer, NULL);
-			NvFlexGetAnisotropy(g_solver, g_buffers->anisotropy1.buffer, g_buffers->anisotropy2.buffer, g_buffers->anisotropy3.buffer, NULL);
-		}
-
-		// read back diffuse data to host
-		if (g_drawDensity)
-			NvFlexGetDensities(g_solver, g_buffers->densities.buffer, NULL);
-
-		if (GetNumDiffuseRenderParticles(g_diffuseRenderBuffers))
-		{
-			NvFlexGetDiffuseParticles(g_solver, g_buffers->diffusePositions.buffer, g_buffers->diffuseVelocities.buffer, g_buffers->diffuseCount.buffer);
-		}
-	}
-	else
-	{
-		// read back just the new diffuse particle count, render buffers will be updated during rendering
-		NvFlexGetDiffuseParticles(g_solver, NULL, NULL, g_buffers->diffuseCount.buffer);
-	}
-  */
+  
 	double updateEndTime = GetSeconds();
 
 	//-------------------------------------------------------

@@ -128,8 +128,8 @@ struct RenderTexture;
 // void DestroyRenderTexture(RenderTexture* tex);
 
 // void SetRenderTarget(RenderTexture* target);
-void FindContacts(Vec3 position, int positionIndex, Vec3 contactPlane, GpuMesh* gpuMesh, GpuMesh* filmMesh, Mat44 modelMatrix, int gridHeight, int gridWidth);
-void PostProcessNearbyTexture(GpuMesh* filmMesh, std::vector<Vec4> &positions, std::vector<int> &indices);
+void FindContacts(Vec3 position, int positionIndex, Vec3 contactPlane, GpuMesh* gpuMesh, GpuMesh* filmMesh, Mat44 modelMatrix, int gridHeight, int gridWidth, std::vector<Vec4> filmPositions);
+void FixTextureSeams(GpuMesh* filmMesh, std::vector<Vec4> &positions, std::vector<int> &indices);
 //void PostProcessNearbyTexture(GpuMesh* filmMesh, int particleIndex, const int neighborCount, const int offset, const int stride, const int* internalToApi, const int* neighbors);
 void SetupFilmMesh(GpuMesh* gpuMesh, GpuMesh* filmMesh);
 void SetupContactsTexture(GpuMesh* filmMesh);

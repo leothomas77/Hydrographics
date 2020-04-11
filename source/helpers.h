@@ -543,13 +543,13 @@ void CreateHydrographicSpringGrid(Vec3 lower, Vec3 meshCenter, int dx, int dy, i
               v2 v4
             */
             // 1st triangle
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x, y, dx));
             g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y - 1, dx));
             g_buffers->triangles.push_back(baseIndex + GridIndex(x, y - 1, dx));
-            g_buffers->triangles.push_back(baseIndex + GridIndex(x, y, dx));
             // 2nd triangle
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y, dx));
             g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y - 1, dx));
             g_buffers->triangles.push_back(baseIndex + GridIndex(x, y, dx));
-            g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y, dx));
           }
           else 
           {
@@ -560,13 +560,13 @@ void CreateHydrographicSpringGrid(Vec3 lower, Vec3 meshCenter, int dx, int dy, i
             v2 v4
             */
             // 1st triangle
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y, dx));
             g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y - 1, dx));
             g_buffers->triangles.push_back(baseIndex + GridIndex(x, y - 1, dx));
-            g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y, dx));
             // 2nd triangle
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y, dx));
             g_buffers->triangles.push_back(baseIndex + GridIndex(x, y - 1, dx));
             g_buffers->triangles.push_back(baseIndex + GridIndex(x, y, dx));
-            g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y, dx));
           }
 
           g_buffers->triangleNormals.push_back(Vec3(0.0f, 1.0f, 0.0f));
