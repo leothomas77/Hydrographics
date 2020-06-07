@@ -31,6 +31,7 @@
   #define RENDER_V2
 #endif
 
+//#define GENERATE_CONTACTS
 //#define NEARBY_TEXTURE_COORECTION
 
 
@@ -740,15 +741,7 @@ void RenderDebug()
 
   SetView(g_view, g_proj);
   SetCullMode(true);
-  /*
-  if (g_mouseParticle != -1)
-	{
-		// draw mouse spring
-		BeginLines();
-		DrawLine(g_mousePos, Vec3(g_buffers->positions[g_mouseParticle]), Vec4(1.0f));
-		EndLines();
-	}
-  */
+
   // springs
 	if (g_drawSprings)
 	{
@@ -822,7 +815,7 @@ void RenderDebug()
 		contactIndices.map();
 		contactCounts.map();
 
-		// each active particle of simulation
+		// for each active particle of simulation
 		for (int i = 0; i < int(g_buffers->activeIndices.size()); ++i)
 		{
 			// each active particle can have up to 6 contact points on NVIDIA Flex 1.1.0
@@ -1495,10 +1488,11 @@ void UpdateFrame(bool &quit)
 #endif
   //render();
   RenderDebug();
+
+//#ifdef GENERATE_CONTACTS
   if (g_pause && g_drawContacts && g_generateContactsTexture && false)
   {
     // generate displacements 2d texture
-
     g_generateContactsTexture = false; // avoid enter this loop again
 
     // visualize contacts against the environment
@@ -1562,7 +1556,7 @@ void UpdateFrame(bool &quit)
     }
 
     //FixTextureSeams(g_film_mesh, g_contact_positions, g_contact_indexes);
-
+//#endif
 
 #ifdef NEARBY_TEXTURE_COORECTION
     //nearby find for post-processing of texture seams
@@ -1619,19 +1613,18 @@ void UpdateFrame(bool &quit)
     neighborCounts.destroy();
     apiToInternal.destroy();
     internalToApi.destroy();
+    //EndLines();
 
 #endif
-    //EndLines();
 
 
     // setup dynamic texture
     //SetupContactsTexture(g_film_mesh);
-
     // swap film texture to gpu_mesh texture
     // SetupFilmMesh(g_gpu_mesh, g_film_mesh);
 
 
-
+    // Generate film texture
     //TgaImage img;
     //img.m_width = g_screenWidth;
     //img.m_height = g_screenHeight;
@@ -1664,17 +1657,9 @@ void UpdateFrame(bool &quit)
 #ifdef TRACK_DISPLACEMENTS
   UnmapBuffers(g_displacement_buffers);
 #endif
-	// move mouse particle (must be done here as GetViewRay() uses the GL projection state)
-	/*
-  if (g_mouseParticle != -1)
-	{
-		Vec3 origin, dir;
-		GetViewRay(g_lastx, g_screenHeight - g_lasty, origin, dir);
 
-		g_mousePos = origin + dir*g_mouseT;
-	}
-  */
-	if (g_capture)
+  // Generate movie output
+  if (g_capture)
 	{
 		TgaImage img;
 		img.m_width = g_screenWidth;
@@ -1698,14 +1683,14 @@ void UpdateFrame(bool &quit)
 	}
 
   // reset solver
-  //if (g_resetSolver)
-  //{
-    //Shutdown();
-    //NvFlexParams copy = g_params;
+  if (g_resetSolver)
+  {
+    Shutdown();
+    NvFlexParams copy = g_params;
 
-    //g_solver = NvFlexCreateSolver(g_flexLib, &g_solverDesc);
+    g_solver = NvFlexCreateSolver(g_flexLib, &g_solverDesc);
 
-  //}
+  }
 	//-------------------------------------------------------------------
 	// Flex Update
 
