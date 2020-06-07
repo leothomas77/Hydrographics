@@ -3446,7 +3446,7 @@ void FixTextureSeamsV2(int baseIndex, std::vector<Vec4> filmPositions, Vec2 texC
   float distance12 = Length(texCoord1 - texCoord2);
 
   //show texture seams
-
+  // draw points only calling in RenderDebug() procedure
   BeginPoints(4.0f); // parei aqui -> gerar codigo hard coded para debugar a criacao de vertice e indice
   Vec4 red = Vec4(1.0f, 0.0f, 0.0f, 1.0f);
   Vec4 blue = Vec4(0.0f, 0.0f, 1.0f, 1.0f);
@@ -3466,6 +3466,7 @@ void FixTextureSeamsV2(int baseIndex, std::vector<Vec4> filmPositions, Vec2 texC
 //#define DEBUG_TEXCOORDS
 void FindContacts(Vec3 filmContactVertex, int filmContactVertexIndex, Vec3 filmContactPlane, GpuMesh* gpuMesh, GpuMesh* filmMesh, Mat44 modelMatrix, int gridHeight, int gridWidth, std::vector<Vec4> filmPositions)
 {
+  // parei aqui
   for (int i = 0; i < gpuMesh->triangles.size(); ++i)
   {
     // discard vertices with texture coordinates

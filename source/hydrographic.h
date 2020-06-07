@@ -1,4 +1,5 @@
 //#define DEBUG_GRID
+//#define HANDLE_PARTICLES_IN_UPDATE
 #define PATH_SIZE 256
 
 class ModelData {
@@ -79,7 +80,7 @@ public:
       //0: tetraedro 1: sphere 2: turtle
       // with texture
       //3: onca 4: bunny 5: earth 
-      selectedModel = 5;
+      selectedModel = 2;
     }
 
 
@@ -376,9 +377,9 @@ public:
 
 		UpdateShapes(); // update data to flex check colision
 
-   
-		if (0)
-		{
+
+
+#ifdef HANDLE_PARTICLES_IN_UPDATE // enable get contact points in the update procedure
 			//get contacted particles
 			int  maxContactsPerParticle = 6;
 			NvFlexVector<Vec4> contactPlanes(g_flexLib, g_buffers->positions.size()*maxContactsPerParticle);
@@ -409,7 +410,7 @@ public:
           //normal.y = 0;
           Normalize(normal);
 
-          Vec3 newPosition = position - normal * (g_dt / g_numSubsteps);// parei aqui
+          Vec3 newPosition = position - normal * (g_dt / g_numSubsteps);//
 
          // newPosition.y = gridY;
          // g_buffers->velocities[g_buffers->activeIndices[i]] = Length(Vec3(newPosition - position)) * normal / (time - lastTime);
@@ -434,7 +435,7 @@ public:
 				}
         
 			}
-		}
+#endif
 
   }
 
