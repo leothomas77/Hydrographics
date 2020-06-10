@@ -487,36 +487,18 @@ void CreateHydrographicSpringGrid(Vec3 lower, Vec3 meshCenter, int dx, int dy, i
 			for (int x = 0; x < dx; ++x)
 			{
 				Vec3 position = lower + radius*Vec3(float(x), float(z), float(y));
-#ifdef TRACK_DISPLACEMENTS
-				displacements.push_back(0.0f);
-				g_displacement_buffers->originalPositions.push_back(Vec4(position.x, position.y, position.z, 1.0f));
-#endif
 				if (x == 0 || x == dx - 1) {
 					g_buffers->positions.push_back(Vec4(position.x, position.y, position.z, invMassV));// 0.08f aumenta o arrasto nas bordas
-#ifdef TRACK_DISPLACEMENTS
-          g_displacement_buffers->positions.push_back(Vec4(position.x, position.y, position.z, invMassV));
-#endif
         }
 				else if (y == 0 || y== dy - 1) {
 					g_buffers->positions.push_back(Vec4(position.x, position.y, position.z, invMassH));// 0.08f aumenta o arrasto nas bordas
-#ifdef TRACK_DISPLACEMENTS
-          g_displacement_buffers->positions.push_back(Vec4(position.x, position.y, position.z, invMassH));
-#endif
         }
 				else {
 					g_buffers->positions.push_back(Vec4(position.x, position.y, position.z, invMass));
-#ifdef TRACK_DISPLACEMENTS
-          g_displacement_buffers->positions.push_back(Vec4(position.x, position.y, position.z, invMass));
-#endif
         }
         g_buffers->normals.push_back(Vec4(0.0f, 1.0f, 0.0f, 0.0f));
 				g_buffers->velocities.push_back(velocity);
 				g_buffers->phases.push_back(phase);
-
-#ifdef TRACK_DISPLACEMENTS
-        g_displacement_buffers->velocities.push_back(velocity);
-        g_displacement_buffers->phases.push_back(phase);
-#endif
 
 				// texture coordinates
 				float u = (float)x / (dx - 1);
@@ -805,90 +787,6 @@ void CreateTetMesh(const char* filename, Vec3 lower, float scale, float stiffnes
 	}
 }
 
-
-// finds the closest particle to a view ray
-/*int PickParticle(Vec3 origin, Vec3 dir, Vec4* particles, int* phases, int n, float radius, float &outT)
-{
-	float maxDistSq = radius*radius;
-	float minT = FLT_MAX;
-	int minIndex = -1;
-
-	for (int i=0; i < n; ++i)
-	{
-		if (phases[i] & eNvFlexPhaseFluid)
-			continue;
-
-		Vec3 delta = Vec3(particles[i])-origin;
-		float t = Dot(delta, dir);
-
-		if (t > 0.0f)
-		{
-			Vec3 perp = delta - t*dir;
-
-			float dSq = LengthSq(perp);
-
-			if (dSq < maxDistSq && t < minT)
-			{
-				minT = t;
-				minIndex = i;
-			}
-		}
-	}
-
-	outT = minT;
-
-	return minIndex;
-}*/
-
-// calculates local space positions given a set of particles and rigid indices
-void CalculateRigidLocalPositions(const Vec4* restPositions, int numRestPositions, const int* offsets, const int* indices, int numRigids, Vec3* localPositions)
-{
-
-	// To improve the accuracy of the result, first transform the restPositions to relative coordinates (by finding the mean and subtracting that from all points)
-	// Note: If this is not done, one might see ghost forces if the mean of the restPositions is far from the origin.
-
-	// Calculate mean
-	Vec3 shapeOffset(0.0f);
-
-	for (int i = 0; i < numRestPositions; i++)
-	{
-		shapeOffset += Vec3(restPositions[i]);
-	}
-
-	shapeOffset /= float(numRestPositions);
-
-	int count = 0;
-
-	for (int r=0; r < numRigids; ++r)
-	{
-		const int startIndex = offsets[r];
-		const int endIndex = offsets[r+1];
-
-		const int n = endIndex-startIndex;
-
-		assert(n);
-
-		Vec3 com;
-	
-		for (int i=startIndex; i < endIndex; ++i)
-		{
-			const int r = indices[i];
-
-			// By substracting meshOffset the calculation is done in relative coordinates
-			com += Vec3(restPositions[r]) - shapeOffset;
-		}
-
-		com /= float(n);
-
-		for (int i=startIndex; i < endIndex; ++i)
-		{
-			const int r = indices[i];
-
-			// By substracting meshOffset the calculation is done in relative coordinates
-			localPositions[count++] = (Vec3(restPositions[r]) - shapeOffset) - com;
-		}
-	}
-}
 
 void DrawImguiString(int x, int y, Vec3 color, int align, const char* s, ...)
 {

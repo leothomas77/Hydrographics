@@ -1,21 +1,4 @@
 //#define DEBUG_GRID
-//#define HANDLE_PARTICLES_IN_UPDATE
-#define PATH_SIZE 256
-
-class ModelData {
-public:
-	ModelData(char *path, Vec3 translation, float scale, Vec3 rotation):
-  translation{translation}, scale{scale}, rotation{rotation}
-  {
-		if (strlen(path) > (PATH_SIZE - 1))
-      throw std::runtime_error(std::string("Model name too long!"));
-    strcpy(this->path, path);
-	}
-  char path[PATH_SIZE];
-	Vec3 translation = Vec3(0.0f);
-	float scale = 0.0f;
-	Vec3 rotation;
-};
 
 class Hydrographic : public Scene
 {
@@ -80,7 +63,7 @@ public:
       //0: tetraedro 1: sphere 2: turtle
       // with texture
       //3: onca 4: bunny 5: earth 
-      selectedModel = 2;
+      selectedModel = 5;
     }
 
 
@@ -207,23 +190,26 @@ public:
 
     // define collision mesh type
     if (1) {
+
 		  sdfMesh = CreateHydrographicSDF(mesh, GetFilePathByPlatform(models[selectedModel].path).c_str(), createFile, voxelDim, transf, sdfMargin, expand);
 			AddSDF(sdfMesh, pos, rot, 1.0f);
 
 		}
 		else {
-      // para usar esta malha,tem que ajustar as transformacoes de escala
+      // para usar esta malha, tem que ajustar as transformacoes de escala
 		  triangleMesh = CreateTriangleMesh(ImportMesh(GetFilePathByPlatform(models[selectedModel].path).c_str()));
 		  AddTriangleMesh(triangleMesh, pos, rot, 1.0f);
+
 		}
 
-    // entry in the collision->render map
-#ifdef RENDER_V2
     // gpu mesh created by assimp import optimized for loading a full texture atlas features and rendering
-    g_gpu_mesh = CreateGpuMesh(GetFilePathByPlatform(models[selectedModel].path).c_str(), transf, sdfMargin);
-#else
-    g_fields[sdf] = CreateGpuMesh(mesh);
-#endif
+    g_gpu_rigid_mesh = CreateGpuMesh(GetFilePathByPlatform(models[selectedModel].path).c_str(), transf, sdfMargin);
+
+    // get texture pixels for use in the fix seam stage
+    //g_rigid_model_texture_pixels = new u32
+    
+    //= new unsigned byte[g_rigid_texture_width * g_rigid_texture_height * 4];
+
 
 		meshIndex = g_buffers->shapePositions.size() - 1;
 		//get the sdf center after the normalization
@@ -233,25 +219,39 @@ public:
 		gridPosition.x += g_meshCenter.x + models[selectedModel].translation.x;
 		gridPosition.z += g_meshCenter.z + models[selectedModel].translation.z;
 
-
     Matrix44 filmModel = TranslationMatrix(Point3(gridPosition));
 
 		CreateHydrographicSpringGrid(gridPosition, g_meshCenter, gridDimX, gridDimZ, 1, spacing, phase, stretchStiffness, bendStiffness, shearStiffness, 0.0f, 1.0f, horizontalInvMass, verticalInvMass, false, false);
-    //filmContactCount.resize(g_buffers->positions.size());
+
+    // initialize contact structures for generate reverse texture mapping
+    g_contact_positions.resize(g_buffers->positions.size());
+    g_contact_normals.resize(g_buffers->normals.size());
+    g_contact_indexes.resize(g_buffers->triangles.size());
+    g_contact_uvs.resize(g_buffers->positions.size());
+    // create a copy of flat film positinos before deformation occurs
+    // do the same to normals and triangles array
+    g_buffers->positions.copyto(&g_contact_positions[0], g_buffers->positions.size());
     for (int i = 0; i < g_buffers->positions.size(); i++)
     {
-      //filmContactCount[i] = 0;
-      g_buffers->uvs[i] = Vec4(-1.0f);
+      g_contact_uvs[i] = Vec4(-1.0f); // initialize contact uv with -1 means this vertice has not contact with rigid body
     }
+    g_buffers->normals.copyto(&g_contact_normals[0], g_buffers->normals.size());
+    g_buffers->triangles.copyto(&g_contact_indexes[0], g_buffers->triangles.size());
     
-#ifdef RENDER_V2
-    g_film_mesh = CreateGpuFilm(filmModel, &g_buffers->positions[0], &g_buffers->normals[0], g_buffers->uvs.size() ? &g_buffers->uvs[0] : NULL, g_buffers->positions.size(), &g_buffers->triangles[0], g_buffers->triangles.size());
-#endif    
+    // flex data is only handle the interaction between the soft bodies
+    // handle the positions and collisions
+    // data structure for render the scene and show texture mapping properly is provided by gpu_mesh structure created here
+    // first time this structure is created and the buffers allocated here
+    // this same structure is updated in the render procedure in the main loop, with the positions updated by flex
+    g_gpu_film_mesh = CreateGpuFilm(filmModel, &g_buffers->positions[0], &g_buffers->normals[0], g_buffers->uvs.size() ? &g_buffers->uvs[0] : NULL, g_buffers->positions.size(), &g_buffers->triangles[0], g_buffers->triangles.size());
+
     // draw options
 		g_drawSprings = false;
 		g_drawHydrographic = true;
 		g_drawShadows = false;
     g_generateContactsTexture = true;
+    g_drawReverseTexture = true;
+    g_drawFixedSeams = true;
 		mTime = 0.0f;
 	}
 
@@ -270,96 +270,6 @@ public:
 			g_pause = true;
 		}
 
-#ifdef TRACK_DISPLACEMENTS // old way for tracking distortion
-    float epsilon = 0.0f;
-    float displacementThreshold = 0.0f;
-    float displacementFactor = 1.0f;
-    if (lower.y <= gridY && !g_pause)  // is dipping
-    {
-		  if (0) // CUDA way
-		  {
-			  Vec4* d_positions;
-			  Vec4* d_disp_positions;
-			  Vec4* d_originalPositions;
-			  Vec3* d_velocities;
-
-			  size_t nPositions = g_buffers->positions.size();
-
-			  cudaMalloc(&d_positions, nPositions * sizeof(Vec4));
-			  cudaMalloc(&d_disp_positions, nPositions * sizeof(Vec4));
-			  cudaMalloc(&d_velocities, nPositions * sizeof(Vec3));
-			  cudaMalloc(&d_originalPositions, nPositions * sizeof(Vec4));
-
-			  cudaMemcpy(d_positions, &g_buffers->positions[0], nPositions * sizeof(Vec4), cudaMemcpyHostToDevice);
-			  cudaMemcpy(d_disp_positions, &g_displacement_buffers->positions[0], nPositions * sizeof(Vec4), cudaMemcpyHostToDevice);
-			  cudaMemcpy(d_velocities, &g_displacement_buffers->velocities[0], nPositions * sizeof(Vec3), cudaMemcpyHostToDevice);
-			  cudaMemcpy(d_originalPositions, &g_displacement_buffers->originalPositions[0], nPositions * sizeof(Vec4), cudaMemcpyHostToDevice);
-
-			  UpdateDisplacements(nPositions, 1, d_positions, d_disp_positions, d_velocities, d_originalPositions);
-
-			  //cudaDeviceSynchronize();
-
-			  cudaMemcpy(&g_displacement_buffers->positions[0], d_disp_positions, nPositions * sizeof(Vec4), cudaMemcpyDeviceToHost);
-			  cudaMemcpy(&g_displacement_buffers->velocities[0], d_velocities, nPositions * sizeof(Vec3), cudaMemcpyDeviceToHost);
-
-			  cudaFree(d_positions);
-			  cudaFree(d_disp_positions);
-			  cudaFree(d_velocities);
-			  cudaFree(d_originalPositions);
-		  }
-
-		  if (0) // CPU way
-		  {
-        NvFlexVector<int> currentActiveIndices(g_flexLib);
-        currentActiveIndices.resize(0);
-        currentActiveIndices.reserve(g_buffers->activeIndices.size());
-        int activeCount = 0;
-		    for (int activeIndex = 0; activeIndex < g_buffers->activeIndices.size(); activeIndex++)
-		    {
-          int i = g_buffers->activeIndices[activeIndex];
-
-			    Vec3 originalPos = g_displacement_buffers->originalPositions[i];
-			    Vec3 displacedPos = Vec3(g_buffers->positions[i]);
-			    float dipping = fabs(g_buffers->positions[i].y - gridY);
-			    float displacement = Length(originalPos - displacedPos);
-			    if (dipping <= epsilon && displacement > displacementThreshold) // particle is not yet dipped
-			    {
-			      //track position
-            currentActiveIndices.push_back(i);
-            activeCount++;
-			      Vec3 gradient = (originalPos - displacedPos) / displacement;
-			      Vec3 predictedPosition = displacementFactor * displacement * gradient;
-			      g_displacement_buffers->positions[i].x += predictedPosition.x;
-			      g_displacement_buffers->positions[i].y += predictedPosition.y;
-			      g_displacement_buffers->positions[i].z += predictedPosition.z;
-			      //g_displacement_buffers->velocities[i] = (originalPos - displacedPos) / g_dt;
-			    }
-			    else {
-			      g_displacement_buffers->velocities[i] = Vec3(0.0f, 0.0f, 0.0f);
-			    }
-		    }
-
-        /*
-        // Remove collided vertices from active indices to improve peformance
-        NvFlexBuffer* activeBuffer = NvFlexAllocBuffer(g_flexLib, currentActiveIndices.count, sizeof(int), eNvFlexBufferHost);
-        int* activeIndices = (int*)NvFlexMap(activeBuffer, eNvFlexMapWait);
-
-        for (int i = 0; i < currentActiveIndices.count; ++i)
-          activeIndices[i] = currentActiveIndices[i];
-
-        NvFlexUnmap(activeBuffer);
-
-        NvFlexCopyDesc copyDesc;
-        copyDesc.dstOffset = 0;
-        copyDesc.srcOffset = 0;
-        copyDesc.elementCount = currentActiveIndices.count;
-
-        NvFlexSetActive(g_solver, activeBuffer, &copyDesc);
-        */
-		  }
-    }
-#endif
-
 		Vec3 pos = Vec3(0.0f, initialY + dippingVelocity * time, 0.0f);
 		Vec3 prevPos = Vec3(0.0f, initialY + dippingVelocity * lastTime, 0.0f);
 
@@ -376,66 +286,6 @@ public:
 		g_buffers->shapePrevRotations[meshIndex] = prevRot;
 
 		UpdateShapes(); // update data to flex check colision
-
-
-
-#ifdef HANDLE_PARTICLES_IN_UPDATE // enable get contact points in the update procedure
-			//get contacted particles
-			int  maxContactsPerParticle = 6;
-			NvFlexVector<Vec4> contactPlanes(g_flexLib, g_buffers->positions.size()*maxContactsPerParticle);
-			NvFlexVector<Vec4> contactVelocities(g_flexLib, g_buffers->positions.size()*maxContactsPerParticle);
-			NvFlexVector<int> contactIndices(g_flexLib, g_buffers->positions.size());
-			NvFlexVector<unsigned int> contactCounts(g_flexLib, g_buffers->positions.size());
-
-			NvFlexGetContacts(g_solver, contactPlanes.buffer, contactVelocities.buffer, contactIndices.buffer, contactCounts.buffer);
-
-			// ensure transfers have finished
-			contactPlanes.map();
-			contactVelocities.map();
-			contactIndices.map();
-			contactCounts.map();
-
-			// each active particle of simulation
-			for (int i = 0; i < int(g_buffers->activeIndices.size()); ++i)
-			{
-				// each active particle can have up to 6 contact points on NVIDIA Flex 1.1.0
-				const int contactIndex = contactIndices[g_buffers->activeIndices[i]];
-				const unsigned int count = contactCounts[contactIndex];
-
-				Vec3 position = g_buffers->positions[g_buffers->activeIndices[i]];
-        float positionW = g_buffers->positions[g_buffers->activeIndices[i]].w;
-				if (!count && position.y < gridY) // not touched particle
-				{
-					Vec3 normal = g_buffers->normals[g_buffers->activeIndices[i]];
-          //normal.y = 0;
-          Normalize(normal);
-
-          Vec3 newPosition = position - normal * (g_dt / g_numSubsteps);//
-
-         // newPosition.y = gridY;
-         // g_buffers->velocities[g_buffers->activeIndices[i]] = Length(Vec3(newPosition - position)) * normal / (time - lastTime);
-
-					g_buffers->positions[g_buffers->activeIndices[i]] = Vec4(newPosition, positionW);
-
-				}				
-        else 
-        {
-					// each active particle can have up to 6 contact points on NVIDIA Flex 1.1.0
-					//retrieve contact planes for each particle 
-					for (unsigned int c = 0; c < count; ++c)
-					{
-						g_buffers->velocities[g_buffers->activeIndices[i]] = Vec3(0.0f, dippingVelocity, 0.0f);
-						Vec4 position = g_buffers->positions[g_buffers->activeIndices[i]];
-
-						position.y += dippingVelocity * g_dt;
-						position.w = 0.0f; //total adhesion
-
-						g_buffers->positions[g_buffers->activeIndices[i]] = position;
-					}
-				}
-        
-			}
-#endif
 
   }
 

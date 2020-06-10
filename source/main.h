@@ -56,6 +56,7 @@ void UpdateCamera();
 void SyncScene();
 void UpdateScene();
 void RenderDebug();
+void BuildReverseTextureMapping();
 void StoreReport(int type, int factor);
 void ShowReport();
 void UpdateFrame(bool &quit);
@@ -87,9 +88,9 @@ struct SimBuffers
 	NvFlexVector<int> phases;
 	NvFlexVector<Vec4> normals;
 	NvFlexVector<int> activeIndices;
-	NvFlexVector<int> diffuseCount;
+	//NvFlexVector<int> diffuseCount;
 
-	NvFlexVector<Vec4>  originalPositions;	// for compute displacement heatmap
+	//NvFlexVector<Vec4>  originalPositions;	// for compute displacement heatmap
 
 	// convexes
 	NvFlexVector<NvFlexCollisionGeometry> shapeGeometry;
@@ -109,8 +110,9 @@ struct SimBuffers
 
 
 	SimBuffers(NvFlexLibrary* l) :
-		positions(l), restPositions(l), velocities(l), phases(l), normals(l), activeIndices(l), diffuseCount(l),
-		originalPositions(l),
+		positions(l), restPositions(l), velocities(l), phases(l), normals(l), activeIndices(l), 
+    //diffuseCount(l),
+		//originalPositions(l),
 		shapeGeometry(l), shapePositions(l), shapeRotations(l),
 		shapePrevPositions(l), shapePrevRotations(l), shapeFlags(l),
 		springIndices(l), springLengths(l), springStiffness(l),
@@ -119,10 +121,6 @@ struct SimBuffers
 };
 
 SimBuffers* g_buffers;
-
-#ifdef TRACK_DISPLACEMENTS
-  SimBuffers* g_displacement_buffers;
-#endif
 
 void MapBuffers(SimBuffers* buffers)
 {
@@ -133,9 +131,9 @@ void MapBuffers(SimBuffers* buffers)
 	buffers->phases.map();
 	buffers->normals.map();
 	buffers->activeIndices.map();
-	buffers->diffuseCount.map();
+	//buffers->diffuseCount.map();
 
-	buffers->originalPositions.map();
+	//buffers->originalPositions.map();
 
 	// convexes
 	buffers->shapeGeometry.map();
@@ -163,9 +161,9 @@ void UnmapBuffers(SimBuffers* buffers)
 	buffers->phases.unmap();
 	buffers->normals.unmap();
 	buffers->activeIndices.unmap();
-	buffers->diffuseCount.unmap();
+	//buffers->diffuseCount.unmap();
 
-	buffers->originalPositions.unmap();
+	//buffers->originalPositions.unmap();
 	
 	// convexes
 	buffers->shapeGeometry.unmap();
@@ -198,9 +196,9 @@ void DestroyBuffers(SimBuffers* buffers)
 	buffers->phases.destroy();
 	buffers->normals.destroy();
 	buffers->activeIndices.destroy();
-	buffers->diffuseCount.destroy();
+	//buffers->diffuseCount.destroy();
 
-	buffers->originalPositions.destroy();
+	//buffers->originalPositions.destroy();
 	
 	// convexes
 	buffers->shapeGeometry.destroy();
@@ -288,20 +286,9 @@ NvFlexSolver* g_solver;
 NvFlexSolverDesc g_solverDesc;
 NvFlexLibrary* g_flexLib;
 
-#ifdef TRACK_DISPLACEMENTS
-// displacement solver
-NvFlexSolver* g_displacements_solver;
-// hydrographics
-vector<float> displacements;		// for compute hydrographic distortion
-									//vector<Vec3>  displacedPositions;	// for compute hydrographic distortion
-									//vector<bool>  tracking;
-									//std::map<int, float> frameTracking;
-									//bool g_tracking;
-#endif
-
-                  //
 std::vector<TriangleIndexes> g_triangles_by_vertex;
 
+// store data of flat distorted film
 std::vector<Vec4> g_contact_positions;
 std::vector<Vec4> g_contact_normals;
 std::vector<Vec4> g_contact_uvs;
@@ -322,9 +309,8 @@ int g_maxContactsPerParticle;
 // mesh used for deformable object rendering
 string g_basePath;
 Mesh* g_mesh;
-GpuMesh* g_film_mesh;
-//GpuMesh* g_contact_mesh;
-GpuMesh* g_gpu_mesh;
+GpuMesh* g_gpu_film_mesh;
+GpuMesh* g_gpu_rigid_mesh;
 
 //vector<Point3> g_meshRestPositions;
 //const int g_numSkinWeights = 4;
@@ -412,7 +398,7 @@ bool g_debug = false;
 bool g_emit = false;
 bool g_warmup = false;
 
-float g_waveFloorTilt = 0.0f;
+// float g_waveFloorTilt = 0.0f;
 
 Vec3 g_sceneLower;
 Vec3 g_sceneUpper;
@@ -424,7 +410,6 @@ bool g_drawPoints;
 bool g_drawMesh;
 bool g_drawCloth;
 bool g_drawHydrographic;
-bool g_drawHydrographicMesh = true;
 bool g_drawHydrographicCollisionMesh = true;
 bool g_drawAABB = false;
 Mesh* g_mesh_rigid;
@@ -434,7 +419,8 @@ float g_expandCloth;	// amount to expand cloth along normal (to account for part
 bool g_drawOpaque;
 int g_drawSprings;		// 0: no draw, 1: draw stretch 2: draw tether
 bool g_drawBases = false;
-bool g_drawDisplacements = false;
+bool g_drawReverseTexture = false;
+bool g_drawFixedSeams = false;
 bool g_drawContacts = false;
 bool g_generateContactsTexture = false;
 bool g_drawNeighbors = false;

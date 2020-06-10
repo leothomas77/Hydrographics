@@ -162,6 +162,7 @@
     <ClInclude Include="..\..\source\hydrographic.h" />
     <ClInclude Include="..\..\source\imgui.h" />
     <ClInclude Include="..\..\source\main.h" />
+    <ClInclude Include="..\..\source\model_data.h" />
     <ClInclude Include="..\..\source\scenes.h" />
     <ClInclude Include="..\..\source\shaders.h" />
     <ClInclude Include="..\..\source\shadersDemoContext.h" />

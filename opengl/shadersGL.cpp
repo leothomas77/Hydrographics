@@ -49,9 +49,10 @@
 #include "imguiRenderGL.h"
 #include "utilsGL.h"
 
-GLuint texHydrographicId;
-GLuint texModelId;
-int texWidth, texHeight, components;
+GLuint g_chessboard_texture_id;
+GLuint g_rigid_model_texture_id;
+
+//int texWidth, texHeight, components;
 GLuint VAO = -1;
 GLuint VBO = -1;
 GLuint EBO = -1;
@@ -224,13 +225,13 @@ aiVector3D scene_min, scene_max, scene_center;
 // texture pool
 #include "../core/png.h"
 
-PngImage g_dynamic_texture;
-GLuint g_dynamic_texture_ID = 0;
+PngImage g_chessboard_texture_image;
+PngImage g_rigid_model_texture_image;
 
-GLuint LoadTexture(const char* filename)
+GLuint LoadTexture(const char* filename, PngImage& image)
 {
-    PngImage img;
-    if (PngLoad(filename, img))
+    //PngImage img;
+    if (PngLoad(filename, image))
     {
         GLuint tex;
 
@@ -240,7 +241,7 @@ GLuint LoadTexture(const char* filename)
 
         if (1)
         {
-          glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img.m_width, img.m_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, img.m_data);
+          glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.m_width, image.m_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image.m_data);
           //glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
           //glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
@@ -257,8 +258,8 @@ GLuint LoadTexture(const char* filename)
           //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 7); // pick mipmap level 7 or lower
         }
         else {
-          glTexStorage2D(GL_TEXTURE_2D, 7 /* mip map levels */, GL_RGB8, img.m_width, img.m_height);
-          glTexSubImage2D(GL_TEXTURE_2D, 0 /* mip map level */, 0 /* xoffset */, 0 /* yoffset */, img.m_width, img.m_height, GL_RGBA, GL_UNSIGNED_BYTE, img.m_data);
+          glTexStorage2D(GL_TEXTURE_2D, 7 /* mip map levels */, GL_RGB8, image.m_width, image.m_height);
+          glTexSubImage2D(GL_TEXTURE_2D, 0 /* mip map level */, 0 /* xoffset */, 0 /* yoffset */, image.m_width, image.m_height, GL_RGBA, GL_UNSIGNED_BYTE, image.m_data);
           glGenerateMipmap(GL_TEXTURE_2D);
 
           glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_LINEAR));
@@ -271,15 +272,23 @@ GLuint LoadTexture(const char* filename)
           //glVerify(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img.m_width, img.m_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, img.m_data));
         }
 
-        PngFree(img);
+        // copy texture data before free memory
+        //width = img.m_width;
+        //height = img.m_height;
+        //pixels = new GLuint[width * height * 4];
+        //memcpy(pixels, img.m_data, width * height * 4);
+
+        //PngFree(img);
 
         return tex;
+    
     }
     else
     {
         return NULL;
     }
 }
+
 
 GLuint LoadTexture_Original(const char* filename)
 {
@@ -314,6 +323,7 @@ GLuint LoadTexture_Original(const char* filename)
   }
 }
 
+/*
 GLuint CreateDynamicTexture(PngImage &img, GLuint &textID)
 {
   img.m_height = 256;
@@ -347,7 +357,9 @@ GLuint CreateDynamicTexture(PngImage &img, GLuint &textID)
 
   return textID;
 }
+*/
 
+/*
 GLuint LoadDynamicTexture(PngImage img, GLuint &textID)
 {
   glBindTexture(GL_TEXTURE_2D, textID);
@@ -355,7 +367,7 @@ GLuint LoadDynamicTexture(PngImage img, GLuint &textID)
 
   return textID;
 }
-
+*/
 
 struct RenderTexture
 {
@@ -393,7 +405,7 @@ extern NvFlexLibrary* g_flexLib;
 extern Colour g_colors[];
 
 extern Mesh* g_mesh;
-extern GpuMesh* g_gpu_mesh;
+extern GpuMesh* g_gpu_rigid_mesh;
 //void DrawShapes();
 
 namespace OGL_Renderer
@@ -442,9 +454,9 @@ namespace OGL_Renderer
 	  //8k_earth_daymap.jpg
 	  //malha_rgb.jpg
 
-    texHydrographicId = LoadTexture(GetFilePathByPlatform("../../textures/malha_rgb.jpg").c_str());
+    g_chessboard_texture_id = LoadTexture(GetFilePathByPlatform("../../textures/malha_rgb.jpg").c_str(), g_chessboard_texture_image);
 
-    CreateDynamicTexture(g_dynamic_texture, g_dynamic_texture_ID);
+    //g_dynamic_texture, g_dynamic_texture_ID);
     
 	  g_msaaSamples = msaaSamples;
 	  g_window = window;
@@ -452,7 +464,7 @@ namespace OGL_Renderer
 
   void DestroyRender()
   {
-    delete[] g_dynamic_texture.m_data;
+    //delete[] g_dynamic_texture.m_data;
   }
 
   void StartFrame(Vec4 clearColor)
@@ -659,6 +671,7 @@ void PresentFrame(bool fullsync)
 #endif
 }
 
+/*
 RenderTexture* CreateRenderTexture(const char* filename)
 {
 	GLuint tex = LoadTexture(filename);
@@ -675,6 +688,7 @@ RenderTexture* CreateRenderTexture(const char* filename)
 		return NULL;
 	}
 }
+*/
 
 RenderTexture* CreateRenderTarget(int width, int height, bool depth)
 {
@@ -3340,6 +3354,7 @@ Vec2 InterpolateTextureCoordinates(Vec2 textCoordV0, Vec2 textCoordV1, Vec2 text
   return interpolatedTexCoords;
 }
 
+/*
 bool isSeam()
 {
   return false;
@@ -3389,18 +3404,19 @@ void FindTextureSeamV2(Vec3 v0, Vec3 v1, Vec3 v2, Vec2 textCoordV0, Vec2 textCoo
   }
   EndPoints();
 }
+*/
 
-void FindTextureSeam(Vec3 v0, Vec3 v1, Vec3 v2, Vec2 textCoordV0, Vec2 textCoordV1, Vec2 textCoordV2)
+void FindTextureSeam(Vec3 v0, Vec3 v1, Vec3 v2, Vec2 textCoordV0, Vec2 textCoordV1, Vec2 textCoordV2, PngImage textureImage)
 {
   // parameters
-  float epsilon = 0.0025f;
+  float epsilon = 0.00125f;
   float treshold = 0.15f;
   float wV0, uV1, vV2;
   float u, v, w;
   Vec2 textureAnt;
   // initial values
 
-  BeginPoints(2.0f);
+  // trasverse a triangle iterating barycentric coordinates and ploting the area inside a texture seam
   for (wV0 = 1.0f, uV1 = vV2 = 0.0f; wV0 >= .0f, vV2 <= 1.0f; wV0 -= epsilon, vV2 += epsilon)
   {
     for (u = .0f, v = vV2, w = wV0, textureAnt = wV0 * textCoordV0 + uV1 * textCoordV1 + vV2 * textCoordV2; u <= 1.0f, v <=1.0f, w >= .0f; u += epsilon, w -= epsilon, v = 1 - (u + w))
@@ -3410,32 +3426,45 @@ void FindTextureSeam(Vec3 v0, Vec3 v1, Vec3 v2, Vec2 textCoordV0, Vec2 textCoord
       // com o triangulo da malha rigida, encontrar o ponto de interseccao e reinterpolar as coordenadas
       // detectar a descontinuidade na reinterpolacao
       Vec2 textureP = InterpolateTextureCoordinates(textCoordV0, textCoordV1, textCoordV2, u, v, w);
-      if (Length(textureP - textureAnt) > treshold) // is a seam
+      float textureDistance = Length(textureP - textureAnt);
+
+      int textelCoordX = textureP.x * textureImage.m_width;
+      int textelCoordY = textureP.y * textureImage.m_height;
+      
+      // avoid textel coordinates out of range
+      textelCoordX = textelCoordX > textureImage.m_width - 1 ? textureImage.m_width - 1: textelCoordX;
+      textelCoordY = textelCoordY > textureImage.m_height - 1 ? textureImage.m_height - 1: textelCoordY;
+
+      textelCoordX = textelCoordX < 0 ? 0 : textelCoordX;
+      textelCoordY = textelCoordY < 0 ? 0 : textelCoordY;
+      
+      //Pixel texturePixel;
+      //texturePixel.pixelAsInt = textureImage.m_data[textelCoordX + textureImage.m_height * textelCoordY];
+      
+      GLuint texturePixel = textureImage.m_data[textelCoordX + textureImage.m_height * textelCoordY];
+      
+      unsigned char a = texturePixel >> 24 & 255;
+      unsigned char b = texturePixel >> 16 & 255;
+      unsigned char g = texturePixel >> 8 & 255;
+      unsigned char r = texturePixel >> 0 & 255;
+
+      Vec4 pixelTextureColor = Vec4((float)r / 255.0f, (float)g / 255.0f, float(b) / 255.0f, (float)a / 255.0f);
+      if (textureDistance > 0.01f)
       {
-        // seam jump texture
-        DrawPoint(p, Vec4(1.0f, 0.0f, 0.0f, 1.0f));
-        //DrawPoint(v1, Vec4(1.0f, 0.0f, 0.0f, 1.0f));
-        //DrawPoint(v2, Vec4(1.0f, 0.0f, 0.0f, 1.0f));
+        Vec4 red = Vec4(1.0f, 0.0f, 0.0f, 1.0f);
+        DrawPoint(p, red);
       }
       else
       {
-        DrawPoint(p, Vec4(0.0f, 1.0f, 0.0f, 1.0f));
-        //DrawPoint(v1, Vec4(0.0f, 1.0f, 0.0f, 1.0f));
-        //DrawPoint(v2, Vec4(0.0f, 1.0f, 0.0f, 1.0f));
+        DrawPoint(p, pixelTextureColor);
       }
-
-      //if (u >= .98f || v >= .98f || w >= .98)
-      //{
-        //DrawPoint(p, Vec4(.0f, .0f, 1.0f, 1.0f));
-      //}
 
       textureAnt = textureP;
     }
   }
-
-  EndPoints();
 }
 
+/*
 void FixTextureSeamsV2(int baseIndex, std::vector<Vec4> filmPositions, Vec2 texCoord0, Vec2 texCoord1, Vec2 texCoord2)
 {
   float maxDistanceUV = .4f;
@@ -3455,244 +3484,84 @@ void FixTextureSeamsV2(int baseIndex, std::vector<Vec4> filmPositions, Vec2 texC
 
     // montar previamente os triangulos candidatos da malha rigida
     // passar para a funcao os triangulos candidatos da malha rigida
-    FindTextureSeam(Vec3(filmPositions[baseIndex]), Vec3(filmPositions[baseIndex + 1]), Vec3(filmPositions[baseIndex + 2]), Vec2(texCoord0), Vec2(texCoord1), Vec2(texCoord2));
+    FindTextureSeam(Vec3(filmPositions[baseIndex]), Vec3(filmPositions[baseIndex + 1]), Vec3(filmPositions[baseIndex + 2]), Vec2(texCoord0), Vec2(texCoord1), Vec2(texCoord2), g_rigid_model_texture_pixels);
 
   }
   EndPoints();
 
 }
+*/
 
-//#define DEBUG_CONTACTS
-//#define DEBUG_TEXCOORDS
-void FindContacts(Vec3 filmContactVertex, int filmContactVertexIndex, Vec3 filmContactPlane, GpuMesh* gpuMesh, GpuMesh* filmMesh, Mat44 modelMatrix, int gridHeight, int gridWidth, std::vector<Vec4> filmPositions)
+void BuildContactUVs(Vec3 filmContactVertex, int filmContactVertexIndex, Vec3 filmContactPlane, GpuMesh* gpuMesh, Mat44 modelMatrix, int gridHeight, int gridWidth, std::vector<Vec4> contactPositions, std::vector<Vec4> &contactUVs)
 {
-  // parei aqui
+  // look for every triangle in the rigid body to cast a ray
   for (int i = 0; i < gpuMesh->triangles.size(); ++i)
   {
-    // discard vertices with texture coordinates
-    //if (filmMesh->texCoordsFilm[filmContactVertexIndex].x >= .0f)
-    //{
-      //continue;
-    //}
-
-    Vec3 v0 = Vec3(modelMatrix * Vec4(gpuMesh->positions[i * 3 + 0], 1.0f));
-    Vec3 v1 = Vec3(modelMatrix * Vec4(gpuMesh->positions[i * 3 + 1], 1.0f));
-    Vec3 v2 = Vec3(modelMatrix * Vec4(gpuMesh->positions[i * 3 + 2], 1.0f));
-
-    //Vec3 normal = Normalize(Cross(v1 - v0, v2 - v0));
-
-    float t = INFINITY;
-    float u, v, w;
-
-    if (gpuMesh->texCoordsRigid.size() && rayTriangleIntersectMT(filmContactVertex, filmContactPlane, v0, v1, v2, t, u, v, w))
+    // process only vertices without texture coordinates
+    if (contactUVs[filmContactVertexIndex].x == -1.0f)
     {
-#ifdef DEBUG_CONTACTS
-      BeginPoints(2.0f);
-      Vec4 color = Vec4(0.0f, 1.0f, 0.0f, 0.8f);
-      Vec3 contactPoint = filmContactVertex + t * filmContactPlane;
-      DrawPoint(contactPoint, color);
-      EndPoints();
-#endif
-    // get texture coords from rigid mesh and transfer to soft-body
-      Vec2 texCoordsRigid = InterpolateTextureCoordinates(gpuMesh->texCoordsRigid[i * 3 + 0], 
-        gpuMesh->texCoordsRigid[i * 3 + 1], gpuMesh->texCoordsRigid[i * 3 + 2], u, v, w);
+      Vec3 v0 = Vec3(modelMatrix * Vec4(gpuMesh->positions[i * 3 + 0], 1.0f));
+      Vec3 v1 = Vec3(modelMatrix * Vec4(gpuMesh->positions[i * 3 + 1], 1.0f));
+      Vec3 v2 = Vec3(modelMatrix * Vec4(gpuMesh->positions[i * 3 + 2], 1.0f));
 
-        filmMesh->texCoordsFilm[filmContactVertexIndex] = Vec4(texCoordsRigid.x, texCoordsRigid.y, 0.0f, 0.0f);
-    }
-
-    /*
-    int filmOffsetIndex = filmContactVertexIndex % 3;
-    int filmBaseIndex;
-    switch (filmOffsetIndex) {
-    case 0:
-      filmBaseIndex = filmContactVertexIndex;
-      break;
-    case 1:
-      filmBaseIndex = filmContactVertexIndex - 1;
-      break;
-    case 2:
-      filmBaseIndex = filmContactVertexIndex - 2;
-      break;
-    }
-
-    Vec2 texCoord0 = Vec2(filmMesh->texCoordsFilm[filmBaseIndex + 0]);
-    Vec2 texCoord1 = Vec2(filmMesh->texCoordsFilm[filmBaseIndex + 1]);
-    Vec2 texCoord2 = Vec2(filmMesh->texCoordsFilm[filmBaseIndex + 2]);
-
-    if (texCoord0.x >= .0f && texCoord1.x >= .0f && texCoord2.x >= .0f)
-    {
-      // 
-      FixTextureSeamsV2(filmBaseIndex, filmPositions, texCoord0, texCoord1, texCoord2);
-    }
-    */
-  }
-
-  //BeginPoints(4);
-  //DrawPoint(Vec3(filmMesh->positions[0]), Vec4(0.0f, 1.0f, 0.0f, 1.0f));
-  //DrawPoint(Vec3(filmMesh->positions[9]), Vec4(1.0f, 0.0f, 0.0f, 1.0f));
-  //EndPoints();
-
-#ifdef DEBUG_TEXCOORDS
-  BeginPoints(5);
-
-  int filmOffsetIndex = filmContactVertexIndex % 3;
-  int filmBaseIndex;
-  switch (filmOffsetIndex){
-    case 0:
-      filmBaseIndex = filmContactVertexIndex;
-      break;
-    case 1:
-      filmBaseIndex = filmContactVertexIndex - 1;
-      break;
-    case 2:
-      filmBaseIndex = filmContactVertexIndex - 2;
-      break;
-  }
-
-  Vec2 texCoord0 = Vec2(filmMesh->texCoordsFilm[filmBaseIndex + 0]);
-  Vec2 texCoord1 = Vec2(filmMesh->texCoordsFilm[filmBaseIndex + 1]);
-  Vec2 texCoord2 = Vec2(filmMesh->texCoordsFilm[filmBaseIndex + 2]);
-
-  float textureFactor = texCoord0.x * texCoord1.x * texCoord2.x;
-
-  //texture atributted to only one vertex
-  /*
-  if (texCoord0.x >= .0f && (texCoord1.x <= .0f || texCoord2.x <= .0f))
-  {
-    texCoord0.x = -1.0f;
-    texCoord1.x = -1.0f;
-    texCoord2.x = -1.0f;
-  }
-  if (texCoord1.x >= .0f && (texCoord0.x <= .0f || texCoord2.x <= .0f))
-  {
-    texCoord0.x = -1.0f;
-    texCoord1.x = -1.0f;
-    texCoord2.x = -1.0f;
-  }
-  if (texCoord2.x >= .0f && (texCoord0.x <= .0f || texCoord1.x <= .0f))
-  {
-    texCoord0.x = -1.0f;
-    texCoord1.x = -1.0f;
-    texCoord2.x = -1.0f;
-  }
-  */
-  float seamDistance = .4f;
-  
-  if (fabs(texCoord0.x - texCoord1.x) > seamDistance || fabs(texCoord0.x - texCoord2.x) > seamDistance || fabs(texCoord1.x - texCoord2.x) > seamDistance)
-  {
-    //texCoord0.x = (texCoord1.x + texCoord2.x) * .5;
-    DrawPoint(Vec3(filmMesh->positions[filmBaseIndex + 0]), Vec4(0.0f, 1.0f, 0.0f, 1.0f));
-  }
-
-  //if (fabs(texCoord1.x - texCoord0.x) > seamDistance || fabs(texCoord1.x - texCoord2.x) > seamDistance)
-  //{
-    //texCoord1.x = (texCoord0.x + texCoord2.x) * .5;
-    //DrawPoint(Vec3(filmMesh->positions[filmBaseIndex + 1]), Vec4(0.0f, 1.0f, 0.0f, 1.0f));
-  //}
-
-  //if (fabs(texCoord2.x - texCoord0.x) > seamDistance || fabs(texCoord2.x - texCoord1.x) > seamDistance)
-  //{
-    //texCoord2.x = (texCoord0.x + texCoord1.x) * .5;
-    //DrawPoint(Vec3(filmMesh->positions[filmBaseIndex + 2]), Vec4(0.0f, 1.0f, 0.0f, 1.0f));
-  //}
-  
-  
-
-  //texture atributted for twe
-  /*
-  if (texCoord0.x < .0f && texCoord1.x >= .0f && texCoord2.x >= .0f)
-  {
-    DrawPoint(Vec3(filmMesh->positions[filmBaseIndex + 1]), Vec4(0.0f, 0.0f, 1.0f, 1.0f));
-    DrawPoint(Vec3(filmMesh->positions[filmBaseIndex + 2]), Vec4(0.0f, 0.0f, 1.0f, 1.0f));
-  }
-
-  if (texCoord1.x < .0f && texCoord0.x >= .0f && texCoord2.x >= .0f)
-  {
-    DrawPoint(Vec3(filmMesh->positions[filmBaseIndex + 0]), Vec4(0.0f, 0.0f, 1.0f, 1.0f));
-    DrawPoint(Vec3(filmMesh->positions[filmBaseIndex + 2]), Vec4(0.0f, 0.0f, 1.0f, 1.0f));
-  }
-
-  if (texCoord2.x < .0f && texCoord0.x >= .0f && texCoord1.x >= .0f)
-  {
-    DrawPoint(Vec3(filmMesh->positions[filmBaseIndex + 0]), Vec4(0.0f, 0.0f, 1.0f, 1.0f));
-    DrawPoint(Vec3(filmMesh->positions[filmBaseIndex + 1]), Vec4(0.0f, 0.0f, 1.0f, 1.0f));
-  }
-  */
-
-  /*
-  if (texCoord1.x < .0f && (texCoord0.x && texCoord2.x) >= 0)
-  {
-    //texCoord1.x = Min(fabs(texCoord1.x - texCoord0.x), fabs(texCoord1.x - texCoord2.x));
-    //texCoord1.y = Min(fabs(texCoord1.y - texCoord0.y), fabs(texCoord1.y - texCoord2.y));
-    DrawPoint(Vec3(filmMesh->positions[filmBaseIndex + 1]), Vec4(0.0f, 1.0f, 0.0f, 1.0f));
-  }
-  if (texCoord2.x < .0f && (texCoord0.x && texCoord1.x) >= 0)
-  {
-    //texCoord2.x = Min(fabs(texCoord2.x - texCoord0.x), fabs(texCoord2.x - texCoord1.x));
-    //texCoord2.y = Min(fabs(texCoord2.y - texCoord0.y), fabs(texCoord2.y - texCoord1.y));
-    DrawPoint(Vec3(filmMesh->positions[filmBaseIndex + 2]), Vec4(0.0f, 1.0f, 0.0f, 1.0f));
-  }
-  */
-
-  //filmMesh->texCoordsFilm[52].x = filmMesh->texCoordsFilm[51].x;
-  //filmMesh->texCoordsFilm[filmBaseIndex + 1] = Vec4(texCoord1);
-  //filmMesh->texCoordsFilm[filmBaseIndex + 2] = Vec4(texCoord2);
-
-  filmMesh->texCoordsFilm[filmBaseIndex + 0] = Vec4(texCoord0);
-  filmMesh->texCoordsFilm[filmBaseIndex + 1] = Vec4(texCoord1);
-  filmMesh->texCoordsFilm[filmBaseIndex + 2] = Vec4(texCoord2);
-
-  EndPoints();
-#endif
-
-  /*
-  OLD CODE USED FOR PRIOR TESTS - KEEP FOR DEBUGGING AND REFERENCE
-  if (0)
-  {
-    for (int i = 0; i < gpuMesh->positions.size(); i++)
-    {
-
-      Vec3 positionW = modelMatrix * Vec4(gpuMesh->positions[i], 1.0f);
-
-      float distance = Length(filmContactVertex - positionW);
-      // found contact nearby a rigid mesh vertex
-      if (distance <= 0.1f) 
+      float t = INFINITY;
+      float u, v, w;
+      // apply Möller–Trumbore algorithm to cast a ray from the contact point to the triangle
+      if (gpuMesh->texCoordsRigid.size() && rayTriangleIntersectMT(filmContactVertex, filmContactPlane, v0, v1, v2, t, u, v, w))
       {
-        //get texture coords from rigid mesh and transfer to soft-body
-        filmMesh->texCoordsFilm[filmContactVertexIndex] = Vec4(gpuMesh->texCoordsRigid[i]);
+        // interpolate texture coordinates by barycentric coordinates and triangle texture coordinates
+        Vec2 texCoordsRigid = InterpolateTextureCoordinates(gpuMesh->texCoordsRigid[i * 3 + 0],
+          gpuMesh->texCoordsRigid[i * 3 + 1], gpuMesh->texCoordsRigid[i * 3 + 2], u, v, w);
 
-        if (0)
-        {
-          float filmRow = floor(filmContactVertexIndex / gridWidth);
-          float filmCol = filmContactVertexIndex % gridWidth;
-      
-          int row = (filmRow / gridHeight) * g_dynamic_texture.m_height;
-          int col = (filmCol / gridWidth) * g_dynamic_texture.m_width;
+        // update the texture coordinates to be used in the flat film
+        contactUVs[filmContactVertexIndex] = Vec4(texCoordsRigid.x, texCoordsRigid.y, 0.0f, 0.0f);
 
-          glm::ivec4 color = glm::ivec4(0, 0, 0, 255);
-          uint32_t pixel = (BYTE(color.a) << 24) + (BYTE(color.b) << 16) + (BYTE(color.g) << 8) + BYTE(color.r);
-
-          int index = g_dynamic_texture.m_width * row + col;
-          g_dynamic_texture.m_data[index] = pixel;
-        }
       }
+
     }
+
   }
-  */
+
 }
 
-void FixTextureSeams(GpuMesh* filmMesh, std::vector<Vec4> &positions, std::vector<int> &indices)
+void RayCastTextureSeams(Vec3 filmContactVertex, int filmContactVertexIndex, Vec3 filmContactPlane, GpuMesh* gpuMesh, Mat44 modelMatrix, int gridHeight, int gridWidth, std::vector<Vec4> contactPositions, std::vector<Vec4> &contactUVs)
+{
+  // look for every triangle in the rigid body to cast a ray
+  for (int i = 0; i < gpuMesh->triangles.size(); ++i)
+  {
+    // process only vertices without texture coordinates
+    if (contactUVs[filmContactVertexIndex].x == -1.0f)
+    {
+      Vec3 v0 = Vec3(modelMatrix * Vec4(gpuMesh->positions[i * 3 + 0], 1.0f));
+      Vec3 v1 = Vec3(modelMatrix * Vec4(gpuMesh->positions[i * 3 + 1], 1.0f));
+      Vec3 v2 = Vec3(modelMatrix * Vec4(gpuMesh->positions[i * 3 + 2], 1.0f));
+
+      float t = INFINITY;
+      float u, v, w;
+      // apply Möller–Trumbore algorithm to cast a ray from the contact point to the triangle
+      if (gpuMesh->texCoordsRigid.size() && rayTriangleIntersectMT(filmContactVertex, filmContactPlane, v0, v1, v2, t, u, v, w))
+      {
+        // interpolate texture coordinates by barycentric coordinates and triangle texture coordinates
+        Vec2 texCoordsRigid = InterpolateTextureCoordinates(gpuMesh->texCoordsRigid[i * 3 + 0],
+          gpuMesh->texCoordsRigid[i * 3 + 1], gpuMesh->texCoordsRigid[i * 3 + 2], u, v, w);
+
+        // update the texture coordinates to be used in the flat film
+        contactUVs[filmContactVertexIndex] = Vec4(texCoordsRigid.x, texCoordsRigid.y, 0.0f, 0.0f);
+
+      }
+
+    }
+
+  }
+
+}
+
+
+void FixTextureSeams(GpuMesh* gpuMesh, GpuMesh* filmMesh, std::vector<Vec4> &contactPositions, std::vector<Vec4> &contactUVs)
 {
   float maxDistanceUV = .3f;
-  //std::map<int, int>::iterator it;
-  //std::map<int, int> correctionList;
 
-  std::vector<int> newTriangleIndexes;
-  std::vector<Vec4> newVertices;
-  std::vector<Vec4> newTexCoords;
-
-
-  // for all triangle indexes
+  // for all triangle indexes in triangle film mesh
   for (int i = 0; i < filmMesh->triangleIntIndexes.size(); i = i + 3) //
   {
     // for a triangle
@@ -3700,20 +3569,26 @@ void FixTextureSeams(GpuMesh* filmMesh, std::vector<Vec4> &positions, std::vecto
     int index1 = filmMesh->triangleIntIndexes[i + 1];
     int index2 = filmMesh->triangleIntIndexes[i + 2];
 
-    Vec3 texCoord0 = Vec3(filmMesh->texCoordsFilm[index0]);
-    Vec3 texCoord1 = Vec3(filmMesh->texCoordsFilm[index1]);
-    Vec3 texCoord2 = Vec3(filmMesh->texCoordsFilm[index2]);
+    Vec3 texCoord0 = Vec3(contactUVs[index0]);
+    Vec3 texCoord1 = Vec3(contactUVs[index1]);
+    Vec3 texCoord2 = Vec3(contactUVs[index2]);
    
-    // if has valid texture coordinate
-    if (texCoord0.x > 0 && texCoord1.x > 0 && texCoord2.x > 0)
+    // if texture coordinat is set
+    if (texCoord0.x != -1 && texCoord1.x != -1 && texCoord2.x != -1)
     {
       float distance01 = Length(texCoord0 - texCoord1);
       float distance02 = Length(texCoord0 - texCoord2);
       float distance12 = Length(texCoord1 - texCoord2);
-      // texture distance greather than treshold
+      // texture distance in a triangle edge is greather than treshold maxDistanceUV
+      // is a candidate texture seam
       if (distance01 > maxDistanceUV || distance02 > maxDistanceUV || distance12 > maxDistanceUV)
-      {        
-        FindTextureSeam(Vec3(positions[index0]), Vec3(positions[index1]), Vec3(positions[index2]), Vec2(texCoord0), Vec2(texCoord1), Vec2(texCoord2));
+      { 
+
+        //parei aqui
+        //FindTextureSeam(Vec3(contactPositions[index0]), Vec3(contactPositions[index1]), Vec3(contactPositions[index2]), Vec2(texCoord0), Vec2(texCoord1), Vec2(texCoord2), g_rigid_model_texture_image);
+        //for (int j = 0; i < gpuMesh->triangles.size(); ++j) {
+
+        //}
       }
     }    
   }
@@ -3780,6 +3655,7 @@ GpuMesh* CreateGpuMeshV2(const Mesh* m)
   return mesh;
 }
 
+/*
 GpuMesh* CreateGpuMeshTex(const Mesh* m)
 {
   GpuMesh* mesh = new GpuMesh();
@@ -3819,7 +3695,9 @@ GpuMesh* CreateGpuMeshTex(const Mesh* m)
 
   return mesh;
 }
+*/
 
+/*
 GpuMesh* CreateGpuMeshTexV2(const Mesh* m)
 {
   GpuMesh* mesh = new GpuMesh();
@@ -3853,6 +3731,7 @@ GpuMesh* CreateGpuMeshTexV2(const Mesh* m)
 
   return mesh;
 }
+*/
 
 size_t traverseScene(const aiScene *scene, const aiNode* node, Mesh* mesh, std::string basePath) {
   size_t nVertices = 0;
@@ -3879,7 +3758,7 @@ size_t traverseScene(const aiScene *scene, const aiNode* node, Mesh* mesh, std::
     if (AI_SUCCESS == mtl_properties->Get(AI_MATKEY_TEXTURE_DIFFUSE(i), map_Kd)) 
     {
       std::string texturePath = basePath + '/' + map_Kd.C_Str();
-      mesh->mTextureId = LoadTexture(texturePath.c_str());
+      mesh->mTextureId = LoadTexture(texturePath.c_str(), g_rigid_model_texture_image);
       if (mesh->mTextureId == 0)
       {
         std::cout << "Texture loading error" << std::endl;
@@ -3945,7 +3824,7 @@ void createVBOs(const aiScene *scene, GpuMesh* gpu_mesh, std::string basePath, M
 
   Mesh* mesh = new Mesh();
   gpu_mesh->mNumVertices = GLuint(traverseScene(scene, scene->mRootNode, mesh, basePath));
-  gpu_mesh->mTextureId = GLuint(mesh->mTextureId);
+  g_rigid_model_texture_id = gpu_mesh->mTextureId = GLuint(mesh->mTextureId); // share rigid model texture id with the reverse mapping film 
   gpu_mesh->triangles = mesh->m_triangles;
 
   std::cout << "           #Vertices   = " << gpu_mesh->mNumVertices << std::endl;
@@ -4129,7 +4008,7 @@ GpuMesh* CreateGpuFilm(Matrix44 model, Vec4* positions, Vec4* normals, Vec4* uvs
   mesh->mNumFaces = nIndices / 3;
   mesh->mNumIndices = nIndices;
   mesh->modelTransform = model;
-  mesh->mTextureId = GetHydrographicTextureId(); //set texture ID for film
+  mesh->mTextureId = GetChessboardTextureId(); //set texture ID for film
   mesh->texCoordsFilm.resize(0);
   for (int i = 0; i < nVertices; i++)
   {
@@ -4169,44 +4048,6 @@ GpuMesh* CreateGpuFilm(Matrix44 model, Vec4* positions, Vec4* normals, Vec4* uvs
   return mesh;
 }
 
-GpuMesh* CreateGpuFilmV2(Matrix44 model, Vec4* positions, Vec4* normals, Vec4* uvs, int nVertices, int* indices, int nIndices)
-{
-  // buffer layout block
-  // |all position vertices|all normal vertices| all tex coords|
-  GpuMesh* mesh = new GpuMesh();
-  mesh->mNumVertices = nVertices;
-  mesh->mNumFaces = nIndices / 3;
-  mesh->mNumIndices = nIndices;
-  mesh->modelTransform = model;
-
-  // configure plane VAO
-  glVerify(glGenVertexArrays(1, &mesh->mVAO));
-  glVerify(glGenBuffers(1, &mesh->mPositionsVBO));
-  glVerify(glGenBuffers(1, &mesh->mNormalsVBO));
-  glVerify(glGenBuffers(1, &mesh->mTexCoordsVBO));
-  glVerify(glGenBuffers(1, &mesh->mIndicesIBO));
-  glVerify(glBindVertexArray(mesh->mVAO));
-  glVerify(glBindBuffer(GL_ARRAY_BUFFER, mesh->mPositionsVBO));
-  glVerify(glBufferData(GL_ARRAY_BUFFER, nVertices * sizeof(Vec4), &positions[0], GL_STATIC_DRAW));
-
-  glVerify(glBufferSubData(GL_ARRAY_BUFFER, 0, nVertices * sizeof(Vec4), &positions[0]));
-  glVerify(glBufferSubData(GL_ARRAY_BUFFER, nVertices * sizeof(Vec4), nVertices * sizeof(Vec4), &normals[0]));
-  glVerify(glBufferSubData(GL_ARRAY_BUFFER, nVertices * (sizeof(Vec4) + sizeof(Vec4)), nVertices * sizeof(Vec4), &uvs[0]));
-
-  glVerify(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->mIndicesIBO));
-  glVerify(glBufferData(GL_ELEMENT_ARRAY_BUFFER, nIndices * sizeof(int), &indices[0], GL_STATIC_DRAW));
-
-  glVerify(glEnableVertexAttribArray(0));
-  glVerify(glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0));
-  glVerify(glEnableVertexAttribArray(1));
-  glVerify(glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(nVertices * sizeof(Vec4))));
-  glVerify(glEnableVertexAttribArray(2));
-  glVerify(glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(nVertices * (sizeof(Vec4) + sizeof(Vec4)))));
-
-  glVerify(glBindVertexArray(0));
-
-  return mesh;
-}
 
 // Create a NULL-terminated string by reading the provided file
 static char* readShaderSource(const char* shaderFile) {
@@ -4318,14 +4159,14 @@ void _check_gl_error(const char *file, int line) {
   }
 }
 
-GLuint GetHydrographicTextureId()
+GLuint GetChessboardTextureId()
 {
-  return texHydrographicId;
+  return g_chessboard_texture_id;
 }
 
-GLuint GetModelTextureId()
+GLuint GetRigidModelTextureId()
 {
-  return texModelId;
+  return g_rigid_model_texture_id;
 }
 
 void BindTexture(unsigned int *textureId, Vec4 *pixels, int texWidth, int texHeight)
@@ -4488,7 +4329,7 @@ void EnableTexture()
 	{
 		glVerify(glActiveTexture(GL_TEXTURE1));//optional //0 texture unit is used by shadow pass
 		glVerify(glEnable(GL_TEXTURE_2D));//optional
-		glVerify(glBindTexture(GL_TEXTURE_2D, texHydrographicId));
+		glVerify(glBindTexture(GL_TEXTURE_2D, g_chessboard_texture_id));
 
 		glVerify(glUniform1i(glGetUniformLocation(s_hydrographicProgram, "tex"), 1));//0 texture unit is used by shadow pass
 		glVerify(glUniform1i(glGetUniformLocation(s_hydrographicProgram, "showTexture"), 1));
@@ -4503,7 +4344,7 @@ void EnableTextureV2()
     
     glVerify(glEnable(GL_TEXTURE_2D));//optional
     glVerify(glActiveTexture(GL_TEXTURE0));//optional //0 texture unit is used by shadow pass
-    glVerify(glBindTexture(GL_TEXTURE_2D, texHydrographicId));
+    glVerify(glBindTexture(GL_TEXTURE_2D, g_chessboard_texture_id));
 
     glVerify(glUniform1i(glGetUniformLocation(s_filmProgram, "tex"), 0));//0 texture unit is used by shadow pass
     glVerify(glUniform1i(glGetUniformLocation(s_filmProgram, "showTexture"), 1));
@@ -4530,7 +4371,7 @@ void DisableTexture()
 	glDisable(GL_TEXTURE_2D);
 	glActiveTexture(GL_TEXTURE0);
 	glDisable(GL_TEXTURE_2D);
-	glDeleteTextures(0, &texHydrographicId);
+	glDeleteTextures(0, &g_chessboard_texture_id);
 }
 
 void DrawHydrographicV2(GpuMesh* mesh, const Vec4* positions, const Vec4* normals, const Vec4* uvs, const int* indices, int nIndices, int numPositions, bool showTexture)
@@ -4538,14 +4379,19 @@ void DrawHydrographicV2(GpuMesh* mesh, const Vec4* positions, const Vec4* normal
   // Enable texture
   glVerify(glEnable(GL_TEXTURE_2D));//
   glVerify(glActiveTexture(GL_TEXTURE0));//
-  glVerify(glBindTexture(GL_TEXTURE_2D, mesh->mTextureId));
+  glVerify(glBindTexture(GL_TEXTURE_2D, GetChessboardTextureId()));
   glVerify(glUniform1i(glGetUniformLocation(s_filmProgram, "tex"), 0));//
-  int hasTexture = showTexture && mesh->texCoordsFilm.size() > 0 ? 1 : 0;
-  glVerify(glUniform1i(glGetUniformLocation(s_filmProgram, "showTexture"), hasTexture));
+  //int hasTexture = showTexture && mesh->texCoordsFilm.size() > 0 ? 1 : 0;
+  //glVerify(glUniform1i(glGetUniformLocation(s_filmProgram, "showTexture"), hasTexture));
+  glVerify(glUniform1i(glGetUniformLocation(s_filmProgram, "showTexture"), showTexture));
   // update positions and normals
   glVerify(glBindBuffer(GL_ARRAY_BUFFER, mesh->mPositionsVBO)); // 
   glVerify(glBufferSubData(GL_ARRAY_BUFFER, 0, mesh->mNumVertices * sizeof(Vec4), positions));
   glVerify(glBufferSubData(GL_ARRAY_BUFFER, mesh->mNumVertices * sizeof(Vec4), mesh->mNumVertices * sizeof(Vec4), normals));
+  if (showTexture)
+  {
+    glVerify(glBufferSubData(GL_ARRAY_BUFFER, mesh->mNumVertices * (sizeof(Vec4) + sizeof(Vec4)), mesh->mNumVertices * sizeof(Vec4), uvs));
+  }
   // draw VAO
   glVerify(glBindVertexArray(mesh->mVAO));
   glVerify(glDrawElements(GL_TRIANGLES, nIndices, GL_UNSIGNED_INT, 0));
@@ -4555,17 +4401,17 @@ void DrawHydrographicV2(GpuMesh* mesh, const Vec4* positions, const Vec4* normal
   glDisable(GL_TEXTURE_2D);
 }
 
-void DrawDistortion(GpuMesh* mesh, const Vec4* positions, const Vec4* normals, const Vec4* uvs, const int* indices, int nIndices, int numPositions, bool showTexture, Mat44 model)
+void DrawReverseTexture(GpuMesh* mesh, const Vec4* positions, const Vec4* normals, const Vec4* uvs, const int* indices, int nIndices, int numPositions, bool showTexture)
 {
-  int hasTexture = showTexture && mesh->texCoordsFilm.size() ? 1 : 0;
-  if (hasTexture)
+  //int hasTexture = showTexture && mesh->texCoordsFilm.size() ? 1 : 0;
+  //if (showTexture)
   {
     // Enable texture
     glVerify(glEnable(GL_TEXTURE_2D));//
     glVerify(glActiveTexture(GL_TEXTURE0));//
-    glVerify(glBindTexture(GL_TEXTURE_2D, mesh->mTextureId));
+    glVerify(glBindTexture(GL_TEXTURE_2D, GetRigidModelTextureId()));
     glVerify(glUniform1i(glGetUniformLocation(s_filmProgram, "tex"), 0));//
-    glVerify(glUniform1i(glGetUniformLocation(s_filmProgram, "showTexture"), hasTexture));
+    glVerify(glUniform1i(glGetUniformLocation(s_filmProgram, "showTexture"), showTexture));
   }
   // Enable blending for transparency
   //glEnable(GL_BLEND);
@@ -4575,25 +4421,40 @@ void DrawDistortion(GpuMesh* mesh, const Vec4* positions, const Vec4* normals, c
   glVerify(glBufferSubData(GL_ARRAY_BUFFER, 0, mesh->mNumVertices * sizeof(Vec4), positions));
   glVerify(glBufferSubData(GL_ARRAY_BUFFER, mesh->mNumVertices * sizeof(Vec4), mesh->mNumVertices * sizeof(Vec4), normals));
   // update texture coords
-  glVerify(glBufferSubData(GL_ARRAY_BUFFER, mesh->mNumVertices * (sizeof(Vec4) + sizeof(Vec4)), mesh->mNumVertices * sizeof(Vec4), mesh->texCoordsFilm.data()));
+  if (showTexture)
+  {
+    glVerify(glBufferSubData(GL_ARRAY_BUFFER, mesh->mNumVertices * (sizeof(Vec4) + sizeof(Vec4)), mesh->mNumVertices * sizeof(Vec4), uvs));
+  }
   // draw VAO
   glVerify(glBindVertexArray(mesh->mVAO));
-  // update indices (in the case of seams corrections)
-  glVerify(glBindBuffer(GL_ARRAY_BUFFER, mesh->mIndicesIBO));
-  glVerify(glBufferData(GL_ELEMENT_ARRAY_BUFFER, nIndices * sizeof(int), &indices[0], GL_STATIC_DRAW));
+  // update indices (in the case of seams corrections) // NOT NECESSARY
+  //glVerify(glBindBuffer(GL_ARRAY_BUFFER, mesh->mIndicesIBO));
+  //glVerify(glBufferData(GL_ELEMENT_ARRAY_BUFFER, nIndices * sizeof(int), &indices[0], GL_STATIC_DRAW));
 
   glVerify(glDrawElements(GL_TRIANGLES, nIndices, GL_UNSIGNED_INT, 0));
   glVerify(glBindVertexArray(0));
   // disable texture
-  if (hasTexture)
+  //if (showTexture)
   {
     glActiveTexture(GL_TEXTURE0);
     glDisable(GL_TEXTURE_2D);
   }
 }
 
+GLuint* GetTexturePixels(GLuint textureID, int width, int height, int chanels)
+{
+  GLuint* pixels = new GLuint[width * height * chanels];
+  glBindTexture(GL_TEXTURE_2D, textureID);
+  //glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_INT, pixels);
+  glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+
+  return pixels;
+}
+
+/*
 void SetupContactsTexture(GpuMesh* filmMesh)
 {
   LoadDynamicTexture(g_dynamic_texture, g_dynamic_texture_ID);
   filmMesh->mTextureId = g_dynamic_texture_ID;
 }
+*/

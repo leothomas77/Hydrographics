@@ -10,7 +10,7 @@
 //
 // ALL NVIDIA DESIGN SPECIFICATIONS, CODE ARE PROVIDED "AS IS.". NVIDIA MAKES
 // NO WARRANTIES, EXPRESSED, IMPLIED, STATUTORY, OR OTHERWISE WITH RESPECT TO
-// THE MATERIALS, AND EXPRESSLY DISCLAIMS ALL IMPLIED WARRANTIES OF NONINFRINGEMENT,
+// THE MATERIALS, AND EXPRESSLY DISCLAIMS ALL IMPLIED WARRANTIES OF NONINFRINGEMENT,g_maxDiffuseParticles
 // MERCHANTABILITY, AND FITNESS FOR A PARTICULAR PURPOSE.
 //
 // Information and code furnished is believed to be accurate and reliable.
@@ -36,6 +36,7 @@
   #define MAX(x, y) (y > x ? y : x)
 #endif
 #include <map>
+#include <algorithm>    // std::min
 
 #include <assimp/cimport.h>
 #include <assimp/scene.h>
@@ -57,6 +58,12 @@ struct SDL_Window;
 struct GpuMesh;
 struct ShadowMap;
 #define SKY_COLOR Vec4(0.6784f, 0.8f, 1.0f, 1.0f)
+
+//https://stackoverflow.com/questions/43463290/efficient-way-to-split-up-rgb-values-in-c
+typedef union Pixel {
+  uint32_t pixelAsInt;
+  unsigned char pixelAsChar[4];
+} Pixel;
 
 struct RenderInitOptions
 {
@@ -80,7 +87,8 @@ void DestroyRender();
 void ReshapeRender(SDL_Window* window);
 void ReshapeRenderV2(SDL_Window* window);
 
-unsigned int GetHydrographicTextureId();
+unsigned int GetChessboardTextureId();
+unsigned int GetRigidModelTextureId();
 
 void StartFrameV2(Vec4 clearColor);
 void EndFrameV2();
@@ -128,12 +136,12 @@ struct RenderTexture;
 // void DestroyRenderTexture(RenderTexture* tex);
 
 // void SetRenderTarget(RenderTexture* target);
-void FindContacts(Vec3 position, int positionIndex, Vec3 contactPlane, GpuMesh* gpuMesh, GpuMesh* filmMesh, Mat44 modelMatrix, int gridHeight, int gridWidth, std::vector<Vec4> filmPositions);
-void FixTextureSeams(GpuMesh* filmMesh, std::vector<Vec4> &positions, std::vector<int> &indices);
+void BuildContactUVs(Vec3 position, int positionIndex, Vec3 contactPlane, GpuMesh* gpuMesh, Mat44 modelMatrix, int gridHeight, int gridWidth, std::vector<Vec4> contactPositions, std::vector<Vec4> &contactUVs);
+void FixTextureSeams(GpuMesh* filmMesh, std::vector<Vec4> &contactPositions, std::vector<Vec4> &contactUVs);
 //void PostProcessNearbyTexture(GpuMesh* filmMesh, int particleIndex, const int neighborCount, const int offset, const int stride, const int* internalToApi, const int* neighbors);
 void SetupFilmMesh(GpuMesh* gpuMesh, GpuMesh* filmMesh);
-void SetupContactsTexture(GpuMesh* filmMesh);
-void DrawDistortion(GpuMesh* mesh, const Vec4* positions, const Vec4* normals, const Vec4* uvs, const int* indices, int nIndices, int numPositions, bool showTexture, Mat44 model);
+//void SetupContactsTexture(GpuMesh* filmMesh);
+void DrawReverseTexture(GpuMesh* mesh, const Vec4* positions, const Vec4* normals, const Vec4* uvs, const int* indices, int nIndices, int numPositions, bool showTexture);
 void SetGpuMeshTriangles(GpuMesh* gpuMesh, std::vector<Triangle> triangles, std::vector<TriangleIndexes> triangleIndexes);
 bool rayTriangleIntersectMT(Vec3 orig, Vec3 dir, Vec3 v0, Vec3 v1, Vec3 v2, float &t, float &u, float &v, float &w);
 //bool rayTriangleIntersect(Vec3 orig, Vec3 dir, Vec3 v0, Vec3 v1, Vec3 v2, float &t, float &u, float &v, float &w);
@@ -195,10 +203,10 @@ GpuMesh* CreateGpuMesh(const Mesh* m);
 GpuMesh* CreateGpuMesh(const char* filename, Mat44 transformation, float margin);
 void DestroyGpuMesh(GpuMesh* m);
 void DrawGpuMesh(GpuMesh* m, const Matrix44& xform, const Vec3& color);
-void DrawGpuMeshInstances(GpuMesh* m, const Matrix44* xforms, int n, const Vec3& color);
-GpuMesh* CreateGpuMeshV2(const Mesh* m);
-GpuMesh* CreateGpuMeshTex(const Mesh* m);
-GpuMesh* CreateGpuMeshTexV2(const Mesh* m);
+//void DrawGpuMeshInstances(GpuMesh* m, const Matrix44* xforms, int n, const Vec3& color);
+//GpuMesh* CreateGpuMeshV2(const Mesh* m);
+//GpuMesh* CreateGpuMeshTex(const Mesh* m);
+//GpuMesh* CreateGpuMeshTexV2(const Mesh* m);
 //GpuMesh* CreateGpuMeshTexV3(const char* meshFile);
 GpuMesh* CreateGpuFilm(Matrix44 model, Vec4* vertices, Vec4* normals, Vec4* uvs, int nVertices, int* indices, int nIndices);
 void DrawGpuMeshV2(GpuMesh* m, const Matrix44& modelMat, bool showTexture);

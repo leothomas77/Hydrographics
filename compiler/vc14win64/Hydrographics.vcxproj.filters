@@ -55,6 +55,9 @@
     <ClInclude Include="..\..\source\stb_truetype.h">
       <Filter>source</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\source\model_data.h">
+      <Filter>source</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="core">
