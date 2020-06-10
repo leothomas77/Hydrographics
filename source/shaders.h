@@ -42,10 +42,9 @@
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
 
-//#include "../demo/opengl/SOIL.h"
-
 #include "../core/maths.h"
 #include "../core/mesh.h"
+#include "../core/png.h" // texture pool
 
 #include "../include/NvFlex.h"
 
@@ -58,12 +57,6 @@ struct SDL_Window;
 struct GpuMesh;
 struct ShadowMap;
 #define SKY_COLOR Vec4(0.6784f, 0.8f, 1.0f, 1.0f)
-
-//https://stackoverflow.com/questions/43463290/efficient-way-to-split-up-rgb-values-in-c
-typedef union Pixel {
-  uint32_t pixelAsInt;
-  unsigned char pixelAsChar[4];
-} Pixel;
 
 struct RenderInitOptions
 {
@@ -131,22 +124,18 @@ void ShadowBegin(ShadowMap* map);
 void ShadowEnd();
 
 struct RenderTexture;
-// RenderTexture* CreateRenderTexture(const char* filename);
-// RenderTexture* CreateRenderTarget(int with, int height, bool depth);
-// void DestroyRenderTexture(RenderTexture* tex);
 
-// void SetRenderTarget(RenderTexture* target);
-void BuildContactUVs(Vec3 position, int positionIndex, Vec3 contactPlane, GpuMesh* gpuMesh, Mat44 modelMatrix, int gridHeight, int gridWidth, std::vector<Vec4> contactPositions, std::vector<Vec4> &contactUVs);
-void FixTextureSeams(GpuMesh* filmMesh, std::vector<Vec4> &contactPositions, std::vector<Vec4> &contactUVs);
-//void PostProcessNearbyTexture(GpuMesh* filmMesh, int particleIndex, const int neighborCount, const int offset, const int stride, const int* internalToApi, const int* neighbors);
+void BuildContactUVs(Vec3 position, int positionIndex, Vec3 contactPlane, GpuMesh* gpuMesh, Mat44 modelMatrix, std::vector<Vec4> contactPositions, std::vector<Vec4> &contactUVs);
+void DetectTextureSeams(GpuMesh* filmMesh, std::vector<Vec4> &contactPositions, std::vector<Vec4> &contactUVs);
+void FindTextureSeam(Vec3 v0, Vec3 v1, Vec3 v2, Vec2 textCoordV0, Vec2 textCoordV1, Vec2 textCoordV2, PngImage textureImage);
+void PlotTexturePixel(Vec3 position, Vec2 textureCoords, PngImage textureImage);
+
 void SetupFilmMesh(GpuMesh* gpuMesh, GpuMesh* filmMesh);
-//void SetupContactsTexture(GpuMesh* filmMesh);
 void DrawReverseTexture(GpuMesh* mesh, const Vec4* positions, const Vec4* normals, const Vec4* uvs, const int* indices, int nIndices, int numPositions, bool showTexture);
 void SetGpuMeshTriangles(GpuMesh* gpuMesh, std::vector<Triangle> triangles, std::vector<TriangleIndexes> triangleIndexes);
 bool rayTriangleIntersectMT(Vec3 orig, Vec3 dir, Vec3 v0, Vec3 v1, Vec3 v2, float &t, float &u, float &v, float &w);
-//bool rayTriangleIntersect(Vec3 orig, Vec3 dir, Vec3 v0, Vec3 v1, Vec3 v2, float &t, float &u, float &v, float &w);
 
-  struct RenderMaterial
+struct RenderMaterial
 {
 	RenderMaterial()
 	{

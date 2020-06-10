@@ -512,7 +512,7 @@ void UpdateScene()
 	g_scenes[g_scene]->Update();
 }
 
-void RenderSceneV2()
+void RenderScene()
 {
   g_proj = ProjectionMatrix(RadToDeg(g_fov), g_aspect, g_camNear, g_camFar);
   if (0) // swap to orthogonal projection
@@ -556,7 +556,7 @@ void RenderSceneV2()
     // hide other meshes and draw only flat film with reverse texture
     g_drawHydrographic = false;
     g_drawHydrographicCollisionMesh = false;
-    if (0)
+    if (1)
     {
       showTexture = true;
       BindFilmShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], lightColor, ambientColor, specularColor, specularExpoent, diffuseColor, showTexture);
@@ -568,11 +568,7 @@ void RenderSceneV2()
       //draw points for fixed texture seams
       SetView(g_view, g_proj);
       SetCullMode(true);
-      BeginPoints(1.0f);
-      // parei aqui
-      // provalemnente vai ter que recuperar a cor fazendo raycast com o corpo rigido e pegando o valor do pixel
-      //FixTextureSeams(g_gpu_film_mesh, g_contact_positions, g_contact_uvs);
-      EndPoints();
+      DetectTextureSeams(g_gpu_film_mesh, g_contact_positions, g_contact_uvs);
 
     }
 
@@ -680,7 +676,7 @@ void RenderDebug()
 			  for (unsigned int c = 0; c < count; ++c)
 			  {
 				  Vec4 filmContactPlane = contactPlanes[contactIndex*maxContactsPerParticle + c];
-          BuildContactUVs(filmPosition, filmIndex, -Vec3(filmContactPlane), g_gpu_rigid_mesh, g_model, gridDimZ, gridDimX, g_contact_positions, g_contact_uvs);
+          BuildContactUVs(filmPosition, filmIndex, -Vec3(filmContactPlane), g_gpu_rigid_mesh, g_model, g_contact_positions, g_contact_uvs);
 			  }
 
       }
@@ -1202,7 +1198,7 @@ void UpdateFrame(bool &quit)
   // main scene render
 	StartFrameV2(Vec4(g_clearColor, 1.0f));
 
-  RenderSceneV2();
+  RenderScene();
 
   RenderDebug(); // this should run beteen map / unmap command, because of reading buffer data incoming from gpu to cpu
 
@@ -1437,12 +1433,12 @@ void BuildReverseTextureMapping()
       for (unsigned int c = 0; c < count; ++c)
       {
         Vec4 filmContactPlane = contactPlanes[contactIndex*maxContactsPerParticle + c];
-        BuildContactUVs(filmPosition, filmIndex, -Vec3(filmContactPlane), g_gpu_rigid_mesh, g_model, gridDimZ, gridDimX, g_contact_positions, g_contact_uvs);
+        BuildContactUVs(filmPosition, filmIndex, -Vec3(filmContactPlane), g_gpu_rigid_mesh, g_model, g_contact_positions, g_contact_uvs);
       }
     }
   }
 
-  FixTextureSeams(g_gpu_film_mesh, g_contact_positions, g_contact_uvs);
+  DetectTextureSeams(g_gpu_film_mesh, g_contact_positions, g_contact_uvs);
 
 }
 
