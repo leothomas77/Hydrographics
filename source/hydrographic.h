@@ -354,10 +354,10 @@ public:
   int sphereSectors = 160;
 	//Film params
   float gridY = 0.3f; // grid position
-  int factor = 4;//16; 
+  int factor = 12; 
   float A4_Spacing = 0.17f;//default spacing based on sphere model
-  int A4_Width = 7;//7; //210
-  int A4_Height = 7;//11; //297
+  int A4_Width = 7; //210
+  int A4_Height = 11; //297
 	//Vec2 boundsX, boundsY, boundsZ;
 	Point3 translation = Point3(0.0f);
 	float scale = 1.0f;

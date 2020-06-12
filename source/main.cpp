@@ -533,7 +533,7 @@ void RenderScene()
   unsigned int specularExpoent = 40;
   bool showTexture = true;
   
-  BindSolidShaderV2(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], lightColor, ambientColor, specularColor, specularExpoent, diffuseColor, showTexture);
+  BindRigidBodyShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], lightColor, ambientColor, specularColor, specularExpoent, diffuseColor, showTexture);
 
   SetCullMode(false);
   SetFillMode(g_wireframe);
@@ -547,7 +547,7 @@ void RenderScene()
   {
     showTexture = true;
     BindFilmShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], lightColor, ambientColor, specularColor, specularExpoent, diffuseColor, showTexture);
-    DrawHydrographicV2(g_gpu_film_mesh, &g_buffers->positions[0], &g_buffers->normals[0], &g_buffers->uvs[0], &g_buffers->triangles[0], g_buffers->triangles.size(), g_buffers->positions.size(), showTexture);
+    DrawHydrographicFilm(g_gpu_film_mesh, &g_buffers->positions[0], &g_buffers->normals[0], &g_buffers->uvs[0], &g_buffers->triangles[0], g_buffers->triangles.size(), g_buffers->positions.size(), showTexture);
   }
   
   // draw flat film with distortion after the build contacts texture
@@ -559,19 +559,19 @@ void RenderScene()
     if (1)
     {
       showTexture = true;
-      BindFilmShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], lightColor, ambientColor, specularColor, specularExpoent, diffuseColor, showTexture);
+      BindReverseTextureShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], lightColor, ambientColor, specularColor, specularExpoent, diffuseColor, showTexture);
       DrawReverseTexture(g_gpu_film_mesh, &g_contact_positions[0], &g_contact_normals[0], &g_contact_uvs[0], &g_contact_indexes[0], g_contact_indexes.size(), g_contact_positions.size(), showTexture);
     }
 
-    if (g_drawFixedSeams)
+    /*
+    if (g_drawFixedSeams && false)
     {
       //draw points for fixed texture seams
       SetView(g_view, g_proj);
       SetCullMode(true);
       DetectTextureSeams(g_gpu_film_mesh, g_contact_positions, g_contact_uvs);
-
     }
-
+    */
   }
 
 
@@ -1438,7 +1438,7 @@ void BuildReverseTextureMapping()
     }
   }
 
-  DetectTextureSeams(g_gpu_film_mesh, g_contact_positions, g_contact_uvs);
+  //BuildTextureSeamsPositions(g_gpu_film_mesh, g_contact_uvs, g_seam_positions_indexes);
 
 }
 
@@ -2123,7 +2123,7 @@ int main(int argc, char* argv[])
 	CreateDemoContext(g_graphics);
 
 	std::string str;
-	str = "Hydrographics Simulator v4.0 ";
+	str = "Hydrographics Simulator v4.1 ";
 	switch (g_graphics)
 	{
 	case 0:

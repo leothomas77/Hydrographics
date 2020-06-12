@@ -290,6 +290,7 @@ std::vector<TriangleIndexes> g_triangles_by_vertex;
 
 // store data of flat distorted film
 std::vector<Vec4> g_contact_positions;
+std::vector<int> g_seam_positions_indexes;
 std::vector<Vec4> g_contact_normals;
 std::vector<Vec4> g_contact_uvs;
 std::vector<int> g_contact_indexes;

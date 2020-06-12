@@ -126,6 +126,7 @@ void ShadowEnd();
 struct RenderTexture;
 
 void BuildContactUVs(Vec3 position, int positionIndex, Vec3 contactPlane, GpuMesh* gpuMesh, Mat44 modelMatrix, std::vector<Vec4> contactPositions, std::vector<Vec4> &contactUVs);
+void BuildTextureSeamsPositions(const GpuMesh* filmMesh, const std::vector<Vec4> contactUVs, std::vector<int> &seamPositionsIndexes);
 void DetectTextureSeams(GpuMesh* filmMesh, std::vector<Vec4> &contactPositions, std::vector<Vec4> &contactUVs);
 void FindTextureSeam(Vec3 v0, Vec3 v1, Vec3 v2, Vec2 textCoordV0, Vec2 textCoordV1, Vec2 textCoordV2, PngImage textureImage);
 void PlotTexturePixel(Vec3 position, Vec2 textureCoords, PngImage textureImage);
@@ -178,7 +179,7 @@ void DrawCloth(const Vec4* positions, const Vec4* normals, const float* uvs, con
 // void DrawBuffer(float* buffer, Vec3 camPos, Vec3 lightPos);
 void DrawRope(Vec4* positions, int* indices, int numIndices, float radius, int color);
 void DrawHydrographic(const Vec4* positions, const Vec4* normals, const float* uvs, const int* indices, int numTris, int numPositions, int colorIndex = 3, float expand = 0.0f, bool twosided = true, bool smooth = true);
-void DrawHydrographicV2(GpuMesh* m, const Vec4* positions, const Vec4* normals, const Vec4* uvs, const int* indices, int nIndices, int numPositions, bool showTexture);
+void DrawHydrographicFilm(GpuMesh* m, const Vec4* positions, const Vec4* normals, const Vec4* uvs, const int* indices, int nIndices, int numPositions, bool showTexture);
 //void SetupVertexArrays(const Vec4* positions, const Vec4* normals, const Vec3* uvs, const int* indices, int numTris, int numPositions);
 void DrawDisplacements(const Vec4* positions, const Vec4* normals, const Vec4* uvs, const int numPositions, const int* indices, int numTris);
 //void DrawBuffer(float* buffer, Vec3 camPos, Vec3 lightPos);
@@ -228,20 +229,18 @@ void* GetGraphicsCommandQueue();
 void GraphicsTimerBegin();
 void GraphicsTimerEnd();
 
-//void BindSolidShaderV2(Vec3 lightPos, Vec3 lightTarget, Matrix44 lightTransform, ShadowMap* shadowTex, float bias, Vec4 fogColor, bool drawShadows);
-void BindSolidShaderV2(Matrix44 view, Matrix44 proj, Vec3 lightPos, Vec3 camPos, Vec4 lightColor, Vec4 ambientColor, Vec4 specularColor, unsigned int specularExpoent, Vec4 diffuseColor, bool showTexture);
+void BindRigidBodyShader(Matrix44 view, Matrix44 proj, Vec3 lightPos, Vec3 camPos, Vec4 lightColor, Vec4 ambientColor, Vec4 specularColor, unsigned int specularExpoent, Vec4 diffuseColor, bool showTexture);
 void BindFilmShader(Matrix44 view, Matrix44 proj, Vec3 lightPos, Vec3 camPos, Vec4 lightColor, Vec4 ambientColor, Vec4 specularColor, unsigned int specularExpoent, Vec4 diffuseColor, bool showTexture);
 void BindHydrographicShader(Vec3 lightPos, Vec3 lightTarget, Matrix44 lightTransform, ShadowMap* shadowTex, float bias, Vec4 fogColor);
-void BindSolidShaderV2(Matrix44 view, Matrix44 proj, Vec3 lightPos, Vec3 camPos, Vec4 lightColor, Vec4 ambientColor, Vec4 specularColor, unsigned int specularExpoent, Vec4 diffuseColor, bool showTexture);
-void BindDisplacementsShader(Matrix44 view, Matrix44 proj, Vec3 lightPos, Vec3 lightTarget);
-//void BindSolidShaderV2(Matrix44 view, Matrix44 proj, Vec3 lightPos, Vec3 lightTarget, Matrix44 lightTransform, ShadowMap* shadowMap, float bias, Vec4 fogColor, bool renderShadow);
+void BindReverseTextureShader(Matrix44 view, Matrix44 proj, Vec3 lightPos, Vec3 camPos, Vec4 lightColor, Vec4 ambientColor, Vec4 specularColor, unsigned int specularExpoent, Vec4 diffuseColor, bool showTexture);
+void BindRigidBodyShader(Matrix44 view, Matrix44 proj, Vec3 lightPos, Vec3 camPos, Vec4 lightColor, Vec4 ambientColor, Vec4 specularColor, unsigned int specularExpoent, Vec4 diffuseColor, bool showTexture);
+//void BindDisplacementsShader(Matrix44 view, Matrix44 proj, Vec3 lightPos, Vec3 lightTarget);
 
-
-void UseSolidShader();
-void UseHydrographicShader();
+//void UseSolidShader();
+//void UseHydrographicShader();
 //void UseDisplacementShader();
 
-void UnbindHydrographicShader();
+//void UnbindHydrographicShader();
 //void UnbindDisplacementShader();
 
 // new fluid renderer

@@ -308,7 +308,7 @@
 
   static char* readShaderSource(const char* shaderFile);
 
-  GLuint InitShader(const char* vShaderFile, const char* fShaderFile);
+  GLuint InitShader(const char* vShaderFile, const char* fShaderFile, const char* tscShaderFile = NULL, const char* tseShaderFile = NULL, const char* gsShaderFile = NULL);
 
   void _check_gl_error(const char *file, int line);
 
