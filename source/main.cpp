@@ -515,14 +515,6 @@ void UpdateScene()
 void RenderScene()
 {
   g_proj = ProjectionMatrix(RadToDeg(g_fov), g_aspect, g_camNear, g_camFar);
-  if (0) // swap to orthogonal projection
-  {
-    float max = MAX(g_sceneUpper.x, g_sceneUpper.y);
-    float r = max * g_aspect, t = max;
-    float l = -r, b = -t;
-    g_proj = OrthographicMatrix(l, r, b, t, g_camNear, g_camFar);
-  }
-
   g_view = RotationMatrix(-g_camAngle[g_camIndex].x, Vec3(0.0f, 1.0f, 0.0f))*RotationMatrix(-g_camAngle[g_camIndex].y, Vec3(cosf(-g_camAngle[g_camIndex].x), 0.0f, sinf(-g_camAngle[g_camIndex].x)))*TranslationMatrix(-Point3(g_camPos[g_camIndex]));
 
   g_lightPos = g_camPos[g_camIndex]; // cam target always iluminated
@@ -533,7 +525,9 @@ void RenderScene()
   unsigned int specularExpoent = 40;
   bool showTexture = true;
   
-  BindRigidBodyShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], lightColor, ambientColor, specularColor, specularExpoent, diffuseColor, showTexture);
+  SetViewport(0, 0, g_screenWidth, g_screenHeight);
+
+  BindRigidBodyShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], lightColor, ambientColor, specularColor, specularExpoent, diffuseColor);
 
   SetCullMode(false);
   SetFillMode(g_wireframe);
@@ -546,11 +540,11 @@ void RenderScene()
   if (g_drawHydrographic) // draw film (soft body)
   {
     showTexture = true;
-    BindFilmShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], lightColor, ambientColor, specularColor, specularExpoent, diffuseColor, showTexture);
+    BindFilmShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], lightColor, ambientColor, specularColor, specularExpoent, diffuseColor);
     DrawHydrographicFilm(g_gpu_film_mesh, &g_buffers->positions[0], &g_buffers->normals[0], &g_buffers->uvs[0], &g_buffers->triangles[0], g_buffers->triangles.size(), g_buffers->positions.size(), showTexture);
   }
   
-  // draw flat film with distortion after the build contacts texture
+  // draw flat film with distortion after build the contacts texture
   if (g_drawReverseTexture && !g_generateContactsTexture && g_pause)
   {
     // hide other meshes and draw only flat film with reverse texture
@@ -559,19 +553,21 @@ void RenderScene()
     if (1)
     {
       showTexture = true;
-      BindReverseTextureShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], lightColor, ambientColor, specularColor, specularExpoent, diffuseColor, showTexture);
+      BindReverseTextureShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], lightColor, ambientColor, specularColor, specularExpoent, diffuseColor, g_max_distance_uv);
       DrawReverseTexture(g_gpu_film_mesh, &g_contact_positions[0], &g_contact_normals[0], &g_contact_uvs[0], &g_contact_indexes[0], g_contact_indexes.size(), g_contact_positions.size(), showTexture);
     }
 
-    /*
-    if (g_drawFixedSeams && false)
+
+    // draw film  for printing swap to orthogonal projection
+    if (0)
     {
-      //draw points for fixed texture seams
-      SetView(g_view, g_proj);
-      SetCullMode(true);
-      DetectTextureSeams(g_gpu_film_mesh, g_contact_positions, g_contact_uvs);
+      float max = MAX(g_sceneUpper.x, g_sceneUpper.y);
+      float r = max * g_aspect, t = max;
+      float l = -r, b = -t;
+      g_proj = OrthographicMatrix(l, r, b, t, g_camNear, g_camFar);
     }
-    */
+
+
   }
 
 

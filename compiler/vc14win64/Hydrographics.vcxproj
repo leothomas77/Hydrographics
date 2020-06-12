@@ -191,15 +191,18 @@
     <ClCompile Include="..\..\source\shadersDemoContext.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="..\..\shaders\displacements.fs">
+    <None Include="..\..\shaders\reverse_tex.fs">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|x64'">true</ExcludedFromBuild>
     </None>
-    <None Include="..\..\shaders\displacements.vs">
+    <None Include="..\..\shaders\reverse_tex.gs" />
+    <None Include="..\..\shaders\reverse_tex.vs">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|x64'">true</ExcludedFromBuild>
     </None>
     <None Include="..\..\shaders\film.fs">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|x64'">true</ExcludedFromBuild>
     </None>
+    <None Include="..\..\shaders\reverse_tex.tcs" />
+    <None Include="..\..\shaders\reverse_tex.tes" />
     <None Include="..\..\shaders\film.vs">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|x64'">true</ExcludedFromBuild>
     </None>

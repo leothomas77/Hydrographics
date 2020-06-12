@@ -214,12 +214,6 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <None Include="..\..\shaders\displacements.fs">
-      <Filter>shaders</Filter>
-    </None>
-    <None Include="..\..\shaders\displacements.vs">
-      <Filter>shaders</Filter>
-    </None>
     <None Include="..\..\shaders\film.fs">
       <Filter>shaders</Filter>
     </None>
@@ -230,6 +224,21 @@
       <Filter>shaders</Filter>
     </None>
     <None Include="..\..\shaders\rigid.vs">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="..\..\shaders\reverse_tex.fs">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="..\..\shaders\reverse_tex.vs">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="..\..\shaders\reverse_tex.tcs">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="..\..\shaders\reverse_tex.tes">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="..\..\shaders\reverse_tex.gs">
       <Filter>shaders</Filter>
     </None>
   </ItemGroup>

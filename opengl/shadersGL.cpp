@@ -2205,10 +2205,13 @@ GLuint GetRigidModelTextureId()
   return g_rigid_model_texture_id;
 }
 
-
-void BindRigidBodyShader(Matrix44 view, Matrix44 proj, Vec3 lightPos, Vec3 camPos, Vec4 lightColor, Vec4 ambientColor, Vec4 specularColor, unsigned int specularExpoent, Vec4 diffuseColor, bool showTexture)
+void SetViewport(int x, int y, int width, int height)
 {
-  glVerify(glViewport(0, 0, g_screenWidth, g_screenHeight));
+  glVerify(glViewport(x, y, width, height));
+}
+
+void BindRigidBodyShader(Matrix44 view, Matrix44 proj, Vec3 lightPos, Vec3 camPos, Vec4 lightColor, Vec4 ambientColor, Vec4 specularColor, unsigned int specularExpoent, Vec4 diffuseColor)
+{
   
   if (s_rigidBodyProgram)
   {
@@ -2229,9 +2232,8 @@ void BindRigidBodyShader(Matrix44 view, Matrix44 proj, Vec3 lightPos, Vec3 camPo
   }
 }
 
-void BindFilmShader(Matrix44 view, Matrix44 proj, Vec3 lightPos, Vec3 camPos, Vec4 lightColor, Vec4 ambientColor, Vec4 specularColor, unsigned int specularExpoent, Vec4 diffuseColor, bool showTexture)
+void BindFilmShader(Matrix44 view, Matrix44 proj, Vec3 lightPos, Vec3 camPos, Vec4 lightColor, Vec4 ambientColor, Vec4 specularColor, unsigned int specularExpoent, Vec4 diffuseColor)
 {
-  glVerify(glViewport(0, 0, g_screenWidth, g_screenHeight));
 
   if (s_filmProgram)
   {
@@ -2253,9 +2255,8 @@ void BindFilmShader(Matrix44 view, Matrix44 proj, Vec3 lightPos, Vec3 camPos, Ve
   }
 }
 
-void BindReverseTextureShader(Matrix44 view, Matrix44 proj, Vec3 lightPos, Vec3 camPos, Vec4 lightColor, Vec4 ambientColor, Vec4 specularColor, unsigned int specularExpoent, Vec4 diffuseColor, bool showTexture)
+void BindReverseTextureShader(Matrix44 view, Matrix44 proj, Vec3 lightPos, Vec3 camPos, Vec4 lightColor, Vec4 ambientColor, Vec4 specularColor, unsigned int specularExpoent, Vec4 diffuseColor, float maxDistanceUV)
 {
-  glVerify(glViewport(0, 0, g_screenWidth, g_screenHeight));
 
   if (s_reverseTexProgram)
   {
@@ -2263,6 +2264,7 @@ void BindReverseTextureShader(Matrix44 view, Matrix44 proj, Vec3 lightPos, Vec3 
     glEnable(GL_DEPTH_TEST);
 
     glVerify(glUseProgram(s_reverseTexProgram));
+    glVerify(glUniform1f(glGetUniformLocation(s_reverseTexProgram, "uMaxDistanceUV"), maxDistanceUV));
     glVerify(glUniform3fv(glGetUniformLocation(s_reverseTexProgram, "uLPos"), 1, lightPos));
     glVerify(glUniform4fv(glGetUniformLocation(s_reverseTexProgram, "uLColor"), 1, lightColor));
     glVerify(glUniform4fv(glGetUniformLocation(s_reverseTexProgram, "uColor"), 1, diffuseColor));
