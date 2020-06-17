@@ -34,10 +34,10 @@ public:
     //modelos centro
 		  ModelData tetra = ModelData("../../data/tetrahedron2.obj", Vec3(0.0f, 0.0f, 0.0f), 0.216f, Vec3(0.0f, 90.0f, 0.0f));//fator escala medido 0.216
       ModelData sphere = ModelData("../../data/sphere.obj", Vec3(0.0f, 0.0f, 0.0f), 0.3f, Vec3(0.0f)); //.17
-      ModelData turtle = ModelData("../../data/tartaruga_centro.obj", Vec3(0.0f, 0.0f, 0.0f), 0.125f, Vec3(0.0f, -95.5f, 0.0f)); //fator escala fixa medida 0.14
+      ModelData turtle = ModelData("../../data/tartaruga-centrov2.obj", Vec3(0.0f, 0.0f, 0.0f), 0.125f, Vec3(0.0f, -95.5f, 0.0f)); //fator escala fixa medida 0.14
       ModelData onca = ModelData("../../data/Onca_Poisson_15_16_0.obj", Vec3(0.0f, -1.8f, 0.0f), 0.125f, Vec3(0.0f, 0.0f, 0.0f)); //fator escala fixa medida 0.14
-      ModelData bunny = ModelData("../../data/bunny.obj", Vec3(0.0f, 0.0f, 0.0f), 0.125f, Vec3(0.0f, -95.5f, 0.0f)); //fator escala fixa medida 0.14
       ModelData earth = ModelData("../../data/Earth.obj", Vec3(0.0f, 0.0f, 0.0f), 0.5f, Vec3(0.0f, 0.0f, 0.0f)); //fator escala fixa medida 0.14
+      ModelData casco = ModelData("../../data/tartaruga-centro_casco.obj", Vec3(0.0f, 0.0f, 0.0f), 0.125f, Vec3(0.0f, -95.5f, 0.0f)); //fator escala fixa medida 0.14
 
     //modelos alinhados - N�O REMOVER                                                                                                                                 //modelos alinhados trasladados
       //ModelData tetra = ModelData("../../data/tetrahedron2.obj", Vec3(-0.02f, 0.0f, 0.3f), 0.216f, Vec3(0.0f, -90.0f, 0.0f));//fator escala medido 0.216
@@ -50,8 +50,8 @@ public:
 		models.push_back(sphere);
 		models.push_back(turtle);
     models.push_back(onca);
-    models.push_back(bunny);
     models.push_back(earth);
+    models.push_back(casco);
 
     if (g_selectedModel >= 0 && g_selectedModel < models.size())
     {
@@ -62,8 +62,8 @@ public:
       // without texture
       //0: tetraedro 1: sphere 2: turtle
       // with texture
-      //3: onca 4: bunny 5: earth 
-      selectedModel = 5;
+      //3: onca 4: bunny 5: earth 6: casco
+      selectedModel = 4;
     }
 
 
@@ -294,7 +294,20 @@ public:
 		imguiLabel("Hydrographic options");
 		if (imguiCheck("Create SDF file", createFile))
 			createFile = !createFile;
-		imguiSlider("Dipping velocity", &dippingVelocity, -0.5f, 0.5f, 0.005f);
+    imguiSlider("Tesselation inner", &g_tesselation_inner, 0.0f, 8.0f, 0.001f);
+    imguiSlider("Tesselation outer", &g_tesselation_outer, 0.0f, 8.0f, 0.001f);
+    imguiSlider("Max distance UV", &g_max_distance_uv, 0.0f, 1.0f, 0.005f);
+    imguiSlider("Max near distance UV", &g_near_distance_uv, 0.0f, 1.0f, 0.001f);
+    if (imguiSlider("Texture Weight1", &g_weight1, 0.0f, 1.0f, 0.001f))
+    {
+      g_weight2 = 1.0f - g_weight1;
+    }
+    if (imguiSlider("Texture Weight2", &g_weight2, 0.0f, 1.0f, 0.001f))
+    {
+      g_weight1 = 1.0f - g_weight2;
+    }
+
+    imguiSlider("Dipping velocity", &dippingVelocity, -0.5f, 0.5f, 0.005f);
 		imguiSlider("Horizontal invMass", &horizontalInvMass, 0.0f, 1.0f, 0.005f);
 		imguiSlider("Vertical invMass", &verticalInvMass, 0.0f, 1.0f, 0.005f);
 

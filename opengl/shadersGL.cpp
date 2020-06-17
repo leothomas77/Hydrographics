@@ -51,18 +51,17 @@
 
 GLuint g_chessboard_texture_id;
 GLuint g_rigid_model_texture_id;
+GLuint g_heat_texture_id;
 
-//int texWidth, texHeight, components;
-GLuint VAO = -1;
-GLuint VBO = -1;
-GLuint EBO = -1;
-//GLuint s_diffuseProgram = GLuint(-1);
-//GLuint s_shadowProgram = GLuint(-1);
-//GLuint s_hydrographicProgram = GLuint(-1);
-//GLuint s_hydrographicProgramV2 = GLuint(-1);
+//GLuint VAO = -1;
+//GLuint VBO = -1;
+//GLuint EBO = -1;
+
 GLuint s_reverseTexProgram = GLuint(-1);
 GLuint s_rigidBodyProgram = GLuint(-1);
 GLuint s_filmProgram = GLuint(-1);
+
+bool g_enable_paches = false;
 
 #ifdef ANDROID
 #include "android/Log.h"
@@ -114,6 +113,8 @@ aiVector3D scene_min, scene_max, scene_center;
 
 PngImage g_chessboard_texture_image;
 PngImage g_rigid_model_texture_image;
+PngImage g_dynamic_texture_image;
+
 
 GLuint LoadTexture(const char* filename, PngImage& image)
 {
@@ -210,14 +211,11 @@ GLuint LoadTexture_Original(const char* filename)
   }
 }
 
-/*
-GLuint CreateDynamicTexture(PngImage &img, GLuint &textID)
+
+GLuint CreateDynamicTexture(PngImage &img)
 {
   img.m_height = 256;
   img.m_width = 256;
-
-  //if (img.m_height <= 0 || img.m_width <= 0) 
-    //return NULL;
 
   img.m_data = new uint32_t[img.m_height * img.m_width];
 
@@ -234,9 +232,11 @@ GLuint CreateDynamicTexture(PngImage &img, GLuint &textID)
     }
   }
 
+  GLuint textID = -1;
+
   glGenTextures(1, &textID);
   glBindTexture(GL_TEXTURE_2D, textID);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img.m_width, img.m_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, (GLvoid*)NULL);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img.m_width, img.m_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, img.m_data);
   glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
@@ -244,7 +244,6 @@ GLuint CreateDynamicTexture(PngImage &img, GLuint &textID)
 
   return textID;
 }
-*/
 
 /*
 GLuint LoadDynamicTexture(PngImage img, GLuint &textID)
@@ -295,6 +294,1096 @@ extern Mesh* g_mesh;
 extern GpuMesh* g_gpu_rigid_mesh;
 //void DrawShapes();
 
+// shader source codes
+GLchar *FILM_VERTEX_SHADER = "#version 430\n" STRINGIFY(
+
+layout(location = 0) in vec4 aPosition;
+layout(location = 1) in vec4 aNormal;
+layout(location = 2) in vec4 aTexCoords;
+uniform mat4 proj;
+uniform mat4 view;
+uniform mat4 model;
+uniform mat4 normalMat;
+uniform bool showTexture;
+out vec3 vNormal;
+out vec3 vPosW;
+out vec2 vTexCoords;
+
+void main()
+{
+  vNormal = (normalize(normalMat * vec4(aNormal.xyz, 1.0))).xyz;
+  vPosW = (model * vec4(aPosition.xyz, 1.0)).xyz;
+  vTexCoords = showTexture ? vTexCoords = aTexCoords.xy : vec2(0.0);
+  gl_Position = proj * view * model * vec4(aPosition.xyz, 1.0);
+}
+);
+
+GLchar *FILM_FRAGMENT_SHADER = "#version 430\n" STRINGIFY(
+  in vec3 vNormal;
+  in vec3 vPosW;
+  in vec2 vTexCoords;
+  uniform vec3 uLPos;
+  uniform vec4 uLColor;
+  uniform vec4 uColor;
+  uniform vec3 uCamPos;
+  uniform vec4 uAmbient;
+  uniform vec4 uSpecular;
+  uniform uint uSpecularExpoent;
+  uniform bool showTexture;
+  uniform sampler2D tex;
+  out vec4 outFragColor;
+  void main(void) {
+    vec4 diffuse = vec4(0.0);
+    vec4 specular = vec4(0.0);
+    //vec4 textureBorderColor = vec4(0.0, 0.0, 0.0, 0.0);
+    vec4 textureBorderColor = vec4(0.0, 0.0, 0.0, 0.0);
+    // always show front facing (avoid black color showing)
+    vec3 normal = gl_FrontFacing ? normalize(-vNormal) : normalize(vNormal);
+    vec4 lColor = uLColor;
+    // material properties
+    vec4 matAmb = uAmbient;
+
+    vec4 matDif;
+    //vec2 seamlessCoords;
+
+    //seamlessCoords.x = ( fwidth( uv0.x ) < fwidth( uv1.x )-0.001 )? uv0.x : uv1.x ;
+    //seamlessCoords.y = ( fwidth( uv0.y ) < fwidth( uv1.y )-0.001 )? uv0.y : uv1.y ;
+
+    //vec4 colorRedGreen = vec4(1.0, 1.0, 0.0, 1.0);
+
+    //colorRedGreen.r *= vTexCoords.x;
+    //colorRedGreen.g *= vTexCoords.y;
+    matDif = showTexture ? texture(tex, vTexCoords) : uColor;
+
+    vec4 matSpec = uSpecular;
+    //ambient
+    vec4 ambient = matAmb;
+    //diffuse
+    vec3 pos = normalize(vPosW);
+    vec3 vL = normalize(uLPos - pos);
+    float NdotL = dot(normal, vL);
+    if (NdotL > 0)
+    {
+      diffuse = matDif * NdotL;
+    }
+    //specular
+    vec3 vV = normalize(uCamPos - pos);
+    vec3 vR = normalize(reflect(-vL, normal));
+    float RdotV = dot(vV, vR);
+    if (RdotV > 0)
+    {
+      specular = matSpec * pow(RdotV, uSpecularExpoent);
+    }
+    //outFragColor = clamp((ambient + diffuse + specular) * lColor, 0.0, 1.0);
+    outFragColor = matDif;
+  }
+);
+
+GLchar *RIGID_VERTEX_SHADER = "#version 430\n" STRINGIFY(
+  layout(location = 0) in vec3 aPosition;
+  layout(location = 1) in vec3 aNormal;
+  layout(location = 2) in vec2 aTexCoords;
+  uniform mat4 proj;
+  uniform mat4 view;
+  uniform mat4 model;
+  uniform mat4 normalMat;
+  uniform bool showTexture;
+  out vec3 vNormal;
+  out vec3 vPosW;
+  out vec2 vTexCoords;
+  void main()
+  {
+    vNormal.xyz = (normalize(normalMat * vec4(aNormal, 1.0))).xyz;
+    vPosW.xyz = (model * vec4(aPosition, 1.0)).xyz;
+    vTexCoords = showTexture ? vTexCoords = aTexCoords : vec2(0.0);
+    gl_Position = proj * view * model * vec4(aPosition, 1.0);
+  }
+);
+
+GLchar *RIGID_FRAGMENT_SHADER = "#version 430\n" STRINGIFY(
+    in vec3 vNormal;
+  in vec3 vPosW;
+  in vec2 vTexCoords;
+  uniform vec3 uLPos;
+  uniform vec4 uLColor;
+  uniform vec4 uColor;
+  uniform vec3 uCamPos;
+  uniform vec4 uAmbient;
+  uniform vec4 uSpecular;
+  uniform uint uSpecularExpoent;
+  uniform bool showTexture;
+  uniform sampler2D tex;
+  out vec4 outFragColor;
+  void main(void) {
+    vec4 lColor = uLColor;
+    //material properties
+    vec4 matAmb = uAmbient;
+    vec4 matDif = showTexture ? texture(tex, vTexCoords) : uColor;
+    vec4 matSpec = uSpecular;
+    vec4 ambient = matAmb;
+    vec3 vL = normalize(uLPos - vPosW);
+    vec3 normal = gl_FrontFacing ? normalize(vNormal) : normalize(-vNormal);
+    float NdotL = dot(vL, normal);
+    //diffuse	
+    float cTheta = max(NdotL, 0.0);
+    vec4 diffuse = matDif * cTheta;
+    //specular
+    vec3 vV = normalize(uCamPos - vPosW);
+    vec3 vR = normalize(reflect(-vL, normal));
+    float cOmega = max(dot(vV, vR), 0.0);
+    vec4 specular = matSpec * pow(cOmega, uSpecularExpoent);
+    //trick to avoid hilights when angle greater than 90
+    if (NdotL < 0)
+    {
+      specular = vec4(0);
+    }
+    outFragColor = clamp((ambient + diffuse + specular) * lColor, 0.0, 1.0);
+  }
+);
+
+GLchar *REVERSE_TEX_VERTEX_SHADER = "#version 430\n" STRINGIFY(
+  layout(location = 0) in vec4 aPosition;
+  layout(location = 1) in vec4 aNormal;
+  layout(location = 2) in vec4 aTexCoords;
+
+  uniform mat4 proj;
+  uniform mat4 view;
+  uniform mat4 model;
+  uniform mat4 normalMat;
+  uniform bool showTexture;
+
+  out VS_OUT
+  {
+    vec3 vNormal;
+  vec3 vPosW;
+  vec2 vTexCoords;
+  } vs_out;
+
+  //out vec3 WorldPos_CS_in;
+  //out vec2 TexCoord_CS_in;
+  //out vec3 Normal_CS_in;
+
+  void main()
+  {
+    //Normal_CS_in = (normalize(normalMat * vec4(aNormal.xyz, 1.0))).xyz;
+    //WorldPos_CS_in = (model * vec4(aPosition.xyz, 1.0)).xyz;
+    //TexCoord_CS_in = showTexture ? TexCoord_CS_in = aTexCoords.xy : vec2(0.0);
+
+    vs_out.vNormal = (normalize(normalMat * vec4(aNormal.xyz, 1.0))).xyz;
+    vs_out.vPosW = (model * vec4(aPosition.xyz, 1.0)).xyz;
+    vs_out.vTexCoords = showTexture ? vs_out.vTexCoords = aTexCoords.xy : vec2(0.0);
+
+    gl_Position = proj * view * model * vec4(aPosition.xyz, 1.0);
+  }
+
+);
+
+GLchar *REVERSE_TEX_TESSELATION_CONTROL_SHADER = "#version 430\n" STRINGIFY(
+  layout(vertices = 3) out;
+
+//uniforms
+uniform vec3 seamVertex[];
+uniform uint seamVertexCount;
+
+//inputs
+in vec3 WorldPos_CS_in[];
+in vec2 TexCoord_CS_in[];
+in vec3 Normal_CS_in[];
+
+//outputs
+out vec3 WorldPos_ES_in[];
+out vec2 TexCoord_ES_in[];
+out vec3 Normal_ES_in[];
+
+void main()
+{
+  // pass-through original vertices
+  TexCoord_ES_in[gl_InvocationID] = TexCoord_CS_in[gl_InvocationID];
+  Normal_ES_in[gl_InvocationID] = Normal_CS_in[gl_InvocationID];
+  WorldPos_ES_in[gl_InvocationID] = WorldPos_CS_in[gl_InvocationID];
+
+  // primitive setup once
+  if (gl_InvocationID == 0)
+  {
+    gl_TessLevelInner[0] = 3;
+
+    gl_TessLevelOuter[0] = 3;
+    gl_TessLevelOuter[1] = 3;
+    gl_TessLevelOuter[2] = 3;
+  }
+
+}
+);
+
+GLchar *REVERSE_TEX_TESSELATION_EVALUATION_SHADER = "#version 430\n" STRINGIFY(
+  layout(triangles, equal_spacing, ccw) in;
+
+//uniforms
+uniform mat4 proj;
+uniform mat4 view;
+uniform mat4 model;
+
+//inputs
+in vec3 WorldPos_ES_in[];
+in vec2 TexCoord_ES_in[];
+in vec3 Normal_ES_in[];
+
+//outputs
+out vec3 WorldPos_FS_in;
+out vec2 TexCoord_FS_in;
+out vec3 Normal_FS_in;
+
+vec2 interpolate2D(vec2 v0, vec2 v1, vec2 v2)
+{
+  return vec2(gl_TessCoord.x) * v0 + vec2(gl_TessCoord.y) * v1 + vec2(gl_TessCoord.z) * v2;
+}
+
+vec3 interpolate3D(vec3 v0, vec3 v1, vec3 v2)
+{
+  return vec3(gl_TessCoord.x) * v0 + vec3(gl_TessCoord.y) * v1 + vec3(gl_TessCoord.z) * v2;
+}
+
+void main()
+{
+  // build values using barycentric coordinates
+  TexCoord_FS_in = interpolate2D(TexCoord_ES_in[0], TexCoord_ES_in[1], TexCoord_ES_in[2]);
+  Normal_FS_in = interpolate3D(Normal_ES_in[0], Normal_ES_in[1], Normal_ES_in[2]);
+  Normal_FS_in = normalize(Normal_FS_in);
+  WorldPos_FS_in = interpolate3D(WorldPos_ES_in[0], WorldPos_ES_in[1], WorldPos_ES_in[2]);
+
+  gl_Position = proj * view * model * vec4(WorldPos_FS_in, 1.0);
+}
+);
+
+GLchar *REVERSE_TEX_FRAGMENT_SHADER = "#version 430\n" STRINGIFY(
+  uniform vec3 uLPos;
+  uniform vec4 uLColor;
+  uniform vec4 uColor;
+  uniform vec3 uCamPos;
+  uniform vec4 uAmbient;
+  uniform vec4 uSpecular;
+  uniform uint uSpecularExpoent;
+  uniform bool showTexture;
+  uniform sampler2D tex;
+
+  in GS_OUT
+  {
+    vec3 vNormal;
+    vec3 vPosW;
+    vec2 vTexCoords;
+  } gs_out;
+
+  out vec4 outFragColor;
+
+  void main(void) {
+
+    vec4 lColor = uLColor;
+
+    float radius = 2.0f;
+    float resolution = 1.0f;
+    float blur = 5.0f;//radius / resolution;
+    //(1.0, 0.0)->x - axis blur
+    //(0.0, 1.0)->y - axis blur
+    float hstep = 1.0f;
+    float vstep = 1.0f;
+
+    vec4 sum = vec4(0.0);
+
+    vec4 matDif;
+
+    matDif = showTexture ? texture(tex, gs_out.vTexCoords) : uColor;
+
+    vec2 tc = gs_out.vTexCoords;
+
+    sum += texture2D(tex, vec2(tc.x - 4.0*blur*hstep, tc.y - 4.0*blur*vstep)) * 0.0162162162;
+    sum += texture2D(tex, vec2(tc.x - 3.0*blur*hstep, tc.y - 3.0*blur*vstep)) * 0.0540540541;
+    sum += texture2D(tex, vec2(tc.x - 2.0*blur*hstep, tc.y - 2.0*blur*vstep)) * 0.1216216216;
+    sum += texture2D(tex, vec2(tc.x - 1.0*blur*hstep, tc.y - 1.0*blur*vstep)) * 0.1945945946;
+
+    sum += texture2D(tex, vec2(tc.x, tc.y)) * 0.2270270270;
+
+    sum += texture2D(tex, vec2(tc.x + 1.0*blur*hstep, tc.y + 1.0*blur*vstep)) * 0.1945945946;
+    sum += texture2D(tex, vec2(tc.x + 2.0*blur*hstep, tc.y + 2.0*blur*vstep)) * 0.1216216216;
+    sum += texture2D(tex, vec2(tc.x + 3.0*blur*hstep, tc.y + 3.0*blur*vstep)) * 0.0540540541;
+    sum += texture2D(tex, vec2(tc.x + 4.0*blur*hstep, tc.y + 4.0*blur*vstep)) * 0.0162162162;
+
+    outFragColor = matDif * vec4(sum.rgb, 1.0);
+
+  }
+);
+
+GLchar *REVERSE_TEX_GEOMETRY_SHADER = "#version 430\n" STRINGIFY(
+  layout(triangles) in;
+  layout(triangle_strip, max_vertices = 36) out;
+
+  uniform float uMaxDistanceUV;
+
+  in VS_OUT
+  {
+    vec3 vNormal;
+  vec3 vPosW;
+  vec2 vTexCoords;
+  } gs_in[];
+
+  out GS_OUT
+  {
+    vec3 vNormal;
+  vec3 vPosW;
+  vec2 vTexCoords;
+  } gs_out;
+
+  void EmitTextureVertex(int index)
+  {
+    gl_Position = gl_in[index].gl_Position;
+    gs_out.vNormal = gs_in[index].vNormal;
+    gs_out.vTexCoords = gs_in[index].vTexCoords;
+    gs_out.vPosW = gs_in[index].vPosW;
+    EmitVertex();
+  }
+
+  void EmitWeightedTexVertex(int index1, int index2, float weight1, float weight2)
+  {
+    gl_Position = 0.5f * (gl_in[index1].gl_Position + gl_in[index2].gl_Position);
+    gs_out.vNormal = gs_in[index1].vNormal; // the mesh is always a plane assumes always the same normal
+    gs_out.vTexCoords = (weight1 * gs_in[index1].vTexCoords + weight2 * gs_in[index2].vTexCoords); // vertex with greater texture weight
+    gs_out.vPosW = 0.5 * (gs_in[index1].vPosW + gs_in[index2].vPosW);
+    EmitVertex();
+  }
+
+  bool isSeam(float maxDistanceUV, bool cross01, bool cross02, bool cross12, bool crossAll)
+  {
+    return (cross01 || cross02 || cross12 || crossAll);
+  }
+
+  bool v0_CrossTheSeam(bool cross01, bool cross02)
+  {
+    return (cross01 && cross02);
+  }
+
+  bool v1_CrossTheSeam(bool cross01, bool cross12)
+  {
+    return (cross01 && cross12);
+  }
+
+  bool v2_CrossTheSeam(bool cross02, bool cross12)
+  {
+    return (cross02 && cross12);
+  }
+
+  bool all_CrossTheSeam(float maxDistanceUV, float distance01, float distance02, float distance12)
+  {
+    float crossAllMaxDistanceUV = 0.33f * maxDistanceUV;
+
+    return (distance01 > crossAllMaxDistanceUV && distance02 > crossAllMaxDistanceUV && distance12 > crossAllMaxDistanceUV);
+  }
+
+  void ComputeTexDistance(vec2 texV0, vec2 texV1, vec2 texV2, inout float distance01, inout float distance02, inout float distance12)
+  {
+    distance01 = length(texV0 - texV1);
+    distance02 = length(texV0 - texV2);
+    distance12 = length(texV1 - texV2);
+  }
+
+  void ComputeCrossSeam(float maxDistanceUV, float distance01, float distance02, float distance12, inout bool cross01, inout bool cross02, inout bool cross12)
+  {
+    cross01 = distance01 > maxDistanceUV;
+    cross02 = distance02 > maxDistanceUV;
+    cross12 = distance12 > maxDistanceUV;
+  }
+
+  void ComputeHalfTextures(vec2 texV0, vec2 texV1, vec2 texV2, inout vec2 halfTex01, inout vec2 halfTex02, inout vec2 halfTex12)
+  {
+    halfTex01 = 0.5f * (texV0 + texV1);
+    halfTex02 = 0.5f * (texV0 + texV2);
+    halfTex12 = 0.5f * (texV1 + texV2);
+  }
+
+  void ComputeHalfDistances(vec4 v0, vec4 v1, vec4 v2, inout vec4 half01, inout vec4 half02, inout vec4 half12)
+  {
+    half01 = 0.5f * (v0 + v1);
+    half02 = 0.5f * (v0 + v2);
+    half12 = 0.5f * (v1 + v2);
+  }
+
+
+  void main(void) {
+
+    float maxDistanceUV = uMaxDistanceUV;
+    int edgeSubdivisions = 2;
+
+    float texDistance01, texDistance02, texDistance12;
+    bool cross01, cross02, cross12;
+
+    vec2 halfTex01, halfTex02, halfTex12;
+    vec4 half01, half02, half12;
+
+
+    ComputeHalfTextures(gs_in[0].vTexCoords, gs_in[1].vTexCoords, gs_in[2].vTexCoords, halfTex01, halfTex02, halfTex12);
+    ComputeHalfDistances(gl_in[0].gl_Position, gl_in[1].gl_Position, gl_in[2].gl_Position, half01, half02, half12);
+
+    ComputeTexDistance(gs_in[0].vTexCoords, gs_in[1].vTexCoords, gs_in[2].vTexCoords, texDistance01, texDistance02, texDistance12);
+
+    ComputeCrossSeam(maxDistanceUV, texDistance01, texDistance02, texDistance12, cross01, cross02, cross12);
+
+    bool crossAll = all_CrossTheSeam(maxDistanceUV, texDistance01, texDistance02, texDistance12);
+    if (isSeam(maxDistanceUV, cross01, cross02, cross12, crossAll))
+    {
+      if (crossAll)
+      {
+        // all cross the stream
+        // strip 1
+        EmitTextureVertex(2);
+        EmitWeightedTexVertex(0, 2, 0.5f, 0.5f);
+        EmitWeightedTexVertex(1, 2, 0.5f, 0.5f);
+
+        EndPrimitive();
+
+        // strip 2
+        EmitWeightedTexVertex(1, 2, 0.5f, 0.5f);
+        EmitWeightedTexVertex(0, 1, 0.5f, 0.5f);
+        EmitTextureVertex(1);
+
+        EndPrimitive();
+
+        // strip 3
+        EmitWeightedTexVertex(0, 2, 0.5f, 0.5f);
+        EmitTextureVertex(0);
+        EmitWeightedTexVertex(0, 1, 0.5f, 0.5f);
+
+        EndPrimitive();
+
+        // strip 4 center  
+        EmitWeightedTexVertex(1, 2, 0.5f, 0.5f);
+        EmitWeightedTexVertex(0, 2, 0.5f, 0.5f);
+        EmitWeightedTexVertex(0, 1, 0.5f, 0.5f);
+
+        EndPrimitive();
+
+      }
+      else if (v0_CrossTheSeam(cross01, cross02))
+      {
+        // v0 cross the seam
+        // strip 1
+        EmitTextureVertex(1);
+        EmitWeightedTexVertex(0, 1, 0.0f, 1.0f);
+        EmitWeightedTexVertex(1, 2, 0.5f, 0.5f);
+        EmitWeightedTexVertex(0, 2, 0.0f, 1.0f);
+        EmitTextureVertex(2);
+
+        EndPrimitive();
+
+        // strip 2
+        EmitWeightedTexVertex(0, 1, 1.0f, .0f);
+        EmitTextureVertex(0);
+        EmitWeightedTexVertex(0, 2, 1.0f, .0f);
+
+        EndPrimitive();
+
+      }
+      else if (v1_CrossTheSeam(cross01, cross12))
+      {
+        //v1 cross the seam
+        // strip 1
+        EmitTextureVertex(2);
+        EmitWeightedTexVertex(1, 2, 0.0f, 1.0f);
+        EmitWeightedTexVertex(0, 2, 0.5f, 0.5f);
+        EmitWeightedTexVertex(0, 1, 1.0f, 0.0f);
+        EmitTextureVertex(0);
+
+        EndPrimitive();
+
+        // strip 2
+        EmitWeightedTexVertex(1, 2, 1.0f, 0.0f);
+        EmitTextureVertex(1);
+        EmitWeightedTexVertex(0, 1, 0.0f, 1.0f);
+
+        EndPrimitive();
+
+      }
+      else if (v2_CrossTheSeam(cross02, cross12))
+      {
+        //v2 cross the seam
+        // strip 1
+        EmitTextureVertex(0);
+        EmitWeightedTexVertex(0, 2, 1.0f, 0.0f);
+        EmitWeightedTexVertex(0, 1, 0.5f, 0.5f);
+        EmitWeightedTexVertex(1, 2, 1.0f, 0.0f);
+        EmitTextureVertex(1);
+
+        EndPrimitive();
+
+        // strip 2
+        EmitWeightedTexVertex(1, 2, 0.0f, 1.0f);
+        EmitTextureVertex(2);
+        EmitWeightedTexVertex(0, 1, 0.0f, 1.0f);
+
+        EndPrimitive();
+
+      }
+
+    }
+    else
+    {
+      // pass-through original vertices
+      EmitTextureVertex(0);
+      EmitTextureVertex(1);
+      EmitTextureVertex(2);
+
+      EndPrimitive();
+
+    }
+  }
+);
+
+
+GLchar *REVERSE_TEX_GEOMETRY_SHADER_V2 = "#version 430\n" STRINGIFY(
+  layout(triangles) in;\n
+layout(triangle_strip, max_vertices = 36) out; \n
+uniform float uMaxDistanceUV; \n
+uniform float uNearDistanceUV; \n
+uniform float uWeight1; \n
+uniform float uWeight2; \n
+uniform sampler2D tex; \n
+uniform sampler2D heatmap; \n
+\n
+in VS_OUT\n
+{ \n
+  vec3 vNormal; \n
+vec3 vPosW; \n
+vec2 vTexCoords; \n
+} gs_in[]; \n
+\n
+out GS_OUT\n
+{ \n
+  vec3 vNormal; \n
+vec3 vPosW; \n
+vec2 vTexCoords; \n
+} gs_out; \n
+\n
+void EmitTextureVertex(int index)\n
+{ \n
+  gl_Position = gl_in[index].gl_Position; \n
+  gs_out.vNormal = gs_in[index].vNormal; \n
+  gs_out.vTexCoords = gs_in[index].vTexCoords; \n
+  gs_out.vPosW = gs_in[index].vPosW; \n
+  EmitVertex(); \n
+}\n
+\n
+void EmitWeightedTexVertex(int index1, int index2, float weight1, float weight2)\n
+{ \n
+  gl_Position = 0.5f * (gl_in[index1].gl_Position + gl_in[index2].gl_Position); \n
+  gs_out.vNormal = gs_in[index1].vNormal; // the mesh is always a plane assumes always the same normal\n
+  gs_out.vTexCoords = (weight1 * gs_in[index1].vTexCoords + weight2 * gs_in[index2].vTexCoords); // vertex with greater texture weight\n
+  gs_out.vPosW = 0.5 * (gs_in[index1].vPosW + gs_in[index2].vPosW); \n
+  EmitVertex(); \n
+}\n
+\n
+void EmitWeightedTexVertexCenter(int index1, int index2, vec2 texCoord1, vec2 texCoord2, vec2 texCoord3, float epsilon)\n
+{ \n
+  gl_Position = 0.5f * (gl_in[index1].gl_Position + gl_in[index2].gl_Position); \n
+  gs_out.vNormal = gs_in[index1].vNormal; // the mesh is always a plane assumes always the same normal\n
+  \n
+    vec2 centerTexCoord = 0.33f * (texCoord1 + texCoord2 + texCoord3); \n
+    //vec2 centerTexDirection = normalize(centerTexCoord - texCoord1); \n
+    \n
+    gs_out.vTexCoords = centerTexCoord;//texCoord1 + centerTexDirection * epsilon; \n
+  gs_out.vPosW = 0.5 * (gs_in[index1].vPosW + gs_in[index2].vPosW); \n
+  EmitVertex(); \n
+}\n
+\n
+void EmitTexVertexByNearColor(int index1, int index2, vec2 texCoords)\n
+{ \n
+  gl_Position = 0.5f * (gl_in[index1].gl_Position + gl_in[index2].gl_Position); \n
+  gs_out.vNormal = gs_in[index1].vNormal; // the mesh is always a plane assumes always the same normal\n
+  gs_out.vTexCoords = texCoords; \n
+    gs_out.vPosW = 0.5 * (gs_in[index1].vPosW + gs_in[index2].vPosW); \n
+    EmitVertex(); \n
+  }\n
+    \n
+    void EmitStrips(int farVertexIndex, int nearVertex1, int nearVertex2, float w1, float w2, int level)\n
+  { \n
+    // v0 cross the seam\n
+    // strip 1\n
+    level++;
+
+  EmitTextureVertex(nearVertex1); \n
+  EmitWeightedTexVertex(farVertexIndex, nearVertex1, w1, w2); \n
+  EmitWeightedTexVertex(nearVertex1, nearVertex2, 0.5f, 0.5f); \n
+  EmitWeightedTexVertex(farVertexIndex, nearVertex2, w1, w2); \n
+  EmitTextureVertex(nearVertex2); \n
+    \n
+  EndPrimitive(); \n
+    \n
+  // strip 2\n
+  EmitWeightedTexVertex(nearVertex1, farVertexIndex, w1, w2); \n
+  EmitTextureVertex(farVertexIndex); \n
+  EmitWeightedTexVertex(nearVertex2, farVertexIndex, w1, w2); \n
+    \n
+  EndPrimitive(); \n
+    \n
+
+  }\n
+\n
+bool isSeam(float maxDistanceUV, bool cross01, bool cross02, bool cross12, bool crossAll)\n
+{ \n
+  return (cross01 || cross02 || cross12 || crossAll); \n
+}\n
+\n
+bool v0_CrossTheSeam(bool cross01, bool cross02)\n
+{ \n
+  return (cross01 && cross02); \n
+}\n
+
+bool v1_CrossTheSeam(bool cross01, bool cross12)\n
+{ \n
+  return (cross01 && cross12); \n
+}\n
+\n
+bool v2_CrossTheSeam(bool cross02, bool cross12)\n
+{ \n
+  return (cross02 && cross12); \n
+}\n
+\n
+bool all_CrossTheSeam(float maxDistanceUV, float distance01, float distance02, float distance12)\n
+{ \n
+  float crossAllMaxDistanceUV = 0.33f * maxDistanceUV; \n
+    \n
+  return (distance01 > crossAllMaxDistanceUV && distance02 > crossAllMaxDistanceUV && distance12 > crossAllMaxDistanceUV);
+}\n
+\n
+void ComputeTexDistance(vec2 texV0, vec2 texV1, vec2 texV2, inout float distance01, inout float distance02, inout float distance12)
+{
+  distance01 = length(texV0 - texV1);
+  distance02 = length(texV0 - texV2);
+  distance12 = length(texV1 - texV2);
+}
+
+void ComputeCrossSeam(float maxDistanceUV, float distance01, float distance02, float distance12, inout bool cross01, inout bool cross02, inout bool cross12)
+{
+  cross01 = distance01 > maxDistanceUV;
+  cross02 = distance02 > maxDistanceUV;
+  cross12 = distance12 > maxDistanceUV;
+}
+
+void ComputeHalfTextures(vec2 texV0, vec2 texV1, vec2 texV2, inout vec2 halfTex01, inout vec2 halfTex02, inout vec2 halfTex12)
+{
+  halfTex01 = 0.5f * (texV0 + texV1);
+  halfTex02 = 0.5f * (texV0 + texV2);
+  halfTex12 = 0.5f * (texV1 + texV2);
+}
+
+void ComputeHalfDistances(vec4 v0, vec4 v1, vec4 v2, inout vec4 half01, inout vec4 half02, inout vec4 half12)
+{
+  half01 = 0.5f * (v0 + v1);
+  half02 = 0.5f * (v0 + v2);
+  half12 = 0.5f * (v1 + v2);
+}
+
+vec2 GetTexCoordsByNearColor(vec2 texCoords, float epsilon)
+{
+  vec4 texColor = texture(tex, texCoords);
+
+  float distances[8];
+  vec2 nearTexCoords[8];
+
+  distances[0] = length(texColor - texture(tex, texCoords + vec2(0.0f, epsilon)));
+  distances[1] = length(texColor - texture(tex, texCoords + vec2(0.0f, -epsilon)));
+  distances[2] = length(texColor - texture(tex, texCoords + vec2(-epsilon, 0.0f)));
+  distances[3] = length(texColor - texture(tex, texCoords + vec2(epsilon, 0.0f)));
+  distances[4] = length(texColor - texture(tex, texCoords + vec2(epsilon, epsilon)));
+  distances[5] = length(texColor - texture(tex, texCoords + vec2(epsilon, -epsilon)));
+  distances[6] = length(texColor - texture(tex, texCoords + vec2(-epsilon, epsilon)));
+  distances[7] = length(texColor - texture(tex, texCoords + vec2(-epsilon, -epsilon)));
+
+
+  nearTexCoords[0] = texCoords + vec2(0.0f, epsilon);
+  nearTexCoords[1] = texCoords + vec2(0.0f, -epsilon);
+  nearTexCoords[2] = texCoords + vec2(-epsilon, 0.0f);
+  nearTexCoords[3] = texCoords + vec2(epsilon, 0.0f);
+  nearTexCoords[4] = texCoords + vec2(epsilon, epsilon);
+  nearTexCoords[5] = texCoords + vec2(epsilon, -epsilon);
+  nearTexCoords[6] = texCoords + vec2(-epsilon, epsilon);
+  nearTexCoords[7] = texCoords + vec2(-epsilon, -epsilon);
+
+  int nearColorIndex = 0;
+  for (int i; i < 8; i++)
+  {
+    if (distances[i] < distances[nearColorIndex])
+    {
+      nearColorIndex = i;
+    }
+  }
+  return nearTexCoords[nearColorIndex];
+}
+
+void main(void) {
+
+  float maxDistanceUV = uMaxDistanceUV;
+  float epsilon = uNearDistanceUV;
+  float w1 = uWeight1;
+  float w2 = uWeight2;
+
+  int farVertexIndex; int nearVertex1; int nearVertex2;
+  float texDistance01; float texDistance02; float texDistance12;
+  bool cross01; bool cross02; bool cross12; \n
+  int level = 0;\n
+
+  vec2 halfTex01; vec2 halfTex02; vec2 halfTex12;
+  vec4 half01; vec4 half02; vec4 half12;
+
+  ComputeHalfTextures(gs_in[0].vTexCoords, gs_in[1].vTexCoords, gs_in[2].vTexCoords, halfTex01, halfTex02, halfTex12);
+  ComputeHalfDistances(gl_in[0].gl_Position, gl_in[1].gl_Position, gl_in[2].gl_Position, half01, half02, half12);
+
+  ComputeTexDistance(gs_in[0].vTexCoords, gs_in[1].vTexCoords, gs_in[2].vTexCoords, texDistance01, texDistance02, texDistance12);
+
+  ComputeCrossSeam(maxDistanceUV, texDistance01, texDistance02, texDistance12, cross01, cross02, cross12);
+
+  bool crossAll = all_CrossTheSeam(maxDistanceUV, texDistance01, texDistance02, texDistance12);
+  if (isSeam(maxDistanceUV, cross01, cross02, cross12, crossAll))
+  {
+    if (crossAll)
+    {
+      // all cross the stream
+      // strip 1
+      EmitTextureVertex(1);
+      EmitWeightedTexVertex(1, 0, .9f, .1f);
+      EmitWeightedTexVertex(1, 2, .9f, .1f);
+
+      EndPrimitive();
+
+      // strip 2
+      EmitWeightedTexVertex(2, 1, .9f, .1f);
+      EmitWeightedTexVertex(2, 0, .9f, .1f);
+      EmitTextureVertex(2);
+
+      EndPrimitive();
+
+      // strip 3
+      EmitWeightedTexVertex(0, 1, .9f, .1f);
+      EmitTextureVertex(0);
+      EmitWeightedTexVertex(0, 2, .9f, .1f);
+
+      EndPrimitive();
+
+      // strip 4 center  
+      EmitWeightedTexVertexCenter(0, 1, halfTex01, halfTex02, halfTex12, epsilon); \n
+      EmitWeightedTexVertexCenter(0, 2, halfTex01, halfTex02, halfTex12, epsilon); \n
+      EmitWeightedTexVertexCenter(1, 2, halfTex01, halfTex02, halfTex12, epsilon); \n
+      //EmitWeightedTexVertex(0, 1, .5f, .5f);
+      //EmitWeightedTexVertex(0, 2, .5f, .5f);
+      //EmitWeightedTexVertex(1, 2, .5f, .5f);
+
+      EndPrimitive();
+
+    }
+    else if (v0_CrossTheSeam(cross01, cross02))
+    {
+      farVertexIndex = 0; nearVertex1 = 1; nearVertex2 = 2;
+
+      EmitStrips(farVertexIndex, nearVertex1, nearVertex2, w1, w2, level);
+
+    }
+    else if (v1_CrossTheSeam(cross01, cross12))
+    {
+      farVertexIndex = 1; nearVertex1 = 2; nearVertex2 = 0;
+
+      EmitStrips(farVertexIndex, nearVertex1, nearVertex2, w1, w2, level);
+
+    }
+    else if (v2_CrossTheSeam(cross02, cross12))
+    {
+      farVertexIndex = 2; nearVertex1 = 0; nearVertex2 = 1;
+
+      EmitStrips(farVertexIndex, nearVertex1, nearVertex2, w1, w2, level);
+
+    }
+  }
+  else
+  {
+    // pass-through original vertices
+    EmitTextureVertex(0);
+    EmitTextureVertex(1);
+    EmitTextureVertex(2);
+
+    EndPrimitive();
+
+  }
+}
+);
+
+GLchar *REVERSE_TEX_GEOMETRY_SHADER_V3 = "#version 430\n" STRINGIFY(
+  layout(triangles) in; \n
+  layout(triangle_strip, max_vertices = 36) out; \n
+  uniform float uMaxDistanceUV; \n
+  uniform float uNearDistanceUV; \n
+  uniform float uWeight1; \n
+  uniform float uWeight2; \n
+  uniform sampler2D tex; \n
+  uniform sampler2D heatmap; \n
+  \n
+  in VS_OUT\n
+{ \n
+vec3 vNormal; \n
+vec3 vPosW; \n
+vec2 vTexCoords; \n
+} gs_in[]; \n
+\n
+out GS_OUT\n
+{ \n
+vec3 vNormal; \n
+vec3 vPosW; \n
+vec2 vTexCoords; \n
+} gs_out; \n
+\n
+void EmitTextureVertex(int index)\n
+{ \n
+gl_Position = gl_in[index].gl_Position; \n
+gs_out.vNormal = gs_in[index].vNormal; \n
+gs_out.vTexCoords = gs_in[index].vTexCoords; \n
+gs_out.vPosW = gs_in[index].vPosW; \n
+EmitVertex(); \n
+}\n
+\n
+void EmitWeightedTexVertex(int index1, int index2, float weight1, float weight2)\n
+{ \n
+gl_Position = 0.5f * (gl_in[index1].gl_Position + gl_in[index2].gl_Position); \n
+gs_out.vNormal = gs_in[index1].vNormal; // the mesh is always a plane assumes always the same normal\n
+gs_out.vTexCoords = (weight1 * gs_in[index1].vTexCoords + weight2 * gs_in[index2].vTexCoords); // vertex with greater texture weight\n
+gs_out.vPosW = 0.5 * (gs_in[index1].vPosW + gs_in[index2].vPosW); \n
+EmitVertex(); \n
+}\n
+\n
+void EmitWeightedTexVertexCenter(int index1, int index2, vec2 texCoord1, vec2 texCoord2, vec2 texCoord3, float epsilon)\n
+{ \n
+gl_Position = 0.5f * (gl_in[index1].gl_Position + gl_in[index2].gl_Position); \n
+gs_out.vNormal = gs_in[index1].vNormal; // the mesh is always a plane assumes always the same normal\n
+\n
+vec2 centerTexCoord = 0.33f * (texCoord1 + texCoord2 + texCoord3); \n
+vec2 centerTexDirection = normalize(centerTexCoord - texCoord1); \n
+\n
+gs_out.vTexCoords = texCoord1 + centerTexDirection * epsilon; \n
+gs_out.vPosW = 0.5 * (gs_in[index1].vPosW + gs_in[index2].vPosW); \n
+EmitVertex(); \n
+}\n
+\n
+void EmitTexVertexByNearColor(int index1, int index2, vec2 texCoords)\n
+{ \n
+gl_Position = 0.5f * (gl_in[index1].gl_Position + gl_in[index2].gl_Position); \n
+gs_out.vNormal = gs_in[index1].vNormal; // the mesh is always a plane assumes always the same normal\n
+gs_out.vTexCoords = texCoords; \n
+gs_out.vPosW = 0.5 * (gs_in[index1].vPosW + gs_in[index2].vPosW); \n
+EmitVertex(); \n
+}\n
+\n
+void EmitStrips(vec3 farVertexIndex, vec3 nearVertex1, vec3 nearVertex2, vec2 texFarVertex, vec2 texNearVertex1, vec2 texNearVertex2, float w1, float w2, int level)\n
+{ \n
+// v0 cross the seam\n
+// strip 1\n
+level++;
+
+EmitTextureVertex(nearVertex1); \n
+EmitWeightedTexVertex(farVertexIndex, nearVertex1, w1, w2); \n
+EmitWeightedTexVertex(nearVertex1, nearVertex2, 0.5f, 0.5f); \n
+EmitWeightedTexVertex(farVertexIndex, nearVertex2, w1, w2); \n
+EmitTextureVertex(nearVertex2); \n
+\n
+EndPrimitive(); \n
+\n
+// strip 2\n
+EmitWeightedTexVertex(nearVertex1, farVertexIndex, w1, w2); \n
+EmitTextureVertex(farVertexIndex); \n
+EmitWeightedTexVertex(nearVertex2, farVertexIndex, w1, w2); \n
+\n
+EndPrimitive(); \n
+\n
+
+}\n
+\n
+bool isSeam(float maxDistanceUV, bool cross01, bool cross02, bool cross12, bool crossAll)\n
+{ \n
+return (cross01 || cross02 || cross12 || crossAll); \n
+}\n
+\n
+bool v0_CrossTheSeam(bool cross01, bool cross02)\n
+{ \n
+return (cross01 && cross02); \n
+}\n
+
+bool v1_CrossTheSeam(bool cross01, bool cross12)\n
+{ \n
+return (cross01 && cross12); \n
+}\n
+\n
+bool v2_CrossTheSeam(bool cross02, bool cross12)\n
+{ \n
+return (cross02 && cross12); \n
+}\n
+\n
+bool all_CrossTheSeam(float maxDistanceUV, float distance01, float distance02, float distance12)\n
+{ \n
+float crossAllMaxDistanceUV = 0.33f * maxDistanceUV; \n
+\n
+return (distance01 > crossAllMaxDistanceUV && distance02 > crossAllMaxDistanceUV && distance12 > crossAllMaxDistanceUV);
+}\n
+\n
+void ComputeTexDistance(vec2 texV0, vec2 texV1, vec2 texV2, inout float distance01, inout float distance02, inout float distance12)
+{
+  distance01 = length(texV0 - texV1);
+  distance02 = length(texV0 - texV2);
+  distance12 = length(texV1 - texV2);
+}
+
+void ComputeCrossSeam(float maxDistanceUV, float distance01, float distance02, float distance12, inout bool cross01, inout bool cross02, inout bool cross12)
+{
+  cross01 = distance01 > maxDistanceUV;
+  cross02 = distance02 > maxDistanceUV;
+  cross12 = distance12 > maxDistanceUV;
+}
+
+void ComputeHalfTextures(vec2 texV0, vec2 texV1, vec2 texV2, inout vec2 halfTex01, inout vec2 halfTex02, inout vec2 halfTex12)
+{
+  halfTex01 = 0.5f * (texV0 + texV1);
+  halfTex02 = 0.5f * (texV0 + texV2);
+  halfTex12 = 0.5f * (texV1 + texV2);
+}
+
+void ComputeHalfDistances(vec4 v0, vec4 v1, vec4 v2, inout vec4 half01, inout vec4 half02, inout vec4 half12)
+{
+  half01 = 0.5f * (v0 + v1);
+  half02 = 0.5f * (v0 + v2);
+  half12 = 0.5f * (v1 + v2);
+}
+
+vec2 GetTexCoordsByNearColor(vec2 texCoords, float epsilon)
+{
+  vec4 texColor = texture(tex, texCoords);
+
+  float distances[8];
+  vec2 nearTexCoords[8];
+
+  distances[0] = length(texColor - texture(tex, texCoords + vec2(0.0f, epsilon)));
+  distances[1] = length(texColor - texture(tex, texCoords + vec2(0.0f, -epsilon)));
+  distances[2] = length(texColor - texture(tex, texCoords + vec2(-epsilon, 0.0f)));
+  distances[3] = length(texColor - texture(tex, texCoords + vec2(epsilon, 0.0f)));
+  distances[4] = length(texColor - texture(tex, texCoords + vec2(epsilon, epsilon)));
+  distances[5] = length(texColor - texture(tex, texCoords + vec2(epsilon, -epsilon)));
+  distances[6] = length(texColor - texture(tex, texCoords + vec2(-epsilon, epsilon)));
+  distances[7] = length(texColor - texture(tex, texCoords + vec2(-epsilon, -epsilon)));
+
+
+  nearTexCoords[0] = texCoords + vec2(0.0f, epsilon);
+  nearTexCoords[1] = texCoords + vec2(0.0f, -epsilon);
+  nearTexCoords[2] = texCoords + vec2(-epsilon, 0.0f);
+  nearTexCoords[3] = texCoords + vec2(epsilon, 0.0f);
+  nearTexCoords[4] = texCoords + vec2(epsilon, epsilon);
+  nearTexCoords[5] = texCoords + vec2(epsilon, -epsilon);
+  nearTexCoords[6] = texCoords + vec2(-epsilon, epsilon);
+  nearTexCoords[7] = texCoords + vec2(-epsilon, -epsilon);
+
+  int nearColorIndex = 0;
+  for (int i; i < 8; i++)
+  {
+    if (distances[i] < distances[nearColorIndex])
+    {
+      nearColorIndex = i;
+    }
+  }
+  return nearTexCoords[nearColorIndex];
+}
+
+void main(void) {
+
+  float maxDistanceUV = uMaxDistanceUV;
+  float epsilon = uNearDistanceUV;
+  float w1 = uWeight1;
+  float w2 = uWeight2;
+
+  int farVertexIndex; int nearVertex1; int nearVertex2;
+  float texDistance01; float texDistance02; float texDistance12;
+  bool cross01; bool cross02; bool cross12; \n
+    int level = 0; \n
+
+    vec2 halfTex01; vec2 halfTex02; vec2 halfTex12;
+  vec4 half01; vec4 half02; vec4 half12;
+
+  ComputeHalfTextures(gs_in[0].vTexCoords, gs_in[1].vTexCoords, gs_in[2].vTexCoords, halfTex01, halfTex02, halfTex12);
+  ComputeHalfDistances(gl_in[0].gl_Position, gl_in[1].gl_Position, gl_in[2].gl_Position, half01, half02, half12);
+
+  ComputeTexDistance(gs_in[0].vTexCoords, gs_in[1].vTexCoords, gs_in[2].vTexCoords, texDistance01, texDistance02, texDistance12);
+
+  ComputeCrossSeam(maxDistanceUV, texDistance01, texDistance02, texDistance12, cross01, cross02, cross12);
+
+  bool crossAll = all_CrossTheSeam(maxDistanceUV, texDistance01, texDistance02, texDistance12);
+  if (isSeam(maxDistanceUV, cross01, cross02, cross12, crossAll))
+  {
+    if (crossAll)
+    {
+      // all cross the stream
+      // strip 1
+      EmitTextureVertex(1);
+      EmitWeightedTexVertex(1, 0, .9f, .1f);
+      EmitWeightedTexVertex(1, 2, .9f, .1f);
+
+      EndPrimitive();
+
+      // strip 2
+      EmitWeightedTexVertex(2, 1, .9f, .1f);
+      EmitWeightedTexVertex(2, 0, .9f, .1f);
+      EmitTextureVertex(2);
+
+      EndPrimitive();
+
+      // strip 3
+      EmitWeightedTexVertex(0, 1, .9f, .1f);
+      EmitTextureVertex(0);
+      EmitWeightedTexVertex(0, 2, .9f, .1f);
+
+      EndPrimitive();
+
+      // strip 4 center  
+      EmitWeightedTexVertex(0, 1, .5f, .5f);
+      EmitWeightedTexVertex(0, 2, .5f, .5f);
+      EmitWeightedTexVertex(1, 2, .5f, .5f);
+
+      EndPrimitive();
+
+    }
+    else if (v0_CrossTheSeam(cross01, cross02))
+    {
+      farVertexIndex = 0; nearVertex1 = 1; nearVertex2 = 2;
+
+      EmitStrips(farVertexIndex, nearVertex1, nearVertex2, w1, w2, level);
+
+    }
+    else if (v1_CrossTheSeam(cross01, cross12))
+    {
+      farVertexIndex = 1; nearVertex1 = 2; nearVertex2 = 0;
+
+      EmitStrips(farVertexIndex, nearVertex1, nearVertex2, w1, w2, level);
+
+    }
+    else if (v2_CrossTheSeam(cross02, cross12))
+    {
+      farVertexIndex = 2; nearVertex1 = 0; nearVertex2 = 1;
+
+      EmitStrips(farVertexIndex, nearVertex1, nearVertex2, w1, w2, level);
+
+    }
+  }
+  else
+  {
+    // pass-through original vertices
+    EmitTextureVertex(0);
+    EmitTextureVertex(1);
+    EmitTextureVertex(2);
+
+    EndPrimitive();
+
+  }
+}
+);
+
+
 namespace OGL_Renderer
 {
 
@@ -328,26 +1417,49 @@ namespace OGL_Renderer
 
     if (s_rigidBodyProgram == GLuint(-1))
     {
-      s_rigidBodyProgram = InitShader("../../shaders/rigid.vs", "../../shaders/rigid.fs");
+      Shader rigidBodyShaders[5] = {
+        { "RIGID_VERTEX_SHADER", GL_VERTEX_SHADER, RIGID_VERTEX_SHADER },
+        { "RIGID_FRAGMENT_SHADER", GL_FRAGMENT_SHADER, RIGID_FRAGMENT_SHADER },
+        { NULL, GL_TESS_CONTROL_SHADER, NULL },
+        { NULL, GL_TESS_EVALUATION_SHADER, NULL },
+        { NULL, GL_GEOMETRY_SHADER, NULL }
+      };
+
+      s_rigidBodyProgram = InitShader(rigidBodyShaders);
     }
 
     if (s_filmProgram == GLuint(-1))
     {
-      s_filmProgram = InitShader("../../shaders/film.vs", "../../shaders/film.fs");
+      Shader filmShaders[5] = {
+        { "FILM_VERTEX_SHADER", GL_VERTEX_SHADER, FILM_VERTEX_SHADER },
+        { "FILM_FRAGMENT_SHADER", GL_FRAGMENT_SHADER, RIGID_FRAGMENT_SHADER },
+        { NULL, GL_TESS_CONTROL_SHADER, NULL },
+        { NULL, GL_TESS_EVALUATION_SHADER, NULL },
+        { NULL, GL_GEOMETRY_SHADER, NULL }
+      };
+      s_filmProgram = InitShader(filmShaders);
     }
 
     if (s_reverseTexProgram == GLuint(-1))
     {
-      //s_reverseTexProgram = InitShader("../../shaders/reverse_tex.vs", "../../shaders/reverse_tex.fs", "../../shaders/reverse_tex.tcs", "../../shaders/reverse_tex.tes", "../../shaders/reverse_tex.gs");
-      s_reverseTexProgram = InitShader("../../shaders/reverse_tex.vs", "../../shaders/reverse_tex.fs", NULL, NULL, "../../shaders/reverse_tex.gs");
+      Shader reverseTextureShaders[5] = {
+        { "../../shaders/reverse_tex.vs", GL_VERTEX_SHADER, NULL },
+        { "../../shaders/reverse_tex.fs", GL_FRAGMENT_SHADER, NULL},
+        { "../../shaders/reverse_tex_v2.tcs", GL_TESS_CONTROL_SHADER, NULL },
+        { "../../shaders/reverse_tex_v2.tes", GL_TESS_EVALUATION_SHADER, NULL },
+        { "../../shaders/pass_through.gs", GL_GEOMETRY_SHADER, NULL }
+      };
+      
+      g_enable_paches = reverseTextureShaders[2].filename != NULL;
 
+      s_reverseTexProgram = InitShader(reverseTextureShaders, true);
     }
 
     //
     GLint MaxPatchVertices = 0;
     glGetIntegerv(GL_MAX_PATCH_VERTICES, &MaxPatchVertices);
     printf("Tesselation Shader - Max supported patch vertices %d\n", MaxPatchVertices);
-    //glPatchParameteri(GL_PATCH_VERTICES, 3);
+    glPatchParameteri(GL_PATCH_VERTICES, 3);
 
 	  //Load texture - begin
 	  //EPRek.png xadrez7x11.png malha_rgb.jpg
@@ -356,7 +1468,7 @@ namespace OGL_Renderer
 
     g_chessboard_texture_id = LoadTexture(GetFilePathByPlatform("../../textures/malha_rgb.jpg").c_str(), g_chessboard_texture_image);
 
-    //g_dynamic_texture, g_dynamic_texture_ID);
+    g_heat_texture_id = CreateDynamicTexture(g_dynamic_texture_image);
     
 	  g_msaaSamples = msaaSamples;
 	  g_window = window;
@@ -2097,39 +3209,42 @@ if (tcsource && tesource)
 }
 */
 
-unsigned int InitShader(const char* vShaderFile, const char* fShaderFile, const char* tscShaderFile, const char* tseShaderFile, const char* gsShaderFile) 
+unsigned int InitShader(const Shader *shaders, const bool readFile) 
 {
-
-  tShader shaders[5] = {
-    { vShaderFile, GL_VERTEX_SHADER, NULL },
-    { fShaderFile, GL_FRAGMENT_SHADER, NULL },
-    { tscShaderFile, GL_TESS_CONTROL_SHADER, NULL },
-    { tseShaderFile, GL_TESS_EVALUATION_SHADER, NULL },
-    { gsShaderFile, GL_GEOMETRY_SHADER, NULL }
-  };
-
   GLuint program = glCreateProgram();
 
-  // for vertex and fragment shader
+  // for each shader of the pipeline
   for (int i = 0; i < 5; ++i)
   {
-    Shader& s = shaders[i];
+    std::string shaderSource;
+    Shader s = shaders[i];
     if (s.filename == NULL)
     {
       continue; // bypass optional shaders
     }
 
+    if (readFile)
+    {
+      shaderSource = readShaderSource(s.filename);
+    } 
+    else
+    {
+      shaderSource = shaders[i].source;
+    }
+
     std::cout << "Creating shader " << s.filename << std::endl;
 
-    s.source = readShaderSource(s.filename);
-    if (shaders[i].source == NULL)
+    if (shaderSource.length() == 0)
     {
       std::cerr << "Failed to read " << s.filename << std::endl;
       exit(EXIT_FAILURE);
     }
 
     GLuint shader = glCreateShader(s.type);
-    glShaderSource(shader, 1, (const GLchar**)&s.source, NULL);
+
+    const GLchar *source = NULL;
+    source = (const GLchar *)shaderSource.c_str();
+    glShaderSource(shader, 1, &source, 0);
     glCompileShader(shader);
 
     GLint  compiled;
@@ -2148,8 +3263,6 @@ unsigned int InitShader(const char* vShaderFile, const char* fShaderFile, const 
     }
 
     std::cout << "Shader program " << s.filename << " compiled sucessfull " << std::endl;
-
-    delete[] s.source;
 
     glAttachShader(program, shader);
   }
@@ -2205,6 +3318,11 @@ GLuint GetRigidModelTextureId()
   return g_rigid_model_texture_id;
 }
 
+GLuint GetDynamicTextureId()
+{
+  return g_heat_texture_id;
+}
+
 void SetViewport(int x, int y, int width, int height)
 {
   glVerify(glViewport(x, y, width, height));
@@ -2255,7 +3373,10 @@ void BindFilmShader(Matrix44 view, Matrix44 proj, Vec3 lightPos, Vec3 camPos, Ve
   }
 }
 
-void BindReverseTextureShader(Matrix44 view, Matrix44 proj, Vec3 lightPos, Vec3 camPos, Vec4 lightColor, Vec4 ambientColor, Vec4 specularColor, unsigned int specularExpoent, Vec4 diffuseColor, float maxDistanceUV)
+void BindReverseTextureShader(Matrix44 view, Matrix44 proj, Vec3 lightPos, Vec3 camPos, 
+  Vec4 lightColor, Vec4 ambientColor, Vec4 specularColor, unsigned int specularExpoent, 
+  Vec4 diffuseColor, float maxDistanceUV, float nearDistanceUV, 
+  float weight1, float weight2, float tesselationInner, float tesselationOuter)
 {
 
   if (s_reverseTexProgram)
@@ -2264,7 +3385,12 @@ void BindReverseTextureShader(Matrix44 view, Matrix44 proj, Vec3 lightPos, Vec3 
     glEnable(GL_DEPTH_TEST);
 
     glVerify(glUseProgram(s_reverseTexProgram));
+    glVerify(glUniform1f(glGetUniformLocation(s_reverseTexProgram, "uTesselationInner"), tesselationInner));
+    glVerify(glUniform1f(glGetUniformLocation(s_reverseTexProgram, "uTesselationOuter"), tesselationOuter));
     glVerify(glUniform1f(glGetUniformLocation(s_reverseTexProgram, "uMaxDistanceUV"), maxDistanceUV));
+    glVerify(glUniform1f(glGetUniformLocation(s_reverseTexProgram, "uNearDistanceUV"), nearDistanceUV));
+    glVerify(glUniform1f(glGetUniformLocation(s_reverseTexProgram, "uWeight1"), weight1));
+    glVerify(glUniform1f(glGetUniformLocation(s_reverseTexProgram, "uWeight2"), weight2));
     glVerify(glUniform3fv(glGetUniformLocation(s_reverseTexProgram, "uLPos"), 1, lightPos));
     glVerify(glUniform4fv(glGetUniformLocation(s_reverseTexProgram, "uLColor"), 1, lightColor));
     glVerify(glUniform4fv(glGetUniformLocation(s_reverseTexProgram, "uColor"), 1, diffuseColor));
@@ -2374,6 +3500,10 @@ void DrawReverseTexture(GpuMesh* mesh, const Vec4* positions, const Vec4* normal
     glVerify(glBindTexture(GL_TEXTURE_2D, GetRigidModelTextureId()));
     glVerify(glUniform1i(glGetUniformLocation(s_reverseTexProgram, "tex"), 0));//
     glVerify(glUniform1i(glGetUniformLocation(s_reverseTexProgram, "showTexture"), showTexture));
+
+    glVerify(glActiveTexture(GL_TEXTURE1));//
+    glVerify(glBindTexture(GL_TEXTURE_2D, GetDynamicTextureId()));
+    glVerify(glUniform1i(glGetUniformLocation(s_reverseTexProgram, "heatmap"), 1));//
   }
   // Enable blending for transparency
   //glEnable(GL_BLEND);
@@ -2393,10 +3523,14 @@ void DrawReverseTexture(GpuMesh* mesh, const Vec4* positions, const Vec4* normal
   //glVerify(glBindBuffer(GL_ARRAY_BUFFER, mesh->mIndicesIBO));
   //glVerify(glBufferData(GL_ELEMENT_ARRAY_BUFFER, nIndices * sizeof(int), &indices[0], GL_STATIC_DRAW));
 
-  //
-  glVerify(glDrawElements(GL_TRIANGLES, nIndices, GL_UNSIGNED_INT, 0));
-  //glVerify(glDrawElements(GL_PATCHES, nIndices, GL_UNSIGNED_INT, 0));
-
+  if (g_enable_paches)
+  {
+    glVerify(glDrawElements(GL_PATCHES, nIndices, GL_UNSIGNED_INT, 0)); // when using tesselation shader
+  }
+  else
+  {
+    glVerify(glDrawElements(GL_TRIANGLES, nIndices, GL_UNSIGNED_INT, 0));
+  }
   
   glVerify(glBindVertexArray(0));
   

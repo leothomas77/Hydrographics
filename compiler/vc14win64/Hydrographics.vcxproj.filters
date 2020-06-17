@@ -241,5 +241,20 @@
     <None Include="..\..\shaders\reverse_tex.gs">
       <Filter>shaders</Filter>
     </None>
+    <None Include="..\..\shaders\reverse_tex_v2.gs">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="..\..\shaders\reverse_tex_v3.gs">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="..\..\shaders\reverse_tex_v2.tcs">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="..\..\shaders\reverse_tex_v2.tes">
+      <Filter>shaders</Filter>
+    </None>
+    <None Include="..\..\shaders\pass_through.gs">
+      <Filter>shaders</Filter>
+    </None>
   </ItemGroup>
 </Project>

@@ -293,7 +293,12 @@ std::vector<Vec4> g_contact_positions;
 std::vector<Vec4> g_contact_normals;
 std::vector<Vec4> g_contact_uvs;
 std::vector<int> g_contact_indexes;
-float g_max_distance_uv = 0.3f;
+float g_max_distance_uv = 0.36f;
+float g_near_distance_uv = 0.01f;
+float g_weight1 = 0.0f;
+float g_weight2 = 1.0f;
+float g_tesselation_inner = 1.0f;
+float g_tesselation_outer = 2.0f;
 
 NvFlexParams g_params;
 NvFlexTimers g_timers;

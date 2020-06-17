@@ -191,6 +191,7 @@
     <ClCompile Include="..\..\source\shadersDemoContext.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="..\..\shaders\pass_through.gs" />
     <None Include="..\..\shaders\reverse_tex.fs">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|x64'">true</ExcludedFromBuild>
     </None>
@@ -204,6 +205,18 @@
     <None Include="..\..\shaders\reverse_tex.tcs" />
     <None Include="..\..\shaders\reverse_tex.tes" />
     <None Include="..\..\shaders\film.vs">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|x64'">true</ExcludedFromBuild>
+    </None>
+    <None Include="..\..\shaders\reverse_tex_v2.gs">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|x64'">true</ExcludedFromBuild>
+    </None>
+    <None Include="..\..\shaders\reverse_tex_v2.tcs">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|x64'">true</ExcludedFromBuild>
+    </None>
+    <None Include="..\..\shaders\reverse_tex_v2.tes">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|x64'">true</ExcludedFromBuild>
+    </None>
+    <None Include="..\..\shaders\reverse_tex_v3.gs">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|x64'">true</ExcludedFromBuild>
     </None>
     <None Include="..\..\shaders\rigid.fs">

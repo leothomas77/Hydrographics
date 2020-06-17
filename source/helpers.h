@@ -500,7 +500,7 @@ void CreateHydrographicSpringGrid(Vec3 lower, Vec3 meshCenter, int dx, int dy, i
 				g_buffers->velocities.push_back(velocity);
 				g_buffers->phases.push_back(phase);
 
-				// texture coordinates
+				// texture coordinates to checkboard pattern
 				float u = (float)x / (dx - 1);
 				float v = (float)y / (dy - 1);
 				g_buffers->uvs.push_back(Vec4(u, v, 0.0f, 0.0f));
@@ -529,9 +529,9 @@ void CreateHydrographicSpringGrid(Vec3 lower, Vec3 meshCenter, int dx, int dy, i
             g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y - 1, dx));
             g_buffers->triangles.push_back(baseIndex + GridIndex(x, y - 1, dx));
             // 2nd triangle
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x, y, dx));
             g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y, dx));
             g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y - 1, dx));
-            g_buffers->triangles.push_back(baseIndex + GridIndex(x, y, dx));
           }
           else 
           {
@@ -543,12 +543,12 @@ void CreateHydrographicSpringGrid(Vec3 lower, Vec3 meshCenter, int dx, int dy, i
             */
             // 1st triangle
             g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y, dx));
-            g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y - 1, dx));
-            g_buffers->triangles.push_back(baseIndex + GridIndex(x, y - 1, dx));
-            // 2nd triangle
-            g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y, dx));
             g_buffers->triangles.push_back(baseIndex + GridIndex(x, y - 1, dx));
             g_buffers->triangles.push_back(baseIndex + GridIndex(x, y, dx));
+            // 2nd triangle
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y, dx));
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y - 1, dx));
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x, y - 1, dx));
           }
 
           g_buffers->triangleNormals.push_back(Vec3(0.0f, 1.0f, 0.0f));

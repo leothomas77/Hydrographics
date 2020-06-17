@@ -17,4 +17,3 @@ void main()
 	vTexCoords = showTexture ? vTexCoords = aTexCoords : vec2(0.0);
 	gl_Position = proj * view * model * vec4(aPosition, 1.0);
 }
-//
