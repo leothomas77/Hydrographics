@@ -54,7 +54,7 @@
 #include "shaders.h"
 #include "imgui.h"
 #include "shadersDemoContext.h"
-//#include "ColorGradient.h"
+#include "ColorGradient.h"
 
 #include "model_data.h"
 #include "main.h"
@@ -545,7 +545,7 @@ void RenderScene()
   }
   
   // draw flat film with distortion after build the contacts texture
-  if (g_drawReverseTexture && !g_generateContactsTexture && g_pause)
+  if (g_drawReverseTexture && !g_generateContactsTexture)
   {
     // hide other meshes and draw only flat film with reverse texture
     g_drawHydrographic = false;
@@ -600,9 +600,11 @@ void RenderDebug()
     //BeginPoints(5.0f);
 		int start = 0;
 
-		//ColorGradient *colorGradient = new ColorGradient();
+		ColorGradient *colorGradient = new ColorGradient();
 
-		std::vector<Vec4> pixels;
+    std::vector<Vec4> pixels;
+
+    float maxDisplacement = 0.0f;
 
 		for (int i = start; i < g_buffers->springLengths.size(); ++i)
 		{
@@ -613,28 +615,33 @@ void RenderDebug()
 
 			int a = g_buffers->springIndices[i * 2];
 			int b = g_buffers->springIndices[i * 2 + 1];
-			float distortedLength = Length(g_buffers->positions[a] - g_buffers->positions[b]);
+			
+      //Heatmap of distortions
+      if (g_drawStretching)
+      {
+        g_drawStiffness = false;
 
-			//Vec3 restA = originalPositions[a];
-			//Vec3 restB = originalPositions[b];
-			//float restLength = Length(restA - restB);
+        float distortedLength = Length(g_buffers->positions[a] - g_buffers->positions[b]);
+        Vec3 restA = g_contact_positions[a];
+        Vec3 restB = g_contact_positions[b];
+        float restLength = Length(restA - restB);
+        float displacement = abs(distortedLength - restLength) / restLength;
+        color = colorGradient->getColorAtValue(displacement * 120.0f);
+      }
 
-			//Heatmap of distortions
-			//float displacement = abs(distortedLength - restLength) / restLength;
-			//color = colorGradient->getColorAtValue(displacement );
+      //Heatmap of stiffness
+      if (g_drawStiffness)
+      {
+        color = colorGradient->getColorAtValue(g_buffers->springStiffness[i]);
+      }
 
-			//Heatmap of stiffness
-			//color = colorGradient->getColorAtValue(g_buffers->springStiffness[i]);
-			//pixels.push_back(color);
-
-			DrawLine(Vec3(g_buffers->positions[a]), Vec3(g_buffers->positions[b]), color);
+			DrawLine(Vec3(g_contact_positions[a]), Vec3(g_contact_positions[b]), color);
       //DrawPoint(Vec3(g_buffers->positions[a]), color);
 		}
 
 		EndLines();
     //EndPoints();
 	}
-
 	// visualize contacts against the environment
   // all arrays are iterated in CPU
 	if (g_drawContacts)
@@ -1162,16 +1169,18 @@ void UpdateFrame(bool &quit)
 	if (!g_pause || g_step)
 	{
 		UpdateScene();
-	}
+  }
 
-  if (g_generateContactsTexture && g_pause)
+  if (g_generateContactsTexture && g_complete)
   {
     // run this block only once
+    g_generateContactsTexture = false;
     // this block should execute before unmap command
     // because of read buffer data from comming from gpu to cpu
-    g_generateContactsTexture = false;
     BuildReverseTextureMapping();
+    g_drawReverseTexture = true;
   }
+
 
 	//-------------------------------------------------------------------
 	// Render

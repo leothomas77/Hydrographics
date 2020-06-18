@@ -32,6 +32,7 @@
 #include <iomanip>
 #include <algorithm>
 
+
 // disable some warnings
 #if _WIN32
 #pragma warning(disable: 4267)  // conversion from 'size_t' to 'int', possible loss of data
@@ -422,11 +423,18 @@ void CreateSpringGrid(Vec3 lower, int dx, int dy, int dz, float radius, int phas
 //hyperbolic clip
 // https://stackoverflow.com/questions/9323903/most-efficient-elegant-way-to-clip-a-number
 float clip(float x, float min, float max) {
-	return ((max - min) / 2)*((exp(x) - exp(-x)) / (exp(x) + exp(-x))) + max - (max - min) / 2;
+  if (x > max)
+    return max;
+
+  if (x < min)
+    return min;
+
+	return ((max - min) * 0.5f)*((exp(x) - exp(-x)) / (exp(x) + exp(-x))) + max - (max - min) * 0.5f;
+
 }
 
 float computeStiffness(float r, float rMax, float x, float x0, float z, float z0) {
-	int mode = 5;
+	int mode = 99;
 	float a, b, c, f;
 	float factor = 0.02f;
 
@@ -439,7 +447,7 @@ float computeStiffness(float r, float rMax, float x, float x0, float z, float z0
 			break;
 		case 1:
 			//f(r) = a(r)^2 + b
-			a = -20.0f;
+			a = 10.0f;
 			b = 1.0f;
 			f = a * sqr(r) + b;
 			break;
@@ -458,11 +466,11 @@ float computeStiffness(float r, float rMax, float x, float x0, float z, float z0
 			f = sqr(x - x0) / a + sqr(z - z0) / b + c;
 			break;
 		default:
-			f = 0.4f;
+			f = 1.0f; //pass-through
 			break;
 	}
 
-	f = clip(f, 0.01f, 1.0f);
+  f = 1.0f - clip(f, 0.01f, 1.0f);
 
 	return f;
 }
@@ -525,13 +533,13 @@ void CreateHydrographicSpringGrid(Vec3 lower, Vec3 meshCenter, int dx, int dy, i
               v2 v4
             */
             // 1st triangle
-            g_buffers->triangles.push_back(baseIndex + GridIndex(x, y, dx));
-            g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y - 1, dx));
-            g_buffers->triangles.push_back(baseIndex + GridIndex(x, y - 1, dx));
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x, y, dx));        //v4
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y - 1, dx));//v1
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x, y - 1, dx));    //v3
             // 2nd triangle
-            g_buffers->triangles.push_back(baseIndex + GridIndex(x, y, dx));
-            g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y, dx));
-            g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y - 1, dx));
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y - 1, dx));//v1
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x, y, dx));        //v4
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y, dx));    //v2
           }
           else 
           {
@@ -542,13 +550,13 @@ void CreateHydrographicSpringGrid(Vec3 lower, Vec3 meshCenter, int dx, int dy, i
             v2 v4
             */
             // 1st triangle
-            g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y, dx));
-            g_buffers->triangles.push_back(baseIndex + GridIndex(x, y - 1, dx));
-            g_buffers->triangles.push_back(baseIndex + GridIndex(x, y, dx));
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y, dx));    //v2
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y - 1, dx));//v1
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x, y - 1, dx));    //v3
             // 2nd triangle
-            g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y, dx));
-            g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y - 1, dx));
-            g_buffers->triangles.push_back(baseIndex + GridIndex(x, y - 1, dx));
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y, dx));    //v2
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x, y - 1, dx));    //v3
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x, y, dx));        //v4
           }
 
           g_buffers->triangleNormals.push_back(Vec3(0.0f, 1.0f, 0.0f));
@@ -569,10 +577,10 @@ void CreateHydrographicSpringGrid(Vec3 lower, Vec3 meshCenter, int dx, int dy, i
 			if (x > 0)
 			{
 				int index1 = y*dx + x - 1;
-				//Vec4 mean = 0.5f * (g_buffers->positions[baseIndex + index0] + g_buffers->positions[baseIndex + index1]);
-				//float d = computeDistance(distortionCenter, Vec3(mean));
-				//CreateSpring(baseIndex + index0, baseIndex + index1, computeStiffness(d, min(dx * radius, dy * radius), mean.x, distortionCenter.x, mean.z, distortionCenter.z));
-        CreateSpring(baseIndex + index0, baseIndex + index1, stretchStiffness);
+				Vec4 mean = 0.5f * (g_buffers->positions[baseIndex + index0] + g_buffers->positions[baseIndex + index1]);
+				float d = computeDistance(distortionCenter, Vec3(mean));
+				CreateSpring(baseIndex + index0, baseIndex + index1, computeStiffness(d, min(dx * radius, dy * radius), mean.x, distortionCenter.x, mean.z, distortionCenter.z));
+        //CreateSpring(baseIndex + index0, baseIndex + index1, stretchStiffness);
       }
 
 			if (hasBendShiftess && x > 1)
@@ -606,10 +614,10 @@ void CreateHydrographicSpringGrid(Vec3 lower, Vec3 meshCenter, int dx, int dy, i
 			if (y > 0)
 			{
 				int index1 = (y - 1)*dx + x;
-				//Vec4 mean = 0.5f * (g_buffers->positions[baseIndex + index0] + g_buffers->positions[baseIndex + index1]);
-				//float d = computeDistance(distortionCenter, Vec3(mean));
-				//CreateSpring(baseIndex + index0, baseIndex + index1, computeStiffness(d, min(dx * radius, dy * radius), mean.x, distortionCenter.x, mean.z, distortionCenter.z));
-        CreateSpring(baseIndex + index0, baseIndex + index1, stretchStiffness);
+				Vec4 mean = 0.5f * (g_buffers->positions[baseIndex + index0] + g_buffers->positions[baseIndex + index1]);
+				float d = computeDistance(distortionCenter, Vec3(mean));
+				CreateSpring(baseIndex + index0, baseIndex + index1, computeStiffness(d, min(dx * radius, dy * radius), mean.x, distortionCenter.x, mean.z, distortionCenter.z));
+        //CreateSpring(baseIndex + index0, baseIndex + index1, stretchStiffness);
       }
 
 			if (hasBendShiftess && y > 1)

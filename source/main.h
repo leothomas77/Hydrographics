@@ -388,10 +388,9 @@ float g_camFar;
 
 Vec3 g_lightPos;
 Vec3 g_lightDir = Normalize(Vec3(5.0f, -15.0f, 7.5f));
-//Vec3 g_lightTarget;
-//bool g_centerLight = true;
 
 bool g_pause = false;
+bool g_complete = false;
 bool g_step = false;
 bool g_capture = false;
 bool g_showHelp = true;
@@ -414,9 +413,12 @@ bool g_drawEllipsoids;
 bool g_drawPoints;
 bool g_drawMesh;
 bool g_drawCloth;
-bool g_drawHydrographic;
+bool g_drawHydrographic = true;
 bool g_drawHydrographicCollisionMesh = true;
 bool g_drawAABB = false;
+bool g_drawStiffness = false;
+bool g_drawStretching = false;
+
 Mesh* g_mesh_rigid;
 bool g_drawShadows;
 float g_expandCloth;	// amount to expand cloth along normal (to account for particle radius)

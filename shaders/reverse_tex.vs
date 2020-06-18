@@ -14,31 +14,25 @@ out VS_OUT
   vec3 vNormal;
   vec3 vPosW;
   vec2 vTexCoords;
-  int  triangleIndexes[3];
-  int vertexID; 
 } vs_out;
 
 void main()
 {
-	//Normal_CS_in = (normalize(normalMat * vec4(aNormal.xyz, 1.0))).xyz;
-	//WorldPos_CS_in = (model * vec4(aPosition.xyz, 1.0)).xyz;
-	//TexCoord_CS_in = showTexture ? TexCoord_CS_in = aTexCoords.xy : vec2(0.0);
-  
 	vs_out.vNormal = (normalize(normalMat * vec4(aNormal.xyz, 1.0))).xyz;
 	vs_out.vPosW = (model * vec4(aPosition.xyz, 1.0)).xyz;
 	vs_out.vTexCoords = showTexture ? vs_out.vTexCoords = aTexCoords.xy : vec2(0.0);
 
-  int indexOffset = gl_VertexID % 3;
-  int indexV0; int indexV1; int indexV2;
-  indexV0 = gl_VertexID - indexOffset + 0; 
-  indexV1 = gl_VertexID - indexOffset + 1; 
-  indexV2 = gl_VertexID - indexOffset + 2;  
+  //int indexOffset = gl_VertexID % 3;
+  //int indexV0; int indexV1; int indexV2;
+  //indexV0 = gl_VertexID - indexOffset + 0; 
+  //indexV1 = gl_VertexID - indexOffset + 1; 
+  //indexV2 = gl_VertexID - indexOffset + 2;  
 
-  vs_out.vertexID = gl_VertexID;
+  //vs_out.vertexID = gl_VertexID;
 
-  vs_out.triangleIndexes[0] = indexV0;
-  vs_out.triangleIndexes[1] = indexV1;
-  vs_out.triangleIndexes[2] = indexV2;
+  //vs_out.triangleIndexes[0] = indexV0;
+  //vs_out.triangleIndexes[1] = indexV1;
+  //vs_out.triangleIndexes[2] = indexV2;
 
 	gl_Position = proj * view * model * vec4(aPosition.xyz, 1.0);
 }				

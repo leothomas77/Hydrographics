@@ -1442,24 +1442,37 @@ namespace OGL_Renderer
 
     if (s_reverseTexProgram == GLuint(-1))
     {
+
+
       Shader reverseTextureShaders[5] = {
         { "../../shaders/reverse_tex.vs", GL_VERTEX_SHADER, NULL },
-        { "../../shaders/reverse_tex.fs", GL_FRAGMENT_SHADER, NULL},
+        { "../../shaders/reverse_tex.fs", GL_FRAGMENT_SHADER, NULL },
         { "../../shaders/reverse_tex_v2.tcs", GL_TESS_CONTROL_SHADER, NULL },
         { "../../shaders/reverse_tex_v2.tes", GL_TESS_EVALUATION_SHADER, NULL },
-        { "../../shaders/pass_through.gs", GL_GEOMETRY_SHADER, NULL }
+        { "../../shaders/reverse_tex_v2.gs", GL_GEOMETRY_SHADER, NULL }
       };
-      
-      g_enable_paches = reverseTextureShaders[2].filename != NULL;
 
+      //disable tesselation shaders
+      if (1) {
+        reverseTextureShaders[2].filename = NULL;
+        reverseTextureShaders[2].source= NULL;
+        reverseTextureShaders[3].filename = NULL;
+        reverseTextureShaders[3].source = NULL;
+      }
+      else {
+        reverseTextureShaders[4].filename = "../../shaders/pass_through.gs";
+        reverseTextureShaders[4].source = NULL;
+        //
+        GLint MaxPatchVertices = 0;
+        glGetIntegerv(GL_MAX_PATCH_VERTICES, &MaxPatchVertices);
+        printf("Tesselation Shader - Max supported patch vertices %d\n", MaxPatchVertices);
+        glPatchParameteri(GL_PATCH_VERTICES, 3);
+      }
+
+      g_enable_paches = reverseTextureShaders[2].filename != NULL;
       s_reverseTexProgram = InitShader(reverseTextureShaders, true);
     }
 
-    //
-    GLint MaxPatchVertices = 0;
-    glGetIntegerv(GL_MAX_PATCH_VERTICES, &MaxPatchVertices);
-    printf("Tesselation Shader - Max supported patch vertices %d\n", MaxPatchVertices);
-    glPatchParameteri(GL_PATCH_VERTICES, 3);
 
 	  //Load texture - begin
 	  //EPRek.png xadrez7x11.png malha_rgb.jpg
@@ -1859,7 +1872,7 @@ void DestroyRenderTexture(RenderTexture* t)
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_BLEND);
 
-    glLineWidth(1.5f);
+    glLineWidth(2.5f);
 
     for (int i = 0; i < 8; ++i)
     {

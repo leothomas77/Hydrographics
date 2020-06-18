@@ -36,7 +36,7 @@ public:
       ModelData sphere = ModelData("../../data/sphere.obj", Vec3(0.0f, 0.0f, 0.0f), 0.3f, Vec3(0.0f)); //.17
       ModelData turtle = ModelData("../../data/tartaruga-centrov2.obj", Vec3(0.0f, 0.0f, 0.0f), 0.125f, Vec3(0.0f, -95.5f, 0.0f)); //fator escala fixa medida 0.14
       ModelData onca = ModelData("../../data/Onca_Poisson_15_16_0.obj", Vec3(0.0f, -1.8f, 0.0f), 0.125f, Vec3(0.0f, 0.0f, 0.0f)); //fator escala fixa medida 0.14
-      ModelData earth = ModelData("../../data/Earth.obj", Vec3(0.0f, 0.0f, 0.0f), 0.5f, Vec3(0.0f, 0.0f, 0.0f)); //fator escala fixa medida 0.14
+      ModelData earth = ModelData("../../data/Earth.obj", Vec3(0.0f, 0.0f, 0.0f), 0.3f, Vec3(0.0f, 0.0f, 0.0f)); //fator escala fixa medida 0.14
       ModelData casco = ModelData("../../data/tartaruga-centro_casco.obj", Vec3(0.0f, 0.0f, 0.0f), 0.125f, Vec3(0.0f, -95.5f, 0.0f)); //fator escala fixa medida 0.14
 
     //modelos alinhados - N�O REMOVER                                                                                                                                 //modelos alinhados trasladados
@@ -247,11 +247,15 @@ public:
 
     // draw options
 		g_drawSprings = false;
-		g_drawHydrographic = true;
 		g_drawShadows = false;
     g_generateContactsTexture = true;
     g_drawReverseTexture = true;
     g_drawFixedSeams = true;
+    g_complete = false;
+    g_pause = false;
+    g_drawHydrographic = true;
+    g_drawHydrographicCollisionMesh = true;
+
 		mTime = 0.0f;
 	}
 
@@ -264,10 +268,11 @@ public:
 
 		GetShapeBounds(lower, upper);
 
-		// stop animation when hidrographics is complete
-		if (upper.y + 0.2f < gridY)
+		// stop animation when hidrographics is complete and generate contacts texture
+		if (upper.y + 0.2f < gridY && !g_complete)
 		{
-			g_pause = true;
+      g_complete = true;
+      g_generateContactsTexture = true;
 		}
 
 		Vec3 pos = Vec3(0.0f, initialY + dippingVelocity * time, 0.0f);
@@ -297,7 +302,7 @@ public:
     imguiSlider("Tesselation inner", &g_tesselation_inner, 0.0f, 8.0f, 0.001f);
     imguiSlider("Tesselation outer", &g_tesselation_outer, 0.0f, 8.0f, 0.001f);
     imguiSlider("Max distance UV", &g_max_distance_uv, 0.0f, 1.0f, 0.005f);
-    imguiSlider("Max near distance UV", &g_near_distance_uv, 0.0f, 1.0f, 0.001f);
+    imguiSlider("Max near distance UV", &g_near_distance_uv, 0.0f, 1.0f, 0.0001f);
     if (imguiSlider("Texture Weight1", &g_weight1, 0.0f, 1.0f, 0.001f))
     {
       g_weight2 = 1.0f - g_weight1;
@@ -317,6 +322,13 @@ public:
 		if (imguiCheck("Draw Collision Mesh", g_drawHydrographicCollisionMesh))
 			g_drawHydrographicCollisionMesh = !g_drawHydrographicCollisionMesh;
 
+    if (imguiCheck("Draw Spring Stiffness", g_drawStiffness))
+      g_drawStiffness = !g_drawStiffness;
+
+    if (imguiCheck("Draw Spring Stretching", g_drawStretching))
+      g_drawStretching = !g_drawStretching;
+    
+    
 		//imguiSlider("Grid Translation X", &models[selectedModel].translation[0], -5.0f, 5.0f, 0.001f);
 		//imguiSlider("Grid Translation Z", &models[selectedModel].translation[2], -5.0f, 5.0f, 0.001f);
 		//imguiSlider("Rotation angle X ", &angle.x, -90.0f, 90.0f, 10.0f);
@@ -367,7 +379,7 @@ public:
   int sphereSectors = 160;
 	//Film params
   float gridY = 0.3f; // grid position
-  int factor = 12; 
+  int factor = 16; 
   float A4_Spacing = 0.17f;//default spacing based on sphere model
   int A4_Width = 7; //210
   int A4_Height = 11; //297

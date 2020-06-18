@@ -191,7 +191,9 @@
     <ClCompile Include="..\..\source\shadersDemoContext.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="..\..\shaders\pass_through.tcs" />
     <None Include="..\..\shaders\pass_through.gs" />
+    <None Include="..\..\shaders\pass_through.tes" />
     <None Include="..\..\shaders\reverse_tex.fs">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='debug|x64'">true</ExcludedFromBuild>
     </None>

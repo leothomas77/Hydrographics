@@ -37,12 +37,15 @@ public:
 	//-- Places a 5 color heapmap gradient into the "color" vector:
 	void createDefaultHeatMapGradient()
 	{
-		color.clear();
-		color.push_back(ColorPoint(0, 0, 1, 0.0f));      // Blue.
-		color.push_back(ColorPoint(0, 1, 1, 0.25f));     // Cyan.
-		color.push_back(ColorPoint(0, 1, 0, 0.5f));      // Green.
-		color.push_back(ColorPoint(1, 1, 0, 0.75f));     // Yellow.
-		color.push_back(ColorPoint(1, 0, 0, 1.0f));      // Red.
+    float rangeValues[5] = { 0.0f, 0.25f, 0.5f, 0.75f, 1.0f };
+    float factor = 1.0f;
+
+    color.clear();
+		color.push_back(ColorPoint(0, 0, 1, rangeValues[0] * factor));      // Blue.
+		color.push_back(ColorPoint(0, 1, 1, rangeValues[1] * factor));     // Cyan.
+		color.push_back(ColorPoint(0, 1, 0, rangeValues[2] * factor));      // Green.
+		color.push_back(ColorPoint(1, 1, 0, rangeValues[3] * factor));     // Yellow.
+		color.push_back(ColorPoint(1, 0, 0, rangeValues[4] * factor));      // Red.
 	}
 
 	//-- Inputs a (value) between 0 and 1 and outputs the (red), (green) and (blue)
