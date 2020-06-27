@@ -37,7 +37,7 @@ public:
       ModelData turtle = ModelData("../../data/tartaruga-centrov2.obj", Vec3(0.0f, 0.0f, 0.0f), 0.125f, Vec3(0.0f, -95.5f, 0.0f)); //fator escala fixa medida 0.14
       ModelData onca = ModelData("../../data/Onca_Poisson_15_16_0.obj", Vec3(0.0f, -1.8f, 0.0f), 0.125f, Vec3(0.0f, 0.0f, 0.0f)); //fator escala fixa medida 0.14
       ModelData earth = ModelData("../../data/Earth.obj", Vec3(0.0f, 0.0f, 0.0f), 0.3f, Vec3(0.0f, 0.0f, 0.0f)); //fator escala fixa medida 0.14
-      ModelData casco = ModelData("../../data/tartaruga-centro_casco.obj", Vec3(0.0f, 0.0f, 0.0f), 0.125f, Vec3(0.0f, -95.5f, 0.0f)); //fator escala fixa medida 0.14
+      ModelData casco = ModelData("../../data/tartaruga-centro_casco.obj", Vec3(-0.1f, 0.0f, 0.0f), 0.18f, Vec3(0.0f, -90.0f, 0.0f)); //fator escala fixa medida 0.14
 
     //modelos alinhados - N�O REMOVER                                                                                                                                 //modelos alinhados trasladados
       //ModelData tetra = ModelData("../../data/tetrahedron2.obj", Vec3(-0.02f, 0.0f, 0.3f), 0.216f, Vec3(0.0f, -90.0f, 0.0f));//fator escala medido 0.216
@@ -63,14 +63,14 @@ public:
       //0: tetraedro 1: sphere 2: turtle
       // with texture
       //3: onca 4: bunny 5: earth 6: casco
-      selectedModel = 4;
+      selectedModel = 5;
     }
 
 
     g_fps = 0.0f;
     g_frame = 0;
 		//float stretchStiffness = 1.0f; // default tartaruga esfera tetra
-    float stretchStiffness = 1.0f; // onca: 0.2 
+    float stretchStiffness = 0.2f; // onca: 0.2 
     float bendStiffness = 0.75f; // not used
 		float shearStiffness = 0.5f; // not used
 		verticalInvMass = 1.0f;
