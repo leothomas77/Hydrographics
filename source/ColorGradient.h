@@ -42,9 +42,9 @@ public:
 
     color.clear();
 		color.push_back(ColorPoint(0, 0, 1, rangeValues[0] * factor));      // Blue.
-		color.push_back(ColorPoint(0, 1, 1, rangeValues[1] * factor));     // Cyan.
+		color.push_back(ColorPoint(0, 1, 1, rangeValues[1] * factor));      // Cyan.
 		color.push_back(ColorPoint(0, 1, 0, rangeValues[2] * factor));      // Green.
-		color.push_back(ColorPoint(1, 1, 0, rangeValues[3] * factor));     // Yellow.
+		color.push_back(ColorPoint(1, 1, 0, rangeValues[3] * factor));      // Yellow.
 		color.push_back(ColorPoint(1, 0, 0, rangeValues[4] * factor));      // Red.
 	}
 

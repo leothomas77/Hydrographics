@@ -47,7 +47,7 @@
     <ClCompile>
       <FloatingPointModel>Precise</FloatingPointModel>
       <AdditionalOptions> /d2Zi+</AdditionalOptions>
-      <Optimization>Disabled</Optimization>
+      <Optimization>MaxSpeed</Optimization>
       <AdditionalIncludeDirectories>$(CUDA_PATH)/include;$(CUDA_PATH)/extras/cupti/include;./..;./../..;./../../external/SDL2-2.0.4/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>_CONSOLE;WIN32;_CRT_SECURE_NO_WARNINGS;_DEBUG;_ITERATOR_DEBUG_LEVEL=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <WarningLevel>Level3</WarningLevel>
@@ -55,6 +55,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>
       </PrecompiledHeaderFile>
+      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
     </ClCompile>
     <Link>
       <AdditionalOptions>

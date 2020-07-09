@@ -51,14 +51,17 @@ SDL_GameController* g_gamecontroller = NULL;
 void Init(int scene, bool centerCamera);
 void RandInit();
 void Reset();
+void Destroy();
 void Shutdown();
 void UpdateCamera();
 void SyncScene();
 void UpdateScene();
 void RenderDebug();
 void BuildReverseTextureMapping();
+void PostProcessReverseTexture();
 void StoreReport(int type, int factor);
 void ShowReport();
+bool isTestingMode();
 void UpdateFrame(bool &quit);
 void ErrorCallback(NvFlexErrorSeverity, const char* msg, const char* file, int line);
 // imGui
@@ -88,10 +91,6 @@ struct SimBuffers
 	NvFlexVector<int> phases;
 	NvFlexVector<Vec4> normals;
 	NvFlexVector<int> activeIndices;
-	//NvFlexVector<int> diffuseCount;
-
-	//NvFlexVector<Vec4>  originalPositions;	// for compute displacement heatmap
-
 	// convexes
 	NvFlexVector<NvFlexCollisionGeometry> shapeGeometry;
 	NvFlexVector<Vec4> shapePositions;
@@ -111,8 +110,6 @@ struct SimBuffers
 
 	SimBuffers(NvFlexLibrary* l) :
 		positions(l), restPositions(l), velocities(l), phases(l), normals(l), activeIndices(l), 
-    //diffuseCount(l),
-		//originalPositions(l),
 		shapeGeometry(l), shapePositions(l), shapeRotations(l),
 		shapePrevPositions(l), shapePrevRotations(l), shapeFlags(l),
 		springIndices(l), springLengths(l), springStiffness(l),
@@ -131,10 +128,6 @@ void MapBuffers(SimBuffers* buffers)
 	buffers->phases.map();
 	buffers->normals.map();
 	buffers->activeIndices.map();
-	//buffers->diffuseCount.map();
-
-	//buffers->originalPositions.map();
-
 	// convexes
 	buffers->shapeGeometry.map();
 	buffers->shapePositions.map();
@@ -161,10 +154,6 @@ void UnmapBuffers(SimBuffers* buffers)
 	buffers->phases.unmap();
 	buffers->normals.unmap();
 	buffers->activeIndices.unmap();
-	//buffers->diffuseCount.unmap();
-
-	//buffers->originalPositions.unmap();
-	
 	// convexes
 	buffers->shapeGeometry.unmap();
 	buffers->shapePositions.unmap();
@@ -196,10 +185,6 @@ void DestroyBuffers(SimBuffers* buffers)
 	buffers->phases.destroy();
 	buffers->normals.destroy();
 	buffers->activeIndices.destroy();
-	//buffers->diffuseCount.destroy();
-
-	//buffers->originalPositions.destroy();
-	
 	// convexes
 	buffers->shapeGeometry.destroy();
 	buffers->shapePositions.destroy();
@@ -232,6 +217,17 @@ int g_msaaSamples = 8;
 
 int g_numSubsteps;
 
+// render phong parameters
+Vec3 g_meshColor;
+Vec3  g_clearColor;
+float g_lightDistance;
+float g_fogDistance;
+Vec4 g_lightColor = Vec4(1.0f, 1.0f, 1.0f, 1.0f);
+Vec4 g_ambientColor = Vec4(0.15f, 0.15f, 0.15f, 1.0f);
+Vec4 g_diffuseColor = Vec4(1.0f, 1.0f, 1.0f, 1.0f);
+Vec4 g_specularColor = Vec4(1.0f, 1.0f, 1.0f, 1.0f);
+unsigned int g_specularExpoent = 40;
+
 // a setting of -1 means Flex will use the device specified in the NVIDIA control panel
 int g_device = -1;
 char g_deviceName[256];
@@ -255,18 +251,40 @@ int g_meshFactorStep = 10;
 
 int g_voxelFactor = 64;
 int g_voxelactorMin = 64;
-int g_voxelFactorMax = 320;
-int g_voxelFactorStep = 16;
+int g_voxelFactorMax = 400.5;
+float g_voxelFactorStep = 1.226; //multiplier factor to a geometric projection from 64 to 400.5
+                                 //depending on memory
 
 int g_meshVertices;
 
-// computes fps
+// computing fps
 float g_fps = 0.0f;
 float g_avgFPS = 0.0f;
 float g_avgUpdateTime = 0.0f;
 float g_avgRenderTime = 0.0f;
 float g_avgWaitTime = 0.0f;
 float g_avgLatencyTime = 0.0f;
+
+vector<float> frametimes;
+vector<float> update_times;
+vector<float> render_times;
+vector<float> wait_times;
+vector<float> latency_times;
+
+struct TestReport {
+  int type;
+  int factor;
+  int springs;
+  float avgFPS;
+  float avgUpdateTime;
+  float avgRenderTime;
+  float avgWaitTime;
+  float avgLatencyTime;
+  int voxel;
+  int meshVertices;
+};
+
+vector<TestReport> report;
 
 bool g_benchmark = false;
 bool g_extensions = true;
@@ -277,16 +295,9 @@ bool g_useAsyncCompute = true;
 bool g_increaseGfxLoadForAsyncComputeTesting = false;
 int g_graphics = 0;	// 0=ogl, 1=DX11, 2=DX12
 
-//FluidRenderer* g_fluidRenderer;
-//FluidRenderBuffers* g_fluidRenderBuffers;
-DiffuseRenderBuffers* g_diffuseRenderBuffers;
-
-
 NvFlexSolver* g_solver;
 NvFlexSolverDesc g_solverDesc;
 NvFlexLibrary* g_flexLib;
-
-std::vector<TriangleIndexes> g_triangles_by_vertex;
 
 // store data of flat distorted film
 std::vector<Vec4> g_contact_positions;
@@ -313,39 +324,13 @@ int g_maxContactsPerParticle;
 
 // mesh used for deformable object rendering
 string g_basePath;
-Mesh* g_mesh;
+
 GpuMesh* g_gpu_film_mesh;
 GpuMesh* g_gpu_rigid_mesh;
 
-//vector<Point3> g_meshRestPositions;
-//const int g_numSkinWeights = 4;
-
-vector<float> frametimes;
-vector<float> update_times;
-vector<float> render_times;
-vector<float> wait_times;
-vector<float> latency_times;
-
-struct TestReport {
-	int type;
-	int factor;
-	int springs;
-	float avgFPS;
-	float avgUpdateTime;
-	float avgRenderTime;
-	float avgWaitTime;
-	float avgLatencyTime;
-	int voxel;
-	int meshVertices;
-};
-
-vector<TestReport> report;
-
 // mapping of collision mesh to render mesh
 std::map<NvFlexTriangleMeshId, GpuMesh*> g_meshes;
-//std::map<NvFlexDistanceFieldId, GpuMesh*> g_fields;
 NvFlexDistanceFieldId g_sdf_mesh;
-//Mesh* g_mesh_debug = NULL;
 
 /* Note that this array of colors is altered by demo code, and is also read from global by graphics API impls */
 Colour g_colors[] =
@@ -402,28 +387,13 @@ bool g_debug = false;
 bool g_emit = false;
 bool g_warmup = false;
 
-// float g_waveFloorTilt = 0.0f;
-
 Vec3 g_sceneLower;
 Vec3 g_sceneUpper;
 
-float g_blur;
-float g_ior;
-bool g_drawEllipsoids;
-bool g_drawPoints;
-bool g_drawMesh;
-bool g_drawCloth;
 bool g_drawHydrographic = true;
 bool g_drawHydrographicCollisionMesh = true;
-bool g_drawAABB = false;
 bool g_drawStiffness = false;
 bool g_drawStretching = false;
-
-Mesh* g_mesh_rigid;
-bool g_drawShadows;
-float g_expandCloth;	// amount to expand cloth along normal (to account for particle radius)
-
-bool g_drawOpaque;
 int g_drawSprings;		// 0: no draw, 1: draw stretch 2: draw tether
 bool g_drawBases = false;
 bool g_drawReverseTexture = false;
@@ -434,17 +404,6 @@ bool g_drawNeighbors = false;
 bool g_drawAxis = false;
 bool g_drawNormals = false;
 bool g_drawDiffuse;
-bool g_drawShapeGrid = false;
-bool g_drawDensity = false;
-float g_pointScale;
-float g_ropeScale;
-float g_drawPlaneBias;	// move planes along their normal for rendering
-
-float g_diffuseScale;
-float g_diffuseMotionScale;
-bool g_diffuseShadow;
-float g_diffuseInscatter;
-float g_diffuseOutscatter;
 
 float g_dt = 1.0f / 60.0f;	// the time delta used for simulation
 float g_realdt;				// the real world time delta between updates
@@ -463,12 +422,6 @@ bool g_resetSolver = false;
 int g_frame = -1;
 int g_numSolidParticles = 0;
 
-int g_mouseParticle = -1;
-float g_mouseT = 0.0f;
-Vec3 g_mousePos;
-float g_mouseMass;
-bool g_mousePicked = false;
-
 // mouse
 int g_lastx;
 int g_lasty;
@@ -477,15 +430,6 @@ int g_lastb = -1;
 bool g_profile = false;
 bool g_outputAllFrameTimes = false;
 bool g_asyncComputeBenchmark = false;
-
-ShadowMap* g_shadowMap;
-
-//Vec4 g_fluidColor;
-Vec4 g_diffuseColor;
-Vec3 g_meshColor;
-Vec3  g_clearColor;
-float g_lightDistance;
-float g_fogDistance;
 
 FILE* g_ffmpeg;
 FILE* g_film;

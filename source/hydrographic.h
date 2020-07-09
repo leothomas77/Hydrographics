@@ -35,7 +35,7 @@ public:
 		  ModelData tetra = ModelData("../../data/tetrahedron2.obj", Vec3(0.0f, 0.0f, 0.0f), 0.216f, Vec3(0.0f, 90.0f, 0.0f));//fator escala medido 0.216
       ModelData sphere = ModelData("../../data/sphere.obj", Vec3(0.0f, 0.0f, 0.0f), 0.3f, Vec3(0.0f)); //.17
       ModelData turtle = ModelData("../../data/tartaruga-centrov2.obj", Vec3(0.0f, 0.0f, 0.0f), 0.125f, Vec3(0.0f, -95.5f, 0.0f)); //fator escala fixa medida 0.14
-      ModelData onca = ModelData("../../data/Onca_Poisson_15_16_0.obj", Vec3(0.0f, -1.8f, 0.0f), 0.125f, Vec3(0.0f, 0.0f, 0.0f)); //fator escala fixa medida 0.14
+      ModelData onca = ModelData("../../data/Onca_Poisson_15_16_0.obj", Vec3(-0.2f, 0.0f, 0.0f), 0.125f, Vec3(0.0f, 0.0f, 0.0f)); //fator escala fixa medida 0.14
       ModelData earth = ModelData("../../data/Earth.obj", Vec3(0.0f, 0.0f, 0.0f), 0.3f, Vec3(0.0f, 0.0f, 0.0f)); //fator escala fixa medida 0.14
       ModelData casco = ModelData("../../data/tartaruga-centro_casco.obj", Vec3(-0.1f, 0.0f, 0.0f), 0.18f, Vec3(0.0f, -90.0f, 0.0f)); //fator escala fixa medida 0.14
 
@@ -59,18 +59,17 @@ public:
     }
     else
     {
-      // without texture
+      // test models without texture
       //0: tetraedro 1: sphere 2: turtle
       // with texture
-      //3: onca 4: bunny 5: earth 6: casco
-      selectedModel = 5;
+      //3: onca 4: texture sphere 5: casco
+      selectedModel = 4;
     }
-
 
     g_fps = 0.0f;
     g_frame = 0;
 		//float stretchStiffness = 1.0f; // default tartaruga esfera tetra
-    float stretchStiffness = 0.2f; // onca: 0.2 
+    float stretchStiffness = 0.5f; // not used onca: 0.2 
     float bendStiffness = 0.75f; // not used
 		float shearStiffness = 0.5f; // not used
 		verticalInvMass = 1.0f;
@@ -111,8 +110,8 @@ public:
 		int phase = NvFlexMakePhase(0, eNvFlexPhaseSelfCollide | eNvFlexPhaseSelfCollideFilter);
 		
 		// general params
-    g_params.numIterations = 5; //onca: 3
-    g_numSubsteps = 2;
+    g_params.numIterations = 3; //onca: 3
+    g_numSubsteps = 1;
     // g_params.numIterations = 5; // iteracoes pbd default
 
     g_params.gravity[0] = 0.0f; // gravidade x, y, z
@@ -123,8 +122,8 @@ public:
 		g_params.staticFriction = 1.0;
 		g_params.particleFriction = 1.0f;
 		g_params.restitution = 0.0f; // coef. restituicao (colisao totalmente inelastica, corpos seguem juntos)
-		//g_params.adhesion = 0.032f; // coef de ades�o
-		//g_params.sleepThreshold
+		//g_params.adhesion = 0.08f; // coef de adesao
+    g_params.sleepThreshold = 0.01f;
 
 		//g_params.maxSpeed
 		//g_params.maxAcceleration
@@ -133,10 +132,10 @@ public:
 		//g_params.dissipation = 0.25f;
 		//g_params.damping = 0.5f;
 
-		// fluid params
+		// fluid params not used
 		g_params.viscosity = 0.0f;
 		// cloth params
-    g_params.drag = .2f;//0.3f;//3.5f;//força de arrasto ao tecido. aumenta sensa��o de elasticidade
+    g_params.drag = .8f;//0.3f;//3.5f;//força de arrasto ao tecido. aumenta sensa��o de elasticidade
     g_params.lift = .8f;//0.2f;//1.8f;// forca de sustentação
 		// collision params
     float radius = 0.012f;
@@ -190,26 +189,18 @@ public:
 
     // define collision mesh type
     if (1) {
-
 		  sdfMesh = CreateHydrographicSDF(mesh, GetFilePathByPlatform(models[selectedModel].path).c_str(), createFile, voxelDim, transf, sdfMargin, expand);
-			AddSDF(sdfMesh, pos, rot, 1.0f);
-
+      delete mesh;
+      AddSDF(sdfMesh, pos, rot, 1.0f);
 		}
 		else {
       // para usar esta malha, tem que ajustar as transformacoes de escala
 		  triangleMesh = CreateTriangleMesh(ImportMesh(GetFilePathByPlatform(models[selectedModel].path).c_str()));
 		  AddTriangleMesh(triangleMesh, pos, rot, 1.0f);
-
 		}
 
     // gpu mesh created by assimp import optimized for loading a full texture atlas features and rendering
     g_gpu_rigid_mesh = CreateGpuMesh(GetFilePathByPlatform(models[selectedModel].path).c_str(), transf, sdfMargin);
-
-    // get texture pixels for use in the fix seam stage
-    //g_rigid_model_texture_pixels = new u32
-    
-    //= new unsigned byte[g_rigid_texture_width * g_rigid_texture_height * 4];
-
 
 		meshIndex = g_buffers->shapePositions.size() - 1;
 		//get the sdf center after the normalization
@@ -247,7 +238,6 @@ public:
 
     // draw options
 		g_drawSprings = false;
-		g_drawShadows = false;
     g_generateContactsTexture = true;
     g_drawReverseTexture = true;
     g_drawFixedSeams = true;
@@ -290,7 +280,7 @@ public:
 		g_buffers->shapePrevPositions[meshIndex] = Vec4(prevPos, 0.0f);
 		g_buffers->shapePrevRotations[meshIndex] = prevRot;
 
-		UpdateShapes(); // update data to flex check colision
+		UpdateShapes(); // update data to flex check colision in updated positions
 
   }
 
@@ -379,7 +369,7 @@ public:
   int sphereSectors = 160;
 	//Film params
   float gridY = 0.3f; // grid position
-  int factor = 16; 
+  int factor = 23; 
   float A4_Spacing = 0.17f;//default spacing based on sphere model
   int A4_Width = 7; //210
   int A4_Height = 11; //297

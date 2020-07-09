@@ -25,10 +25,6 @@
 //
 // Copyright (c) 2013-2017 NVIDIA Corporation. All rights reserved.
 
-//#define GENERATE_CONTACTS
-//#define NEARBY_TEXTURE_COORECTION
-
-
 #include "../core/types.h"
 #include "../core/maths.h"
 #include "../core/platform.h"
@@ -70,26 +66,8 @@ void Init(int scene, bool centerCamera = true)
 
 	if (g_solver)
 	{
-		if (g_buffers)
-			DestroyBuffers(g_buffers);
-
-    for (auto& iter : g_meshes)
-		{
-			NvFlexDestroyTriangleMesh(g_flexLib, iter.first);
-			DestroyGpuMesh(iter.second);
-		}
-
-    g_meshes.clear();
-
-    NvFlexDestroyDistanceField(g_flexLib, g_sdf_mesh);
-    DestroyGpuMesh(g_gpu_rigid_mesh);
-
-    DestroyGpuMesh(g_gpu_film_mesh);
-
-		NvFlexDestroySolver(g_solver);
-		g_solver = NULL;
+    Destroy();
 	}
-
 
 	// alloc buffers
 	g_buffers = AllocBuffers(g_flexLib);
@@ -111,12 +89,7 @@ void Init(int scene, bool centerCamera = true)
 	g_buffers->triangleNormals.resize(0);
 	g_buffers->uvs.resize(0);
 
-	g_buffers->shapeGeometry.resize(0);
-	g_buffers->shapePositions.resize(0);
-	g_buffers->shapeRotations.resize(0);
-	g_buffers->shapePrevPositions.resize(0);
-	g_buffers->shapePrevRotations.resize(0);
-	g_buffers->shapeFlags.resize(0);
+  ClearShapes();
 
   // for draw distortions
   g_contact_positions.resize(0);
@@ -124,54 +97,28 @@ void Init(int scene, bool centerCamera = true)
   g_contact_uvs.resize(0);
   g_contact_indexes.resize(0);
 
-  // for compute fps
+  // for compute fps and the metrics
   g_avgFPS = g_avgUpdateTime = g_avgRenderTime = g_avgWaitTime = g_avgLatencyTime = 0.0;
+  g_fps = g_updateTime = g_renderTime = g_waitTime = g_simLatency = 0.0f;
   frametimes.resize(0);
   update_times.resize(0);
   render_times.resize(0);
   wait_times.resize(0);
   latency_times.resize(0);
 
-	// remove collision shapes
-	delete g_mesh; g_mesh = NULL;
-
 	g_frame = 0;
 	g_pause = false;
 
   g_dt = 1.0f / 60.0f;
 
-	g_blur = 1.0f;
-	g_meshColor = Vec3(0.9f, 0.9f, 0.9f);
-	g_drawEllipsoids = false;
-	g_drawPoints = true;
-	g_drawCloth = true;
-	g_expandCloth = 0.0f;
-	g_drawShadows = true;
-
-	g_drawOpaque = false;
-	g_drawSprings = false;
-	g_drawDiffuse = false;
-	g_drawMesh = true;
-	g_drawDensity = false;
-	//g_ior = 1.0f;
 	g_lightDistance = 2.0f;
 	g_fogDistance = 0.005f;
 
-  //Vec3 perspectiveCam = Vec3(6.0f, 8.0f, 18.0f);
   g_camPos.resize(0);
-  //g_camPos.push_back(perspectiveCam);
-  //g_camIndex = g_camPos.size() - 1;
-
-  //g_camAngle.push_back(Vec3(0.0f, -DegToRad(20.0f), 0.0f));
-
-	g_camSpeed = 0.05f;//0.075f;
+	g_camSpeed = 0.05f;
 	g_camNear = 0.01f;
 	g_camFar = 1000.0f;
   
-	g_pointScale = 1.0f;
-	g_ropeScale = 1.0f;
-	g_drawPlaneBias = 0.0f;
-
 	// sim params
 	g_params.gravity[0] = 0.0f;
 	g_params.gravity[1] = -9.8f;
@@ -222,9 +169,6 @@ void Init(int scene, bool centerCamera = true)
 	g_params.diffuseBuoyancy = 1.0f;
 	g_params.diffuseDrag = 0.8f;
 	g_params.diffuseBallistic = 16;
-	//g_params.diffuseSortAxis[0] = 0.0f;
-	//g_params.diffuseSortAxis[1] = 0.0f;
-	//g_params.diffuseSortAxis[2] = 0.0f;
 	g_params.diffuseLifetime = 2.0f;
 
 	g_numSubsteps = 2;
@@ -232,21 +176,12 @@ void Init(int scene, bool centerCamera = true)
 	// planes created after particles
 	g_params.numPlanes = 1;
 
-	g_diffuseScale = 0.5f;
-	g_diffuseColor = 1.0f;
-	g_diffuseMotionScale = 1.0f;
-	g_diffuseShadow = false;
-	g_diffuseInscatter = 0.8f;
-	g_diffuseOutscatter = 0.53f;
-
 	// reset phase 0 particle color to blue
   g_colors[0] = Colour(0.0f, 0.5f, 1.0f);
 
 	g_numSolidParticles = 0;
 
 	g_warmup = false;
-
-	g_mouseParticle = -1;
 
 	g_maxDiffuseParticles = 0;	// number of diffuse particles
 	g_maxNeighborsPerParticle = 96;
@@ -309,35 +244,12 @@ void Init(int scene, bool centerCamera = true)
   //generate a bottom position and bottom angle for camera
   g_camPos.push_back(Vec3(g_meshCenter.x, -2.4f, g_meshCenter.z));
   g_camAngle.push_back(Vec3(0.0f, DegToRad(90.0f), 0.0f));
+  //generate a top position for render hidrographic texture
+  g_camPos.push_back(Vec3(g_meshCenter.x, 2.4f, g_meshCenter.z));
+  g_camAngle.push_back(Vec3(DegToRad(90.0f), DegToRad(-90.0f), 0.0f));
+
   g_camIndex = 0; // select main cam view
 
-  //g_buffers->diffuseCount.resize(1, 0);
-
-	// initialize normals (just for rendering before simulation starts)
-  /*
-	g_buffers->normals.resize(0);
-	g_buffers->normals.resize(maxParticles);
-	int numTris = g_buffers->triangles.size() / 3;
-	for (int i = 0; i < numTris; ++i)
-	{
-		Vec3 v0 = Vec3(g_buffers->positions[g_buffers->triangles[i * 3 + 0]]);
-		Vec3 v1 = Vec3(g_buffers->positions[g_buffers->triangles[i * 3 + 1]]);
-		Vec3 v2 = Vec3(g_buffers->positions[g_buffers->triangles[i * 3 + 2]]);
-
-		Vec3 n = Cross(v1 - v0, v2 - v0);
-
-		g_buffers->normals[g_buffers->triangles[i * 3 + 0]] += Vec4(n, 0.0f);
-		g_buffers->normals[g_buffers->triangles[i * 3 + 1]] += Vec4(n, 0.0f);
-		g_buffers->normals[g_buffers->triangles[i * 3 + 2]] += Vec4(n, 0.0f);
-	}
-
-  for (int i = 0; i < int(maxParticles); ++i)
-  {
-		g_buffers->normals[i] = Vec4(SafeNormalize(Vec3(g_buffers->normals[i]), Vec3(0.0f, 1.0f, 0.0f)), 0.0f);
-  }
-  */
-
-	
 	g_solverDesc.maxParticles = maxParticles;
 	g_solverDesc.maxDiffuseParticles = g_maxDiffuseParticles;
 	g_solverDesc.maxNeighborsPerParticle = g_maxNeighborsPerParticle;
@@ -463,25 +375,38 @@ void Reset()
 	Init(g_scene, true);
 }
 
-void Shutdown()
+void Destroy()
 {
-	// free buffers
-	DestroyBuffers(g_buffers);
+  // free buffers
+  DestroyBuffers(g_buffers);
 
-	for (auto& iter : g_meshes)
-	{
-		NvFlexDestroyTriangleMesh(g_flexLib, iter.first);
-		DestroyGpuMesh(iter.second);
-	}
+  for (auto& iter : g_meshes)
+  {
+    NvFlexDestroyTriangleMesh(g_flexLib, iter.first);
+    DestroyGpuMesh(iter.second);
+  }
 
-	NvFlexDestroyDistanceField(g_flexLib, g_sdf_mesh);
-	DestroyGpuMesh(g_gpu_rigid_mesh);
+  int sdfCount = 0;
+  NvFlexGetDistanceFields(g_flexLib, &g_sdf_mesh, sdfCount);
+  if (sdfCount != 0)
+  {
+    printf("Destroying existing SDF");
+    NvFlexDestroyDistanceField(g_flexLib, g_sdf_mesh);
+  }
+
+  DestroyGpuMesh(g_gpu_rigid_mesh);
 
   DestroyGpuMesh(g_gpu_film_mesh);
 
-	g_meshes.clear();
+  g_meshes.clear();
 
-	NvFlexDestroySolver(g_solver);
+  NvFlexDestroySolver(g_solver);
+
+}
+
+void Shutdown()
+{
+  Destroy();
 
   NvFlexShutdown(g_flexLib);
 
@@ -518,16 +443,11 @@ void RenderScene()
   g_view = RotationMatrix(-g_camAngle[g_camIndex].x, Vec3(0.0f, 1.0f, 0.0f))*RotationMatrix(-g_camAngle[g_camIndex].y, Vec3(cosf(-g_camAngle[g_camIndex].x), 0.0f, sinf(-g_camAngle[g_camIndex].x)))*TranslationMatrix(-Point3(g_camPos[g_camIndex]));
 
   g_lightPos = g_camPos[g_camIndex]; // cam target always iluminated
-  Vec4 lightColor = Vec4(1.0f, 1.0f, 1.0f, 1.0f);
-  Vec4 ambientColor = Vec4(0.15f, 0.15f, 0.15f, 1.0f);
-  Vec4 diffuseColor = Vec4(1.0f, 1.0f, 1.0f, 1.0f);
-  Vec4 specularColor = Vec4(1.0f, 1.0f, 1.0f, 1.0f);
-  unsigned int specularExpoent = 40;
   bool showTexture = true;
   
   SetViewport(0, 0, g_screenWidth, g_screenHeight);
 
-  BindRigidBodyShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], lightColor, ambientColor, specularColor, specularExpoent, diffuseColor);
+  BindRigidBodyShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], g_lightColor, g_ambientColor, g_specularColor, g_specularExpoent, g_diffuseColor);
 
   SetCullMode(false);
   SetFillMode(g_wireframe);
@@ -540,12 +460,12 @@ void RenderScene()
   if (g_drawHydrographic) // draw film (soft body)
   {
     showTexture = true;
-    BindFilmShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], lightColor, ambientColor, specularColor, specularExpoent, diffuseColor);
+    BindFilmShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], g_lightColor, g_ambientColor, g_specularColor, g_specularExpoent, g_diffuseColor);
     DrawHydrographicFilm(g_gpu_film_mesh, &g_buffers->positions[0], &g_buffers->normals[0], &g_buffers->uvs[0], &g_buffers->triangles[0], g_buffers->triangles.size(), g_buffers->positions.size(), showTexture);
   }
   
   // draw flat film with distortion after build the contacts texture
-  if (g_drawReverseTexture && !g_generateContactsTexture)
+  if (!isTestingMode() && g_drawReverseTexture && !g_generateContactsTexture)
   {
     // hide other meshes and draw only flat film with reverse texture
     g_drawHydrographic = false;
@@ -553,7 +473,7 @@ void RenderScene()
     if (1)
     {
       showTexture = true;
-      BindReverseTextureShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], lightColor, ambientColor, specularColor, specularExpoent, diffuseColor, g_max_distance_uv, g_near_distance_uv, g_weight1, g_weight2, g_tesselation_inner, g_tesselation_outer);
+      BindReverseTextureShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], g_lightColor, g_ambientColor, g_specularColor, g_specularExpoent, g_diffuseColor, g_max_distance_uv, g_near_distance_uv, g_weight1, g_weight2, g_tesselation_inner, g_tesselation_outer);
       DrawReverseTexture(g_gpu_film_mesh, &g_contact_positions[0], &g_contact_normals[0], &g_contact_uvs[0], &g_contact_indexes[0], g_contact_indexes.size(), g_contact_positions.size(), showTexture);
     }
 
@@ -564,7 +484,10 @@ void RenderScene()
       float max = MAX(g_sceneUpper.x, g_sceneUpper.y);
       float r = max * g_aspect, t = max;
       float l = -r, b = -t;
-      g_proj = OrthographicMatrix(l, r, b, t, g_camNear, g_camFar);
+      Mat44 projOrtho = OrthographicMatrix(l, r, b, t, g_camNear, g_camFar);
+      BindReverseTextureShader(g_view, projOrtho, g_lightPos, g_camPos[g_camIndex], g_lightColor, g_ambientColor, g_specularColor, g_specularExpoent, g_diffuseColor, g_max_distance_uv, g_near_distance_uv, g_weight1, g_weight2, g_tesselation_inner, g_tesselation_outer);
+      DrawReverseTexture(g_gpu_film_mesh, &g_contact_positions[0], &g_contact_normals[0], &g_contact_uvs[0], &g_contact_indexes[0], g_contact_indexes.size(), g_contact_positions.size(), showTexture);
+      CreateHydrographicFilmImage(g_screenWidth, g_screenHeight);
     }
 
 
@@ -596,8 +519,8 @@ void RenderDebug()
 			color = Vec4(0.0f, 1.0f, 0.0f, 0.8f);
 		}
 
-		BeginLines();
-    //BeginPoints(5.0f);
+		//BeginLines();
+    BeginPoints(3.0f);
 		int start = 0;
 
 		ColorGradient *colorGradient = new ColorGradient();
@@ -626,7 +549,7 @@ void RenderDebug()
         Vec3 restB = g_contact_positions[b];
         float restLength = Length(restA - restB);
         float displacement = abs(distortedLength - restLength) / restLength;
-        color = colorGradient->getColorAtValue(displacement * 120.0f);
+        color = colorGradient->getColorAtValue(displacement * 2);
       }
 
       //Heatmap of stiffness
@@ -635,12 +558,13 @@ void RenderDebug()
         color = colorGradient->getColorAtValue(g_buffers->springStiffness[i]);
       }
 
-			DrawLine(Vec3(g_contact_positions[a]), Vec3(g_contact_positions[b]), color);
-      //DrawPoint(Vec3(g_buffers->positions[a]), color);
-		}
+			//DrawLine(Vec3(g_contact_positions[a]), Vec3(g_contact_positions[b]), color);
+      DrawPoint(Vec3(g_contact_positions[a]), color);
+      DrawPoint(Vec3(g_contact_positions[b]), color);
+    }
 
-		EndLines();
-    //EndPoints();
+		//EndLines();
+    EndPoints();
 	}
 	// visualize contacts against the environment
   // all arrays are iterated in CPU
@@ -839,7 +763,8 @@ int DoUI()
 			DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "Num Iterations: %d", g_params.numIterations); y -= fontHeight * 2;
 
 			DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "Device: %s", g_deviceName); y -= fontHeight * 2;
-		}
+      DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "Camera Positon (X ,Y ,Z): (%.2f, %.2f, %.2f)", g_camPos[g_camIndex].x, g_camPos[g_camIndex].y, g_camPos[g_camIndex].z); y -= fontHeight * 2;
+    }
 
 		if (g_profile)
 		{
@@ -868,7 +793,7 @@ int DoUI()
 			DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "Calculate Anisotropy: %.2fms", g_timers.calculateAnisotropy); y -= fontHeight;
 			DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "Update Diffuse: %.2fms", g_timers.updateDiffuse); y -= fontHeight * 2;
 		}
-
+    
 		x -= 180;
 
 		int uiOffset = 250;
@@ -896,15 +821,15 @@ int DoUI()
 
     if (imguiCheck("Film test", g_filmStepTest)) {
       g_filmStepTest = !g_filmStepTest;
-      g_resetScene;
+      g_resetScene = true;
     }
     if (imguiCheck("Mesh test", g_meshStepTest)) {
       g_meshStepTest = !g_meshStepTest;
-      g_resetScene;
+      g_resetScene = true;
     }
     if (imguiCheck("Voxel test", g_voxelStepTest)) {
       g_voxelStepTest = !g_voxelStepTest;
-      g_resetScene;
+      g_resetScene = true;
     }
 
 		imguiSeparatorLine();
@@ -1004,19 +929,6 @@ int DoUI()
 			imguiSlider("Buoyancy", &g_params.buoyancy, -1.0f, 1.0f, 0.01f);
 
 			imguiSeparatorLine();
-			//imguiSlider("Anisotropy Scale", &g_params.anisotropyScale, 0.0f, 30.0f, 0.01f);
-			//imguiSlider("Smoothing", &g_params.smoothing, 0.0f, 1.0f, 0.01f);
-
-			// diffuse params
-			//imguiSeparatorLine();
-			//imguiSlider("Diffuse Threshold", &g_params.diffuseThreshold, 0.0f, 1000.0f, 1.0f);
-			//imguiSlider("Diffuse Buoyancy", &g_params.diffuseBuoyancy, 0.0f, 2.0f, 0.01f);
-			//imguiSlider("Diffuse Drag", &g_params.diffuseDrag, 0.0f, 2.0f, 0.01f);
-			//imguiSlider("Diffuse Scale", &g_diffuseScale, 0.0f, 1.5f, 0.01f);
-			//imguiSlider("Diffuse Alpha", &g_diffuseColor.w, 0.0f, 3.0f, 0.01f);
-			//imguiSlider("Diffuse Inscatter", &g_diffuseInscatter, 0.0f, 2.0f, 0.01f);
-			//imguiSlider("Diffuse Outscatter", &g_diffuseOutscatter, 0.0f, 2.0f, 0.01f);
-			//imguiSlider("Diffuse Motion Blur", &g_diffuseMotionScale, 0.0f, 5.0f, 0.1f);
 
 			imguiEndScrollArea();
 		}
@@ -1041,6 +953,10 @@ void StoreReport(int type, int factor) {
   result.factor = factor;
   result.meshVertices = g_meshVertices;
   report.push_back(result);
+}
+
+bool isTestingMode() {
+  return g_filmStepTest || g_voxelStepTest || g_meshStepTest;
 }
 
 void ShowReport() {
@@ -1166,7 +1082,7 @@ void UpdateFrame(bool &quit)
 
 	UpdateCamera();
 
-	if (!g_pause || g_step)
+	if (!(g_complete || g_pause || g_step))
 	{
 		UpdateScene();
   }
@@ -1178,6 +1094,8 @@ void UpdateFrame(bool &quit)
     // this block should execute before unmap command
     // because of read buffer data from comming from gpu to cpu
     BuildReverseTextureMapping();
+    //PostProcessReverseTexture();
+
     g_drawReverseTexture = true;
   }
 
@@ -1187,7 +1105,7 @@ void UpdateFrame(bool &quit)
 
 	double renderBeginTime = GetSeconds();
 
-	if (g_profile && (!g_pause || g_step)) 
+	if (g_profile && !(g_complete || g_pause || g_step)) 
   {
 		if (g_benchmark) 
     {
@@ -1280,7 +1198,7 @@ void UpdateFrame(bool &quit)
 		g_shapesChanged = false;
 	}
 
-	if (!g_pause || g_step)
+	if (!(g_complete || g_pause || g_step))
 	{
 		// tick solver
 		NvFlexSetParams(g_solver, &g_params);
@@ -1313,14 +1231,13 @@ void UpdateFrame(bool &quit)
 	float newWaitTime = float(waitEndTime - waitBeginTime);
   
 	// Exponential filter to make the display easier to read
-	const float timerSmoothing = 0.05f;
-
+  const float timerSmoothing = 1.0f;
 	g_updateTime = (g_updateTime == 0.0f) ? newUpdateTime : Lerp(g_updateTime, newUpdateTime, timerSmoothing);
 	g_renderTime = (g_renderTime == 0.0f) ? newRenderTime : Lerp(g_renderTime, newRenderTime, timerSmoothing);
 	g_waitTime = (g_waitTime == 0.0f) ? newWaitTime : Lerp(g_waitTime, newWaitTime, timerSmoothing);
 	g_simLatency = (g_simLatency == 0.0f) ? newSimLatency : Lerp(g_simLatency, newSimLatency, timerSmoothing);
-	
-	if (g_benchmark) newScene = BenchmarkUpdate();
+  
+  if (g_benchmark) newScene = BenchmarkUpdate();
 
 	// flush out the last frame before freeing up resources in the event of a scene change
 	// this is necessary for d3d12
@@ -1333,22 +1250,21 @@ void UpdateFrame(bool &quit)
 		Init(g_scene);
 	}
 
-  if (!g_pause) 
+  if (!(g_pause || g_complete)) 
 	{	
     // get metrics
-    float duration = g_updateTime + g_renderTime + g_waitTime + g_simLatency;
-    if (g_realdt > 0.0f) {
-      g_fps = float(1.0 / g_realdt);
+    float duration = (g_updateTime + g_renderTime + g_waitTime);
+    if (duration  > 0.0f) {
+      g_fps = 1.0f/duration;
       frametimes.push_back(g_fps);
       update_times.push_back(g_updateTime);
       render_times.push_back(g_renderTime);
       wait_times.push_back(g_waitTime);      
       latency_times.push_back(g_simLatency);
-
     }
 
   }
-  else {
+  else if (g_complete && isTestingMode()) {
     // generate a metrics report
     float totalFPS = 0.0f;
     float totalUpdateTime = 0.0f;
@@ -1387,18 +1303,68 @@ void UpdateFrame(bool &quit)
     }
     if (g_voxelStepTest && g_voxelFactor <= g_meshFactorMax) {
       StoreReport(2, g_voxelFactor);
-      g_voxelFactor += g_voxelFactorStep;
+      g_voxelFactor = int(g_voxelFactor * g_voxelFactorStep); //multiplier factor
       g_resetScene = true;
     }
 
     if ((g_filmStepTest && g_filmFactor > g_filmFactorMax) || 
         (g_meshStepTest && g_meshFactor > g_meshFactorMax) || 
-        (g_voxelStepTest && g_voxelFactor > g_meshFactorMax)) {
+        (g_voxelStepTest && g_voxelFactor > g_voxelFactorMax)) {
       ShowReport();
       report.resize(0);
       quit = true; // EXIT for call other test in BATCH
     }
   }
+}
+
+void PostProcessReverseTexture()
+{
+  // look for every triangle in the film mesh
+  for (int i = 0; i < g_contact_indexes.size() / 3; ++i)
+  {   
+      int contactIndex = g_contact_indexes[i];
+      int countFilledTextCoords = 0;
+      int filledIndexes[3] = { -1, -1, -1 };
+      Vec4 filledTextureMean = Vec4(0.0f, 0.0f);
+      for (int j = 0; j < 3; ++j)
+      {
+        Vec4 filledTextureSum = Vec4(0.0f, 0.0f);
+        if (g_contact_uvs[contactIndex * 3 + j] != -1)
+        {
+          countFilledTextCoords++;
+          filledIndexes[j] = contactIndex * 3 + j;
+          filledTextureSum += g_contact_uvs[contactIndex * 3 + j];
+        }
+        filledTextureMean = filledTextureSum * 0.5f;
+
+
+      }
+      
+      if (countFilledTextCoords == 2)
+      {
+        for (int z = 0; z < 3; z++)
+        {
+          if (filledIndexes[z] == -1)
+          {
+            g_contact_uvs[filledIndexes[z]] = filledTextureMean;
+          }
+        }
+      }
+
+      if (countFilledTextCoords == 1)
+      {
+        filledTextureMean *= 2.0f;
+        for (int z = 0; z < 3; z++)
+        {
+          if (filledIndexes[z] == -1)
+          {
+            g_contact_uvs[filledIndexes[z]] = filledTextureMean;
+          }
+        }
+      }
+
+  }
+
 }
 
 
@@ -1443,8 +1409,6 @@ void BuildReverseTextureMapping()
     }
   }
 
-  //BuildTextureSeamsPositions(g_gpu_film_mesh, g_contact_uvs, g_seam_positions_indexes);
-
 }
 
 
@@ -1465,13 +1429,6 @@ void ReshapeWindow(int width, int height)
 		printf("Reshaping\n");
 
 	ReshapeRender(g_window);
-
-	//if (!g_fluidRenderer || (width != g_screenWidth || height != g_screenHeight))
-	//{
-		//if (g_fluidRenderer)
-			//DestroyFluidRenderer(g_fluidRenderer);
-		//g_fluidRenderer = CreateFluidRenderer(width, height);
-	//}
 
 	g_screenWidth = width;
 	g_screenHeight = height;
@@ -1786,12 +1743,6 @@ void MouseFunc(int b, int state, int x, int y)
 #ifdef ANDROID
 		extern void setStateLeft(bool bLeftDown);
 		setStateLeft(false);
-#else
-		if ((SDL_GetModState() & KMOD_LSHIFT) && g_lastb == SDL_BUTTON_LEFT)
-		{
-			// record that we need to update the picked particle
-			g_mousePicked = true;
-		}
 #endif
 		break;
 	}
@@ -1845,9 +1796,6 @@ void ControllerButtonEvent(SDL_ControllerButtonEvent event)
 			g_lastx = g_screenWidth / 2;
 			g_lasty = g_screenHeight / 2;
 			g_lastb = 1;
-
-			// record that we need to update the picked particle
-			g_mousePicked = true;
 		}
 	}
 	else
@@ -1980,8 +1928,10 @@ int main(int argc, char* argv[])
 	for (int i = 1; i < argc; ++i)
 	{
 		int d;
-		if (sscanf(argv[i], "-device=%d", &d))
-			g_device = d;
+    if (sscanf(argv[i], "-device=%d", &d))
+    {
+      g_device = d;
+    }
 
 		if (sscanf(argv[i], "-extensions=%d", &d))
 			g_extensions = d != 0;
@@ -2044,13 +1994,19 @@ int main(int argc, char* argv[])
 			g_fullscreen = false;
 		}
 
-		if (sscanf(argv[i], "-vsync=%d", &d))
-			g_vsync = d != 0;
-
+    if (sscanf(argv[i], "-vsync=%d", &d) == 1)
+      g_vsync = d == 1 ? true : false;
+ 
 		if (sscanf(argv[i], "-multiplier=%d", &d) == 1)
 		{
 			g_numExtraMultiplier = d;
 		}
+
+    float dippingArg = 0.0f;
+    if (sscanf(argv[i], "-dippingVelocity=%f", &dippingArg) == 1)
+    {
+      dippingVelocity = dippingArg;
+    }
 
 		if (strcmp(argv[i], "-disabletweak") == 0)
 		{
@@ -2074,28 +2030,28 @@ int main(int argc, char* argv[])
 		}
 
 
-    if (strcmp(argv[i], "-testFilm"))
+    if (strcmp(argv[i], "-testFilm") == 0)
     {
       g_filmStepTest = true;
       g_meshStepTest = false;
       g_voxelStepTest = false;
     }
 
-    if (strcmp(argv[i], "-testMesh"))
+    if (strcmp(argv[i], "-testMesh") == 0)
     {
       g_filmStepTest = false;
       g_meshStepTest = true;
       g_voxelStepTest = false;
     }
 
-    if (strcmp(argv[i], "-testVoxel"))
+    if (strcmp(argv[i], "-testVoxel") == 0)
     {
       g_filmStepTest = false;
       g_meshStepTest = false;
       g_voxelStepTest = true;
     }
 
-    if (sscanf(argv[i], "-selectedModel=%d", &d) == 1)
+    if (sscanf(argv[i], "-selectedModel=%d", &d) == 0)
     {
       g_selectedModel = d;
     }
@@ -2210,17 +2166,12 @@ int main(int argc, char* argv[])
 	if (g_benchmark)
 		g_scene = BenchmarkInit();
 
-	// create shadow maps
-	g_shadowMap = ShadowCreate();
-
 	// init default scene
 	StartGpuWork();
 	Init(g_scene);
 	EndGpuWork();
 
 	SDLMainLoop();
-
-	ShadowDestroy(g_shadowMap);
 
 	Shutdown();
 	DestroyRender();

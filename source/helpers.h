@@ -252,6 +252,7 @@ NvFlexDistanceFieldId CreateSDF(const char* meshFile, int dim, float margin = 0.
 	return sdf;
 }
 */
+
 NvFlexDistanceFieldId CreateHydrographicSDF(Mesh* mesh, const char* meshFile, bool createSDFFile, int dim, Mat44 transformation, float margin = 0.1f, float expand = 0.0f)
 {
 	if (!mesh)
@@ -288,7 +289,7 @@ NvFlexDistanceFieldId CreateHydrographicSDF(Mesh* mesh, const char* meshFile, bo
 		printf("Cooking SDF: %s - dim: %d^3\n", sdfFile.c_str(), dim);
 
 		CreateSDF(mesh, dim, lower, upper, pfm.m_data);
-		// ...then save in pfm format, to use in the next program perform
+		// ...save in pfm format, to use in the next program execution
 		PfmSave(sdfFile.c_str(), pfm);
 	}
 
@@ -302,15 +303,27 @@ NvFlexDistanceFieldId CreateHydrographicSDF(Mesh* mesh, const char* meshFile, bo
 		pfm.m_data[i] += expand;
 
 	NvFlexVector<float> field(g_flexLib);
+  field.map();
 	field.assign(pfm.m_data, pfm.m_width*pfm.m_height*pfm.m_depth);
 	field.unmap();
 
 	// set up flex collision shape
-	NvFlexDistanceFieldId sdf = NvFlexCreateDistanceField(g_flexLib);
+  int sdfCount = 0;
+  NvFlexDistanceFieldId sdf = NULL;
+  NvFlexGetDistanceFields(g_flexLib, &sdf, sdfCount);
+  if (sdfCount != 0) 
+  {
+    printf("Destroying existing SDF");
+    NvFlexDestroyDistanceField(g_flexLib, sdf);
+  }
+  else
+  {
+    printf("Creating new SDF");
+    sdf = NvFlexCreateDistanceField(g_flexLib);
+  }
+
 	NvFlexUpdateDistanceField(g_flexLib, sdf, dim, dim, dim, field.buffer);
 
-
-	delete mesh;
 	delete[] pfm.m_data;
 
 	return sdf;
@@ -1070,130 +1083,6 @@ void CreateSkinning(const Vec3* vertices, int numVertices, const Vec3* clusters,
 }
 
 
-void SampleMesh(Mesh* mesh, Vec3 lower, Vec3 scale, float rotation, float radius, float volumeSampling, float surfaceSampling, std::vector<Vec3>& outPositions)
-{
-	if (!mesh)
-		return;
-
-	mesh->Transform(RotationMatrix(rotation, Vec3(0.0f, 1.0f, 0.0f)));
-
-	Vec3 meshLower, meshUpper;
-	mesh->GetBounds(meshLower, meshUpper);
-
-	Vec3 edges = meshUpper - meshLower;
-	float maxEdge = max(max(edges.x, edges.y), edges.z);
-
-	// put mesh at the origin and scale to specified size
-	Matrix44 xform = ScaleMatrix(scale / maxEdge)*TranslationMatrix(Point3(-meshLower));
-
-	mesh->Transform(xform);
-	mesh->GetBounds(meshLower, meshUpper);
-
-	std::vector<Vec3> samples;
-
-	if (volumeSampling > 0.0f)
-	{
-		// recompute expanded edges
-		edges = meshUpper - meshLower;
-		maxEdge = max(max(edges.x, edges.y), edges.z);
-
-		// use a higher resolution voxelization as a basis for the particle decomposition
-		float spacing = radius / volumeSampling;
-
-		// tweak spacing to avoid edge cases for particles laying on the boundary
-		// just covers the case where an edge is a whole multiple of the spacing.
-		float spacingEps = spacing*(1.0f - 1e-4f);
-
-		// make sure to have at least one particle in each dimension
-		int dx, dy, dz;
-		dx = spacing > edges.x ? 1 : int(edges.x / spacingEps);
-		dy = spacing > edges.y ? 1 : int(edges.y / spacingEps);
-		dz = spacing > edges.z ? 1 : int(edges.z / spacingEps);
-
-		int maxDim = max(max(dx, dy), dz);
-
-		// expand border by two voxels to ensure adequate sampling at edges
-		meshLower -= 2.0f*Vec3(spacing);
-		meshUpper += 2.0f*Vec3(spacing);
-		maxDim += 4;
-
-		vector<uint32_t> voxels(maxDim*maxDim*maxDim);
-
-		// we shift the voxelization bounds so that the voxel centers
-		// lie symmetrically to the center of the object. this reduces the 
-		// chance of missing features, and also better aligns the particles
-		// with the mesh
-		Vec3 meshOffset;
-		meshOffset.x = 0.5f * (spacing - (edges.x - (dx - 1)*spacing));
-		meshOffset.y = 0.5f * (spacing - (edges.y - (dy - 1)*spacing));
-		meshOffset.z = 0.5f * (spacing - (edges.z - (dz - 1)*spacing));
-		meshLower -= meshOffset;
-
-		//Voxelize(*mesh, dx, dy, dz, &voxels[0], meshLower - Vec3(spacing*0.05f) , meshLower + Vec3(maxDim*spacing) + Vec3(spacing*0.05f));
-		Voxelize((const Vec3*)&mesh->m_positions[0], mesh->m_positions.size(), (const int*)&mesh->m_indices[0], mesh->m_indices.size(), maxDim, maxDim, maxDim, &voxels[0], meshLower, meshLower + Vec3(maxDim*spacing));
-
-		// sample interior
-		for (int x = 0; x < maxDim; ++x)
-		{
-			for (int y = 0; y < maxDim; ++y)
-			{
-				for (int z = 0; z < maxDim; ++z)
-				{
-					const int index = z*maxDim*maxDim + y*maxDim + x;
-
-					// if voxel is marked as occupied the add a particle
-					if (voxels[index])
-					{
-						Vec3 position = lower + meshLower + spacing*Vec3(float(x) + 0.5f, float(y) + 0.5f, float(z) + 0.5f);
-
-						// normalize the sdf value and transform to world scale
-						samples.push_back(position);
-					}
-				}
-			}
-		}
-	}
-
-	// move back
-	mesh->Transform(ScaleMatrix(1.0f)*TranslationMatrix(Point3(-0.5f*(meshUpper + meshLower))));
-	mesh->Transform(TranslationMatrix(Point3(lower + 0.5f*(meshUpper + meshLower))));
-
-	if (surfaceSampling > 0.0f)
-	{
-		// sample vertices
-		for (int i = 0; i < int(mesh->m_positions.size()); ++i)
-			samples.push_back(Vec3(mesh->m_positions[i]));
-
-		// random surface sampling
-		if (1)
-		{
-			for (int i = 0; i < 50000; ++i)
-			{
-				int t = Rand() % mesh->GetNumFaces();
-				float u = Randf();
-				float v = Randf()*(1.0f - u);
-				float w = 1.0f - u - v;
-
-				int a = mesh->m_indices[t * 3 + 0];
-				int b = mesh->m_indices[t * 3 + 1];
-				int c = mesh->m_indices[t * 3 + 2];
-				
-				Point3 pt = mesh->m_positions[a] * u + mesh->m_positions[b] * v + mesh->m_positions[c] * w;
-				Vec3 p(pt.x,pt.y,pt.z);
-
-				samples.push_back(p);
-			}
-		}
-	}
-
-	std::vector<int> clusterIndices;
-	std::vector<int> clusterOffsets;
-	std::vector<Vec3> clusterPositions;
-	std::vector<float> priority(samples.size());
-
-	CreateClusters(&samples[0], &priority[0], samples.size(), clusterOffsets, clusterIndices, outPositions, radius);
-
-}
 
 void ClearShapes()
 {

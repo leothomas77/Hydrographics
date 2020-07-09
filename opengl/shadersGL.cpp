@@ -51,11 +51,6 @@
 
 GLuint g_chessboard_texture_id;
 GLuint g_rigid_model_texture_id;
-GLuint g_heat_texture_id;
-
-//GLuint VAO = -1;
-//GLuint VBO = -1;
-//GLuint EBO = -1;
 
 GLuint s_reverseTexProgram = GLuint(-1);
 GLuint s_rigidBodyProgram = GLuint(-1);
@@ -178,39 +173,6 @@ GLuint LoadTexture(const char* filename, PngImage& image)
 }
 
 
-GLuint LoadTexture_Original(const char* filename)
-{
-  PngImage img;
-  if (PngLoad(filename, img))
-  {
-    GLuint tex;
-
-    glVerify(glGenTextures(1, &tex));
-    glVerify(glActiveTexture(GL_TEXTURE0));
-    glVerify(glBindTexture(GL_TEXTURE_2D, tex));
-
-    glTexStorage2D(GL_TEXTURE_2D, 2 /* mip map levels */, GL_RGB8, img.m_width, img.m_height);
-    glTexSubImage2D(GL_TEXTURE_2D, 0 /* mip map level */, 0 /* xoffset */, 0 /* yoffset */, img.m_width, img.m_height, GL_RGBA, GL_UNSIGNED_BYTE, img.m_data);
-    glGenerateMipmap(GL_TEXTURE_2D);
-
-
-    glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR));
-    glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR));
-    glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
-    glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
-    //glVerify(glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, GL_TRUE));
-    //glVerify(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img.m_width, img.m_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, img.m_data));
-
-    PngFree(img);
-
-    return tex;
-  }
-  else
-  {
-    return NULL;
-  }
-}
-
 
 GLuint CreateDynamicTexture(PngImage &img)
 {
@@ -245,15 +207,6 @@ GLuint CreateDynamicTexture(PngImage &img)
   return textID;
 }
 
-/*
-GLuint LoadDynamicTexture(PngImage img, GLuint &textID)
-{
-  glBindTexture(GL_TEXTURE_2D, textID);
-  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, img.m_width, img.m_height, GL_RGBA, GL_UNSIGNED_BYTE, img.m_data);
-
-  return textID;
-}
-*/
 
 struct RenderTexture
 {
@@ -289,10 +242,7 @@ float g_shadowBias = 0.05f;
 
 extern NvFlexLibrary* g_flexLib;
 extern Colour g_colors[];
-
-extern Mesh* g_mesh;
-extern GpuMesh* g_gpu_rigid_mesh;
-//void DrawShapes();
+extern bool g_vsync;
 
 // shader source codes
 GLchar *FILM_VERTEX_SHADER = "#version 430\n" STRINGIFY(
@@ -1069,9 +1019,6 @@ void main(void) {
       EmitWeightedTexVertexCenter(0, 1, halfTex01, halfTex02, halfTex12, epsilon); \n
       EmitWeightedTexVertexCenter(0, 2, halfTex01, halfTex02, halfTex12, epsilon); \n
       EmitWeightedTexVertexCenter(1, 2, halfTex01, halfTex02, halfTex12, epsilon); \n
-      //EmitWeightedTexVertex(0, 1, .5f, .5f);
-      //EmitWeightedTexVertex(0, 2, .5f, .5f);
-      //EmitWeightedTexVertex(1, 2, .5f, .5f);
 
       EndPrimitive();
 
@@ -1405,7 +1352,7 @@ namespace OGL_Renderer
 	  SDL_GL_CreateContext(window);
 
 	  // This makes our buffer swap syncronized with the monitor's vertical refresh
-	  SDL_GL_SetSwapInterval(1);
+	  SDL_GL_SetSwapInterval(g_vsync);
 
 	  if (!gladLoadGLLoader(SDL_GL_GetProcAddress))
 	  {
@@ -1442,8 +1389,6 @@ namespace OGL_Renderer
 
     if (s_reverseTexProgram == GLuint(-1))
     {
-
-
       Shader reverseTextureShaders[5] = {
         { "../../shaders/reverse_tex.vs", GL_VERTEX_SHADER, NULL },
         { "../../shaders/reverse_tex.fs", GL_FRAGMENT_SHADER, NULL },
@@ -1473,23 +1418,15 @@ namespace OGL_Renderer
       s_reverseTexProgram = InitShader(reverseTextureShaders, true);
     }
 
-
-	  //Load texture - begin
-	  //EPRek.png xadrez7x11.png malha_rgb.jpg
-	  //8k_earth_daymap.jpg
-	  //malha_rgb.jpg
-
     g_chessboard_texture_id = LoadTexture(GetFilePathByPlatform("../../textures/malha_rgb.jpg").c_str(), g_chessboard_texture_image);
 
-    g_heat_texture_id = CreateDynamicTexture(g_dynamic_texture_image);
-    
 	  g_msaaSamples = msaaSamples;
 	  g_window = window;
   }
 
   void DestroyRender()
   {
-    //delete[] g_dynamic_texture.m_data;
+
   }
 
   void StartFrame(Vec4 clearColor)
@@ -1696,25 +1633,6 @@ void PresentFrame(bool fullsync)
 #endif
 }
 
-/*
-RenderTexture* CreateRenderTexture(const char* filename)
-{
-	GLuint tex = LoadTexture(filename);
-
-	if (tex)
-	{
-		RenderTexture* t = new RenderTexture();
-		t->colorTex = tex;
-
-		return t;
-	}
-	else
-	{
-		return NULL;
-	}
-}
-*/
-
 RenderTexture* CreateRenderTarget(int width, int height, bool depth)
 {
 	return NULL;
@@ -1756,8 +1674,6 @@ void DestroyRenderTexture(RenderTexture* t)
     s_shadowProgram = GLuint(-1);
   }
 #endif
-
-
 
   GpuMesh* CreateGpuMesh(const Mesh* m)
   {
@@ -2335,11 +2251,9 @@ void EndFrameV2()
     glVerify(glBindFramebuffer(GL_DRAW_FRAMEBUFFER_EXT, 0));
     glVerify(glBlitFramebuffer(0, 0, g_screenWidth, g_screenHeight, 0, 0, g_screenWidth, g_screenHeight, GL_COLOR_BUFFER_BIT, GL_LINEAR));
   }
-
   // render help to back buffer
   glVerify(glBindFramebuffer(GL_FRAMEBUFFER, 0));
   glVerify(glClear(GL_DEPTH_BUFFER_BIT));
-
 }
 
 void drawPlane() {
@@ -2556,57 +2470,6 @@ Vec2 InterpolateTextureCoordinates(Vec2 textCoordV0, Vec2 textCoordV1, Vec2 text
   return interpolatedTexCoords;
 }
 
-/*
-bool isSeam()
-{
-  return false;
-}
-
-void FindTextureSeamV2(Vec3 v0, Vec3 v1, Vec3 v2, Vec2 textCoordV0, Vec2 textCoordV1, Vec2 textCoordV2)
-{
-  // parameters
-  float epsilon = 0.08f;
-  float treshold = 0.4f;
-  // initial values
-  float w = 1.0f, u = 0.0f, v = 0.0f;
-  Vec2 textureAnt = w * textCoordV0 + u * textCoordV1 + v * textCoordV2;
-  BeginPoints(3.0f);
-  while (w > .0f)
-  {
-    while (u <= 1.0f)
-    {
-      v = .0f, w = 1 - (u + v);
-      while (v <= 1.0f)
-      {
-        Vec3 p = w * v0 + u * v1 + v * v2; // compute arbitrary position given barycentric coordinates
-
-                                           // Debug triangle sampler
-                                           // com o triangulo da malha rigida, encontrar o ponto de interseccao e reinterpolar as coordenadas
-                                           // detectar a descontinuidade na reinterpolacao
-        Vec2 textureP = InterpolateTextureCoordinates(textCoordV0, textCoordV1, textCoordV2, u, v, w);
-        if (Length(textureP - textureAnt) > treshold) // is a seam
-        {
-          // seam jump texture
-          DrawPoint(p, Vec4(1.0f, 0.0f, 0.0f, 1.0f));
-          //DrawPoint(v1, Vec4(1.0f, 0.0f, 0.0f, 1.0f));
-          //DrawPoint(v2, Vec4(1.0f, 0.0f, 0.0f, 1.0f));
-        }
-        else
-        {
-          DrawPoint(p, Vec4(0.0f, 1.0f, 0.0f, 1.0f));
-          //DrawPoint(v1, Vec4(0.0f, 1.0f, 0.0f, 1.0f));
-          //DrawPoint(v2, Vec4(0.0f, 1.0f, 0.0f, 1.0f));
-        }
-        textureAnt = textureP;
-        v += epsilon;
-        w = 1 - (u + v);
-      }
-      u += epsilon;
-    }
-  }
-  EndPoints();
-}
-*/
 
 void FindTextureSeam(Vec3 v0, Vec3 v1, Vec3 v2, Vec2 textCoordV0, Vec2 textCoordV1, Vec2 textCoordV2, PngImage textureImage)
 {
@@ -2636,7 +2499,6 @@ void FindTextureSeam(Vec3 v0, Vec3 v1, Vec3 v2, Vec2 textCoordV0, Vec2 textCoord
     }
   }
 }
-
 
 
 void PlotTexturePixel(Vec3 position, Vec2 textureCoords, PngImage textureImage) 
@@ -2702,46 +2564,6 @@ void BuildContactUVs(Vec3 filmContactVertex, int filmContactVertexIndex, Vec3 fi
   }
 
 }
-
-/*
-void BuildTextureSeamsPositions(const GpuMesh* filmMesh, const std::vector<Vec4> contactUVs, std::vector<int> &seamPositionsIndexes)
-{
-  float maxDistanceUV = .3f;
-
-  // for all triangle indexes in triangle film mesh
-  for (int i = 0; i < filmMesh->triangleIntIndexes.size(); i = i + 3) //
-  {
-    // for a triangle
-    int index0 = filmMesh->triangleIntIndexes[i];
-    int index1 = filmMesh->triangleIntIndexes[i + 1];
-    int index2 = filmMesh->triangleIntIndexes[i + 2];
-
-    Vec3 texCoord0 = Vec3(contactUVs[index0]);
-    Vec3 texCoord1 = Vec3(contactUVs[index1]);
-    Vec3 texCoord2 = Vec3(contactUVs[index2]);
-
-    // if texture coordinat is set
-    if (texCoord0.x != -1 && texCoord1.x != -1 && texCoord2.x != -1)
-    {
-      float distance01 = Length(texCoord0 - texCoord1);
-      float distance02 = Length(texCoord0 - texCoord2);
-      float distance12 = Length(texCoord1 - texCoord2);
-      // texture distance in a triangle edge is greather than treshold maxDistanceUV
-      // is a candidate texture seam
-      if (distance01 > maxDistanceUV || distance02 > maxDistanceUV || distance12 > maxDistanceUV)
-      {
-
-        seamPositionsIndexes.push_back(index0);
-        seamPositionsIndexes.push_back(index1);
-        seamPositionsIndexes.push_back(index2);
-
-      }
-
-    }
-  }
-
-}
-*/
 
 
 void DetectTextureSeams(GpuMesh* filmMesh, std::vector<Vec4> &contactPositions, std::vector<Vec4> &contactUVs)
@@ -3194,33 +3016,8 @@ static char* readShaderSource(const char* shaderFile) {
   return buf;
 }
 
-/* ************************************************************************* */
-/*                                                                           */
-/* ************************************************************************* */
 
 // Create a GLSL program object from vertex and fragment shader files
-
-/*
-if (tcsource && tesource)
-{
-  tesselationControlShader = glCreateShader(GL_TESS_CONTROL_SHADER);
-  glShaderSource(tesselationControlShader, 1, &tcsource, 0);
-  glCompileShader(tesselationControlShader);
-  GlslPrintShaderLog(tesselationControlShader);
-  glAttachShader(program, tesselationControlShader);
-
-  tesselationEvaluationShader = glCreateShader(GL_TESS_EVALUATION_SHADER);
-  glShaderSource(tesselationEvaluationShader, 1, &tesource, 0);
-  glCompileShader(tesselationEvaluationShader);
-  GlslPrintShaderLog(tesselationEvaluationShader);
-  glAttachShader(program, tesselationEvaluationShader);
-
-  GLint MaxPatchVertices = 0;
-  glGetIntegerv(GL_MAX_PATCH_VERTICES, &MaxPatchVertices);
-  printf("Max supported patch vertices %d\n", MaxPatchVertices);
-  glPatchParameteri(GL_PATCH_VERTICES, 3);
-}
-*/
 
 unsigned int InitShader(const Shader *shaders, const bool readFile) 
 {
@@ -3331,11 +3128,6 @@ GLuint GetRigidModelTextureId()
   return g_rigid_model_texture_id;
 }
 
-GLuint GetDynamicTextureId()
-{
-  return g_heat_texture_id;
-}
-
 void SetViewport(int x, int y, int width, int height)
 {
   glVerify(glViewport(x, y, width, height));
@@ -3418,62 +3210,6 @@ void BindReverseTextureShader(Matrix44 view, Matrix44 proj, Vec3 lightPos, Vec3 
   }
 }
 
-//
-/*
-void BindDisplacementsShader(Matrix44 view, Matrix44 proj, Vec3 lightPos, Vec3 lightTarget)
-{
-  glVerify(glUseProgram(s_reverseTexProgram));
-
-  glVerify(glUniformMatrix4fv(glGetUniformLocation(s_reverseTexProgram, "objectTransform"), 1, false, Matrix44::kIdentity));
-  glVerify(glUniformMatrix4fv(glGetUniformLocation(s_reverseTexProgram, "view"), 1, false, &view[0]));
-  glVerify(glUniformMatrix4fv(glGetUniformLocation(s_reverseTexProgram, "proj"), 1, false, &proj[0]));
-  glVerify(glUniformMatrix4fv(glGetUniformLocation(s_reverseTexProgram, "normalMat"), 1, false, Transpose(AffineInverse(Matrix44::kIdentity))));
-
-
-}
-
-void DrawDisplacements(const Vec4* positions, const Vec4* normals, const Vec4* uvs, const int numPositions, const int* indices, int numTris)
-{
-  glGenVertexArrays(1, &VAO);
-  glGenBuffers(1, &VBO);
-  glGenBuffers(1, &EBO);
-
-  glBindVertexArray(VAO);
-  glBindBuffer(GL_ARRAY_BUFFER, VBO);
-  //glBufferData(GL_ARRAY_BUFFER, numPositions * (sizeof(Vec4) + sizeof(Vec4) + sizeof(Vec4)), NULL, GL_STATIC_DRAW);
-
-  glVerify(glBufferData(GL_ARRAY_BUFFER, numPositions * sizeof(Vec4), &positions[0], GL_STATIC_DRAW));
-  glVerify(glBufferData(GL_ARRAY_BUFFER, numPositions * sizeof(Vec4), &normals[0], GL_STATIC_DRAW));
-  glVerify(glBufferData(GL_ARRAY_BUFFER, numPositions * sizeof(Vec4), &uvs[0], GL_STATIC_DRAW));
-
-  glVerify(glEnableVertexAttribArray(0));
-  glVerify(glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, sizeof(Vec4), (void *)0));
-  glVerify(glEnableVertexAttribArray(1));
-  glVerify(glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(Vec4), (void *)(numPositions * sizeof(Vec4))));
-  glVerify(glEnableVertexAttribArray(2));
-  glVerify(glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(Vec4), (void *)(numPositions * (sizeof(Vec4) + sizeof(Vec4)))));
-
-
-
-  glVerify(glBindBuffer(GL_ARRAY_BUFFER, VAO));
-  glVerify(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO));
-
-  glVerify(glClientActiveTexture(GL_TEXTURE1)); //optional 
-
-  glVerify(glDrawElements(GL_TRIANGLES, numTris, GL_UNSIGNED_INT, indices));
-
-  glVerify(glBindVertexArray(0));
-}
-
-void UnbindHydrographicShader()
-{
-	glActiveTexture(GL_TEXTURE1);
-	glDisable(GL_TEXTURE_2D);
-	glActiveTexture(GL_TEXTURE0);
-	glUseProgram(0);
-}
-*/
-
 
 void DrawHydrographicFilm(GpuMesh* mesh, const Vec4* positions, const Vec4* normals, const Vec4* uvs, const int* indices, int nIndices, int numPositions, bool showTexture)
 {
@@ -3513,10 +3249,6 @@ void DrawReverseTexture(GpuMesh* mesh, const Vec4* positions, const Vec4* normal
     glVerify(glBindTexture(GL_TEXTURE_2D, GetRigidModelTextureId()));
     glVerify(glUniform1i(glGetUniformLocation(s_reverseTexProgram, "tex"), 0));//
     glVerify(glUniform1i(glGetUniformLocation(s_reverseTexProgram, "showTexture"), showTexture));
-
-    glVerify(glActiveTexture(GL_TEXTURE1));//
-    glVerify(glBindTexture(GL_TEXTURE_2D, GetDynamicTextureId()));
-    glVerify(glUniform1i(glGetUniformLocation(s_reverseTexProgram, "heatmap"), 1));//
   }
   // Enable blending for transparency
   //glEnable(GL_BLEND);
@@ -3564,4 +3296,21 @@ GLuint* GetTexturePixels(GLuint textureID, int width, int height, int chanels)
   glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
 
   return pixels;
+}
+
+
+void CreateHydrographicFilmImage(int W, int H)
+{
+  FILE   *out = fopen("../../movies/screenshot.tga", "wb");
+  char   *pixel_data = new char[3 * W*H];
+  short  TGAhead[] = { 0, 2, 0, 0, 0, 0, W, H, 24 };
+
+  //glReadBuffer(GL_FRONT);
+  glReadPixels(0, 0, W, H, GL_BGR, GL_UNSIGNED_BYTE, pixel_data);
+
+  fwrite(&TGAhead, sizeof(TGAhead), 1, out);
+  fwrite(pixel_data, 3 * W*H, 1, out);
+  fclose(out);
+
+  delete[] pixel_data;
 }

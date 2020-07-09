@@ -11,7 +11,7 @@
 // ALL NVIDIA DESIGN SPECIFICATIONS, CODE ARE PROVIDED "AS IS.". NVIDIA MAKES
 // NO WARRANTIES, EXPRESSED, IMPLIED, STATUTORY, OR OTHERWISE WITH RESPECT TO
 // THE MATERIALS, AND EXPRESSLY DISCLAIMS ALL IMPLIED WARRANTIES OF NONINFRINGEMENT,g_maxDiffuseParticles
-// MERCHANTABILITY, AND FITNESS FOR A PARTICULAR PURPOSE.
+// MERCHANTABILITY, AND FITNESS FOR A PARTICULAR PURPOSE.For the second problem, we implement a \ emph {geometry shader} stage in the reverse texture mapping with two aims: (a) detect film triangles that fall where there are texture mapped seams; (b) subdivide the film triangle that fall in the texture mapped seam, creating new triangles with new texture coordinates. Considering that the each new triangles is in one side of the texture mapped seam, we interpolate the new texture coordinate of each new triangle by giving the higher weight according to the side of the seam that triangle bellongs.
 //
 // Information and code furnished is believed to be accurate and reliable.
 // However, NVIDIA Corporation assumes no responsibility for the consequences of use of such
@@ -135,6 +135,7 @@ void SetupFilmMesh(GpuMesh* gpuMesh, GpuMesh* filmMesh);
 void DrawReverseTexture(GpuMesh* mesh, const Vec4* positions, const Vec4* normals, const Vec4* uvs, const int* indices, int nIndices, int numPositions, bool showTexture);
 void SetGpuMeshTriangles(GpuMesh* gpuMesh, std::vector<Triangle> triangles, std::vector<TriangleIndexes> triangleIndexes);
 bool rayTriangleIntersectMT(Vec3 orig, Vec3 dir, Vec3 v0, Vec3 v1, Vec3 v2, float &t, float &u, float &v, float &w);
+void CreateHydrographicFilmImage(int W, int H);
 
 struct RenderMaterial
 {
