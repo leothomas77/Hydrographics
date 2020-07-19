@@ -230,7 +230,7 @@ void MakeSDF(const uint32_t* img, uint32_t w, uint32_t h, uint32_t d, float* out
 			}
 		}
 	}
-  //printf("Begin find surface points\n", (GetSeconds() - startSDF));
+  //printf("End find surface points\n", (GetSeconds() - startSDF));
 
 	// no occupied voxels so quit
 	if (queue.empty())

@@ -7,6 +7,8 @@ in VS_OUT
   vec3 vNormal; 
   vec3 vPosW; 
   vec2 vTexCoords;
+  vec2 uv0;
+  vec2 uv1;
   int triangleIndexes[3];
   int vertexID; 
 } tcs_in[]; 
@@ -17,6 +19,8 @@ out TCS_OUT
   vec3 vNormal; 
   vec3 vPosW; 
   vec2 vTexCoords; 
+  vec2 uv0;
+  vec2 uv1;
 } tes_in[]; 
 
 void main ()
@@ -25,6 +29,8 @@ void main ()
   tes_in[gl_InvocationID].vPosW = tcs_in[gl_InvocationID].vPosW;
   tes_in[gl_InvocationID].vNormal = tcs_in[gl_InvocationID].vNormal;
   tes_in[gl_InvocationID].vTexCoords = tcs_in[gl_InvocationID].vTexCoords;
+  tes_in[gl_InvocationID].uv0 = tcs_in[gl_InvocationID].uv0;
+  tes_in[gl_InvocationID].uv1 = tcs_in[gl_InvocationID].uv1;
 
   gl_TessLevelInner[ 0 ] = 0.0f;
   

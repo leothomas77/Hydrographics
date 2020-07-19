@@ -14,6 +14,8 @@ out VS_OUT
   vec3 vNormal;
   vec3 vPosW;
   vec2 vTexCoords;
+  vec2 uv0;
+  vec2 uv1;
 } vs_out;
 
 void main()
@@ -21,6 +23,9 @@ void main()
 	vs_out.vNormal = (normalize(normalMat * vec4(aNormal.xyz, 1.0))).xyz;
 	vs_out.vPosW = (model * vec4(aPosition.xyz, 1.0)).xyz;
 	vs_out.vTexCoords = showTexture ? vs_out.vTexCoords = aTexCoords.xy : vec2(0.0);
+
+  vs_out.uv0 = fract( vs_out.vTexCoords.xy );
+  vs_out.uv1 = fract( vs_out.vTexCoords.xy + vec2(0.5,0.5) ) - vec2(0.5,0.5);
 
   //int indexOffset = gl_VertexID % 3;
   //int indexV0; int indexV1; int indexV2;

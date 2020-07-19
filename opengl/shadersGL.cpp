@@ -280,6 +280,7 @@ GLchar *FILM_FRAGMENT_SHADER = "#version 430\n" STRINGIFY(
   uniform vec4 uSpecular;
   uniform uint uSpecularExpoent;
   uniform bool showTexture;
+  uniform bool showPhong;
   uniform sampler2D tex;
   out vec4 outFragColor;
   void main(void) {
@@ -294,38 +295,38 @@ GLchar *FILM_FRAGMENT_SHADER = "#version 430\n" STRINGIFY(
     vec4 matAmb = uAmbient;
 
     vec4 matDif;
-    //vec2 seamlessCoords;
 
-    //seamlessCoords.x = ( fwidth( uv0.x ) < fwidth( uv1.x )-0.001 )? uv0.x : uv1.x ;
-    //seamlessCoords.y = ( fwidth( uv0.y ) < fwidth( uv1.y )-0.001 )? uv0.y : uv1.y ;
-
-    //vec4 colorRedGreen = vec4(1.0, 1.0, 0.0, 1.0);
-
-    //colorRedGreen.r *= vTexCoords.x;
-    //colorRedGreen.g *= vTexCoords.y;
     matDif = showTexture ? texture(tex, vTexCoords) : uColor;
 
-    vec4 matSpec = uSpecular;
-    //ambient
-    vec4 ambient = matAmb;
-    //diffuse
-    vec3 pos = normalize(vPosW);
-    vec3 vL = normalize(uLPos - pos);
-    float NdotL = dot(normal, vL);
-    if (NdotL > 0)
+    if (showPhong)
     {
-      diffuse = matDif * NdotL;
+      vec4 matSpec = uSpecular;
+      //ambient
+      vec4 ambient = matAmb;
+      //diffuse
+      vec3 pos = normalize(vPosW);
+      vec3 vL = normalize(uLPos - pos);
+      float NdotL = dot(normal, vL);
+      if (NdotL > 0)
+      {
+        diffuse = matDif * NdotL;
+      }
+      //specular
+      vec3 vV = normalize(uCamPos - pos);
+      vec3 vR = normalize(reflect(-vL, normal));
+      float RdotV = dot(vV, vR);
+      if (RdotV > 0)
+      {
+        specular = matSpec * pow(RdotV, uSpecularExpoent);
+      }
+      
+      outFragColor = clamp((ambient + diffuse + specular) * lColor, 0.0, 1.0);
+
     }
-    //specular
-    vec3 vV = normalize(uCamPos - pos);
-    vec3 vR = normalize(reflect(-vL, normal));
-    float RdotV = dot(vV, vR);
-    if (RdotV > 0)
+    else
     {
-      specular = matSpec * pow(RdotV, uSpecularExpoent);
+      outFragColor = matDif;
     }
-    //outFragColor = clamp((ambient + diffuse + specular) * lColor, 0.0, 1.0);
-    outFragColor = matDif;
   }
 );
 
@@ -362,6 +363,7 @@ GLchar *RIGID_FRAGMENT_SHADER = "#version 430\n" STRINGIFY(
   uniform vec4 uSpecular;
   uniform uint uSpecularExpoent;
   uniform bool showTexture;
+  uniform bool showPhong;
   uniform sampler2D tex;
   out vec4 outFragColor;
   void main(void) {
@@ -387,7 +389,17 @@ GLchar *RIGID_FRAGMENT_SHADER = "#version 430\n" STRINGIFY(
     {
       specular = vec4(0);
     }
-    outFragColor = clamp((ambient + diffuse + specular) * lColor, 0.0, 1.0);
+
+    if (showPhong && false)
+    {
+
+      outFragColor = clamp((ambient + diffuse + specular) * lColor, 0.0, 1.0);
+      //outFragColor = clamp((diffuse + specular) * lColor, 0.0, 1.0);
+    }
+    else
+    {
+      outFragColor = matDif * cTheta;
+    }
   }
 );
 
@@ -2419,6 +2431,7 @@ void DrawGpuMeshV2(GpuMesh* m, const Matrix44& modelMat, bool showTexture)
       //Consider if it has a texture loaded to bind it
       glVerify(glUniform1i(glGetUniformLocation(s_rigidBodyProgram, "showTexture"), hasTexture));
     }
+    glVerify(glUniform1i(glGetUniformLocation(s_rigidBodyProgram, "showPhong"), 1));
     //Setup normal and model mat
     glVerify(glUniformMatrix4fv(glGetUniformLocation(s_rigidBodyProgram, "normalMat"), 1, false, Transpose(AffineInverse(modelMat))));
     glVerify(glUniformMatrix4fv(glGetUniformLocation(s_rigidBodyProgram, "model"), 1, false, modelMat));
@@ -2778,6 +2791,12 @@ void createVBOs(const aiScene *scene, GpuMesh* gpu_mesh, std::string basePath, M
   mesh->Normalize(1.0f - margin);
   mesh->Transform(TranslationMatrix(Point3(margin, margin, margin)*0.5f));
 
+  float maxDistanceUV = 0.0f;
+  float minDistanceUV = 1.0f;
+  float avgDistanceUV = 0.0f;
+  int countDistanceUV = 0;
+  float sumDistanceUV = 0.0f;
+
   for (int i = 0; i < mesh->m_positions.size(); i++)
   {
     // can't copy directly because of type incompatibility between point and Vec3
@@ -2789,6 +2808,22 @@ void createVBOs(const aiScene *scene, GpuMesh* gpu_mesh, std::string basePath, M
     {
       gpu_mesh->texCoordsRigid.push_back(mesh->m_texcoords[0][i]);
     }
+
+    if (i % 3 == 0)
+    {
+      float texDistance01 = Length(mesh->m_positions[i] - mesh->m_positions[i+1]);
+      float texDistance12 = Length(mesh->m_positions[i+1] - mesh->m_positions[i+2]);
+      float texDistance02 = Length(mesh->m_positions[i] - mesh->m_positions[i+2]);
+
+      maxDistanceUV = Max(maxDistanceUV, Max(texDistance01, Max(texDistance12, texDistance02)));
+      minDistanceUV = Min(minDistanceUV, Min(texDistance01, Min(texDistance12, texDistance02)));
+
+      sumDistanceUV = sumDistanceUV + (texDistance01 + texDistance12 + texDistance02);
+      countDistanceUV += 3;
+    }
+
+    avgDistanceUV = sumDistanceUV / countDistanceUV;
+
   }
 
   glGenBuffers(1, &gpu_mesh->mPositionsVBO);
@@ -2898,10 +2933,12 @@ GpuMesh* CreateGpuMesh(const char* filename, Mat44 transformation, float margin)
   return gpu_mesh;
 }
 
+/*
 void SetGpuMeshTriangles(GpuMesh* gpuMesh, std::vector<Triangle> triangles, std::vector<TriangleIndexes> triangleIndexes) {
   gpuMesh->triangles = triangles;
   gpuMesh->triangleIndexes = triangleIndexes;
 }
+*/
 
 #define CULLING
 /*
@@ -3142,7 +3179,6 @@ void BindRigidBodyShader(Matrix44 view, Matrix44 proj, Vec3 lightPos, Vec3 camPo
     glEnable(GL_DEPTH_TEST);
 
     glVerify(glUseProgram(s_rigidBodyProgram));
-
     glVerify(glUniform3fv(glGetUniformLocation(s_rigidBodyProgram, "uLPos"), 1, lightPos));
     glVerify(glUniform4fv(glGetUniformLocation(s_rigidBodyProgram, "uLColor"), 1, lightColor));
     glVerify(glUniform4fv(glGetUniformLocation(s_rigidBodyProgram, "uColor"), 1, diffuseColor));
@@ -3221,6 +3257,7 @@ void DrawHydrographicFilm(GpuMesh* mesh, const Vec4* positions, const Vec4* norm
   //int hasTexture = showTexture && mesh->texCoordsFilm.size() > 0 ? 1 : 0;
   //glVerify(glUniform1i(glGetUniformLocation(s_filmProgram, "showTexture"), hasTexture));
   glVerify(glUniform1i(glGetUniformLocation(s_filmProgram, "showTexture"), showTexture));
+  glVerify(glUniform1i(glGetUniformLocation(s_filmProgram, "showPhong"), 1));
   // update positions and normals
   glVerify(glBindBuffer(GL_ARRAY_BUFFER, mesh->mPositionsVBO)); // 
   glVerify(glBufferSubData(GL_ARRAY_BUFFER, 0, mesh->mNumVertices * sizeof(Vec4), positions));

@@ -5,6 +5,7 @@
     </Filter>
     <Filter Include="source">
     </Filter>
+    <Filter Include="include\core" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\include\NvFlex.h">
@@ -60,117 +61,113 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <Filter Include="core">
-    </Filter>
-  </ItemGroup>
-  <ItemGroup>
     <ClCompile Include="..\..\core\aabbtree.cpp">
-      <Filter>core</Filter>
+      <Filter>include\core</Filter>
     </ClCompile>
     <ClCompile Include="..\..\core\core.cpp">
-      <Filter>core</Filter>
+      <Filter>include\core</Filter>
     </ClCompile>
     <ClCompile Include="..\..\core\extrude.cpp">
-      <Filter>core</Filter>
+      <Filter>include\core</Filter>
     </ClCompile>
     <ClCompile Include="..\..\core\maths.cpp">
-      <Filter>core</Filter>
+      <Filter>include\core</Filter>
     </ClCompile>
     <ClCompile Include="..\..\core\mesh.cpp">
-      <Filter>core</Filter>
+      <Filter>include\core</Filter>
     </ClCompile>
     <ClCompile Include="..\..\core\perlin.cpp">
-      <Filter>core</Filter>
+      <Filter>include\core</Filter>
     </ClCompile>
     <ClCompile Include="..\..\core\pfm.cpp">
-      <Filter>core</Filter>
+      <Filter>include\core</Filter>
     </ClCompile>
     <ClCompile Include="..\..\core\platform.cpp">
-      <Filter>core</Filter>
+      <Filter>include\core</Filter>
     </ClCompile>
     <ClCompile Include="..\..\core\png.cpp">
-      <Filter>core</Filter>
+      <Filter>include\core</Filter>
     </ClCompile>
     <ClCompile Include="..\..\core\sdf.cpp">
-      <Filter>core</Filter>
+      <Filter>include\core</Filter>
     </ClCompile>
     <ClCompile Include="..\..\core\tga.cpp">
-      <Filter>core</Filter>
+      <Filter>include\core</Filter>
     </ClCompile>
     <ClCompile Include="..\..\core\voxelize.cpp">
-      <Filter>core</Filter>
+      <Filter>include\core</Filter>
     </ClCompile>
     <ClInclude Include="..\..\core\aabbtree.h">
-      <Filter>core</Filter>
+      <Filter>include\core</Filter>
     </ClInclude>
     <ClInclude Include="..\..\core\cloth.h">
-      <Filter>core</Filter>
+      <Filter>include\core</Filter>
     </ClInclude>
     <ClInclude Include="..\..\core\convex.h">
-      <Filter>core</Filter>
+      <Filter>include\core</Filter>
     </ClInclude>
     <ClInclude Include="..\..\core\core.h">
-      <Filter>core</Filter>
+      <Filter>include\core</Filter>
     </ClInclude>
     <ClInclude Include="..\..\core\extrude.h">
-      <Filter>core</Filter>
+      <Filter>include\core</Filter>
     </ClInclude>
     <ClInclude Include="..\..\core\mat22.h">
-      <Filter>core</Filter>
+      <Filter>include\core</Filter>
     </ClInclude>
     <ClInclude Include="..\..\core\mat33.h">
-      <Filter>core</Filter>
+      <Filter>include\core</Filter>
     </ClInclude>
     <ClInclude Include="..\..\core\mat44.h">
-      <Filter>core</Filter>
+      <Filter>include\core</Filter>
     </ClInclude>
     <ClInclude Include="..\..\core\maths.h">
-      <Filter>core</Filter>
+      <Filter>include\core</Filter>
     </ClInclude>
     <ClInclude Include="..\..\core\matnn.h">
-      <Filter>core</Filter>
+      <Filter>include\core</Filter>
     </ClInclude>
     <ClInclude Include="..\..\core\mesh.h">
-      <Filter>core</Filter>
+      <Filter>include\core</Filter>
     </ClInclude>
     <ClInclude Include="..\..\core\perlin.h">
-      <Filter>core</Filter>
+      <Filter>include\core</Filter>
     </ClInclude>
     <ClInclude Include="..\..\core\pfm.h">
-      <Filter>core</Filter>
+      <Filter>include\core</Filter>
     </ClInclude>
     <ClInclude Include="..\..\core\platform.h">
-      <Filter>core</Filter>
+      <Filter>include\core</Filter>
     </ClInclude>
     <ClInclude Include="..\..\core\png.h">
-      <Filter>core</Filter>
+      <Filter>include\core</Filter>
     </ClInclude>
     <ClInclude Include="..\..\core\point3.h">
-      <Filter>core</Filter>
+      <Filter>include\core</Filter>
     </ClInclude>
     <ClInclude Include="..\..\core\quat.h">
-      <Filter>core</Filter>
+      <Filter>include\core</Filter>
     </ClInclude>
     <ClInclude Include="..\..\core\sdf.h">
-      <Filter>core</Filter>
+      <Filter>include\core</Filter>
     </ClInclude>
     <ClInclude Include="..\..\core\tga.h">
-      <Filter>core</Filter>
+      <Filter>include\core</Filter>
     </ClInclude>
     <ClInclude Include="..\..\core\types.h">
-      <Filter>core</Filter>
+      <Filter>include\core</Filter>
     </ClInclude>
     <ClInclude Include="..\..\core\vec2.h">
-      <Filter>core</Filter>
+      <Filter>include\core</Filter>
     </ClInclude>
     <ClInclude Include="..\..\core\vec3.h">
-      <Filter>core</Filter>
+      <Filter>include\core</Filter>
     </ClInclude>
     <ClInclude Include="..\..\core\vec4.h">
-      <Filter>core</Filter>
+      <Filter>include\core</Filter>
     </ClInclude>
     <ClInclude Include="..\..\core\voxelize.h">
-      <Filter>core</Filter>
+      <Filter>include\core</Filter>
     </ClInclude>
     <ClCompile Include="..\..\source\imgui.cpp">
       <Filter>source</Filter>

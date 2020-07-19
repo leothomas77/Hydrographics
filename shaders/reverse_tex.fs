@@ -15,6 +15,9 @@ in GS_OUT
     vec3 vNormal;
     vec3 vPosW;
     vec2 vTexCoords;
+		vec2 uv0;
+		vec2 uv1;
+
 } fs_in;
 
 out vec4 outFragColor;
@@ -30,7 +33,17 @@ void main(void) {
 	vec4 matAmb	 = uAmbient;
 
   vec4 matDif;
+
+  //vec2 uvT; //Tarini 
+  //uvT.x = ( fwidth( fs_in.uv0.x ) < fwidth( fs_in.uv1.x )-0.001 )? fs_in.uv0.x : fs_in.uv1.x;
+	//uvT.y = ( fwidth( fs_in.uv0.y ) < fwidth( fs_in.uv1.y )-0.001 )? fs_in.uv0.y : fs_in.uv1.y;
+
+  //uvT.x = ( fwidth( fs_in.uv0.x ) < fwidth( fs_in.uv0.x +0.001) )? fs_in.uv0.x : fs_in.uv0.x +000.1;
+	//uvT.y = ( fwidth( fs_in.uv0.y ) < fwidth( fs_in.uv0.y +0.001) )? fs_in.uv0.y : fs_in.uv0.y +000.1;
+
 	matDif  = showTexture ? texture(tex, fs_in.vTexCoords) : uColor;
+  //matDif  = showTexture ? texture(tex, uvT) : uColor;
+
 
 	vec4 matSpec = uSpecular;
 	//ambient

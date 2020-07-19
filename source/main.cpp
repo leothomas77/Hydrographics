@@ -112,12 +112,9 @@ void Init(int scene, bool centerCamera = true)
   g_dt = 1.0f / 60.0f;
 
 	g_lightDistance = 2.0f;
-	g_fogDistance = 0.005f;
 
   g_camPos.resize(0);
 	g_camSpeed = 0.05f;
-	g_camNear = 0.01f;
-	g_camFar = 1000.0f;
   
 	// sim params
 	g_params.gravity[0] = 0.0f;
@@ -439,7 +436,12 @@ void UpdateScene()
 
 void RenderScene()
 {
+
+  //float aspect = (g_screenWidth*fy) / (g_screenHeight*fx);
   g_proj = ProjectionMatrix(RadToDeg(g_fov), g_aspect, g_camNear, g_camFar);
+
+  g_camDistance = Length(g_camPos[g_camIndex] - g_centroid);
+ 
   g_view = RotationMatrix(-g_camAngle[g_camIndex].x, Vec3(0.0f, 1.0f, 0.0f))*RotationMatrix(-g_camAngle[g_camIndex].y, Vec3(cosf(-g_camAngle[g_camIndex].x), 0.0f, sinf(-g_camAngle[g_camIndex].x)))*TranslationMatrix(-Point3(g_camPos[g_camIndex]));
 
   g_lightPos = g_camPos[g_camIndex]; // cam target always iluminated
@@ -468,8 +470,8 @@ void RenderScene()
   if (!isTestingMode() && g_drawReverseTexture && !g_generateContactsTexture)
   {
     // hide other meshes and draw only flat film with reverse texture
-    g_drawHydrographic = false;
-    g_drawHydrographicCollisionMesh = false;
+    //g_drawHydrographic = false;
+    //g_drawHydrographicCollisionMesh = false;
     if (1)
     {
       showTexture = true;
@@ -548,8 +550,9 @@ void RenderDebug()
         Vec3 restA = g_contact_positions[a];
         Vec3 restB = g_contact_positions[b];
         float restLength = Length(restA - restB);
-        float displacement = abs(distortedLength - restLength) / restLength;
-        color = colorGradient->getColorAtValue(displacement * 2);
+        float displacementCoef = abs(distortedLength - restLength) / restLength;
+        //color = colorGradient->getColorAtValue(displacement * 2);
+        color = colorGradient->getColorAtValue(displacementCoef);
       }
 
       //Heatmap of stiffness
@@ -672,7 +675,8 @@ void RenderDebug()
 
 	if (g_drawAxis)
 	{
-		BeginLines();
+    
+    BeginLines();
 
 		float size = 0.5f;
 
@@ -685,7 +689,13 @@ void RenderDebug()
 		DrawLine(Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, size), Vec4(blue, 0.0f));
 
 		EndLines();
-	}
+
+    BeginPoints(3.0f);
+    DrawPoint(g_centroid, Vec4(red, 0.0f));
+    EndPoints();
+
+
+  }
 
 	if (g_drawNormals)
 	{
@@ -737,16 +747,21 @@ int DoUI()
 			if (!g_ffmpeg)
 			{
 				DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "FPS: %.2f", g_fps); y -= fontHeight * 2;
-				DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "AVG FPS: %.2f", g_avgFPS); y -= fontHeight * 2;
-        DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "AVG Update Time: %.2fms", g_avgUpdateTime*1000.0f); y -= fontHeight * 2;
-        DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "AVG Render Time: %.2fms", g_avgRenderTime*1000.0f); y -= fontHeight * 2;
-        DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "AVG Wait Time: %.2fms", g_avgWaitTime*1000.0f); y -= fontHeight * 2;
+        if (isTestingMode())
+        {
+          DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "AVG FPS: %.2f", g_avgFPS); y -= fontHeight * 2;
+          DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "AVG Update Time: %.2fms", g_avgUpdateTime*1000.0f); y -= fontHeight * 2;
+          DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "AVG Render Time: %.2fms", g_avgRenderTime*1000.0f); y -= fontHeight * 2;
+          DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "AVG Wait Time: %.2fms", g_avgWaitTime*1000.0f); y -= fontHeight * 2;
+        }
         DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "Frame Time: %.2fms", g_realdt*1000.0f); y -= fontHeight * 2;
 
 				// If detailed profiling is enabled, then these timers will contain the overhead of the detail timers, so we won't display them.
 				if (!g_profile)
 				{
-					DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "Sim Time (CPU): %.2fms", g_updateTime*1000.0f); y -= fontHeight;
+          DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "Update Time (CPU): %.2fms", g_updateTime*1000.0f); y -= fontHeight;
+          DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "Render Time (CPU): %.2fms", g_renderTime*1000.0f); y -= fontHeight;
+          DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "Wait Time (CPU): %.2fms", g_waitTime*1000.0f); y -= fontHeight;
 					DrawImguiString(x, y, Vec3(0.97f, 0.59f, 0.27f), IMGUI_ALIGN_RIGHT, "Sim Latency (GPU): %.2fms", g_simLatency); y -= fontHeight * 2;
 				}
 				else
@@ -764,6 +779,9 @@ int DoUI()
 
 			DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "Device: %s", g_deviceName); y -= fontHeight * 2;
       DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "Camera Positon (X ,Y ,Z): (%.2f, %.2f, %.2f)", g_camPos[g_camIndex].x, g_camPos[g_camIndex].y, g_camPos[g_camIndex].z); y -= fontHeight * 2;
+      DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "Cam distance %.2f", g_camDistance); y -= fontHeight * 2;
+      DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "Cam real distance %.2f mm", g_camDistance / g_realDistanceFactor); y -= fontHeight * 2;
+      //DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "Real dipping %.2f mm/s", g_realDipping * g_camRealDistanceFactor); y -= fontHeight * 2;
     }
 
 		if (g_profile)
@@ -897,6 +915,7 @@ int DoUI()
       if (imguiSlider("Num Iterations", &n, 1, 20, 1))
       {
 				g_params.numIterations = int(n);
+        g_resetSolver = true;
       }
 
 			imguiSeparatorLine();
@@ -918,7 +937,18 @@ int DoUI()
 			imguiSlider("Collision Distance", &g_params.collisionDistance, 0.0f, 0.5f, 0.001f);
 			imguiSlider("Collision Margin", &g_params.shapeCollisionMargin, 0.0f, 5.0f, 0.01f);
 
-			// cloth params
+      imguiSlider("Cam fov", &g_fov, 0.001f, 5, 0.001f);
+      imguiSlider("Cam near", &g_camNear, 0.0f, 5.0f, 0.001f);
+      imguiSlider("Cam far", &g_camFar, 0.0f, 1500.0f, 0.001f);
+      imguiSlider("Cam aspect", &g_aspect, 0.001f, 5.0f, 0.0001f);
+      imguiSlider("Cam angle X", &g_camAngle[g_camIndex].x, 0.0f, 2 * M_PI, 0.0001f);
+      imguiSlider("Cam angle Y", &g_camAngle[g_camIndex].y, 0.0f, 2 * M_PI, 0.0001f);
+      imguiSlider("Cam angle Z", &g_camAngle[g_camIndex].z, 0.0f, 2 * M_PI, 0.0001f);
+      imguiSlider("Cam position X", &g_camPos[g_camIndex].x, -10.0f, 10.0f, 0.0001f);
+      imguiSlider("Cam position Y", &g_camPos[g_camIndex].y, -10.0f, 10.0f, 0.0001f);
+      imguiSlider("Cam position Z", &g_camPos[g_camIndex].z, -10.0f, 10.0f, 0.0001f);
+
+      // cloth params
 			imguiSeparatorLine();
 			imguiSlider("Drag", &g_params.drag, 0.0f, 1.0f, 0.01f);
 			imguiSlider("Lift", &g_params.lift, 0.0f, 1.0f, 0.01f);
@@ -1552,7 +1582,7 @@ bool InputKeyboardDown(unsigned char key, int x, int y)
 		if (g_fullscreen)
 		{
 			SDL_SetWindowFullscreen(g_window, 0);
-			ReshapeWindow(1280, 720);
+			ReshapeWindowV2(1280, 720);
 			g_fullscreen = false;
 		}
 		else
@@ -1893,7 +1923,7 @@ void SDLMainLoop()
 				if (e.window.windowID == g_windowId)
 				{
 					if (e.window.event == SDL_WINDOWEVENT_SIZE_CHANGED)
-						ReshapeWindow(e.window.data1, e.window.data2);
+						ReshapeWindowV2(e.window.data1, e.window.data2);
 				}
 				break;
 
@@ -2005,7 +2035,7 @@ int main(int argc, char* argv[])
     float dippingArg = 0.0f;
     if (sscanf(argv[i], "-dippingVelocity=%f", &dippingArg) == 1)
     {
-      dippingVelocity = dippingArg;
+      g_dippingVelocity = dippingArg;
     }
 
 		if (strcmp(argv[i], "-disabletweak") == 0)
