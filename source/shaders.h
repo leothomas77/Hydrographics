@@ -179,10 +179,10 @@ void DrawMesh(const Mesh*, Vec3 color);
 void DrawCloth(const Vec4* positions, const Vec4* normals, const float* uvs, const int* indices, int numTris, int numPositions, int colorIndex=3, float expand=0.0f, bool twosided=true, bool smooth=true);
 // void DrawBuffer(float* buffer, Vec3 camPos, Vec3 lightPos);
 void DrawRope(Vec4* positions, int* indices, int numIndices, float radius, int color);
-void DrawHydrographic(const Vec4* positions, const Vec4* normals, const float* uvs, const int* indices, int numTris, int numPositions, int colorIndex = 3, float expand = 0.0f, bool twosided = true, bool smooth = true);
+//void DrawHydrographic(const Vec4* positions, const Vec4* normals, const float* uvs, const int* indices, int numTris, int numPositions, int colorIndex = 3, float expand = 0.0f, bool twosided = true, bool smooth = true);
 void DrawHydrographicFilm(GpuMesh* m, const Vec4* positions, const Vec4* normals, const Vec4* uvs, const int* indices, int nIndices, int numPositions, bool showTexture);
 //void SetupVertexArrays(const Vec4* positions, const Vec4* normals, const Vec3* uvs, const int* indices, int numTris, int numPositions);
-void DrawDisplacements(const Vec4* positions, const Vec4* normals, const Vec4* uvs, const int numPositions, const int* indices, int numTris);
+//void DrawDisplacements(const Vec4* positions, const Vec4* normals, const Vec4* uvs, const int numPositions, const int* indices, int numTris);
 //void DrawBuffer(float* buffer, Vec3 camPos, Vec3 lightPos);
 //void DrawRope(Vec4* positions, int* indices, int numIndices, float radius, int color);
 //void DrawShapes();
@@ -210,7 +210,7 @@ void get_bounding_box_for_node(const struct aiNode* nd, aiVector3D* min, aiVecto
 
 // texture setup
 //void BindHeatmapTexture(Vec4 *pixels, int texWidth, int texHeight);
-void EnableTexture(); 
+//void EnableTexture(); 
 void EnableTextureV2();
 //void EnableTexture(unsigned int textureId);
 

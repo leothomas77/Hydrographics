@@ -253,7 +253,53 @@ NvFlexDistanceFieldId CreateSDF(const char* meshFile, int dim, float margin = 0.
 }
 */
 
-NvFlexDistanceFieldId CreateHydrographicSDF(Mesh* mesh, const char* meshFile, bool createSDFFile, int dim, Mat44 transformation, float margin = 0.1f, float expand = 0.0f)
+Vec3 GetCentroid(float *data,  int dim)
+{
+  float unityVolume = 1.0f;
+  float totalVolume = 0.0f;
+  Vec3 totalPositionVolume = Vec3(0.0f);
+  Vec3 centroid;
+
+  for (int i = 0; i < dim; i++)
+  {
+    for (int j = 0; j < dim; j++)
+    {
+      for (int k = 0; k < dim; k++)
+      {
+        int index = i + dim * (j + dim * k);
+        float sdfData = data[index];
+        if (sdfData < 0.0f)
+        {
+          totalPositionVolume += Vec3(float(i), float(j), float(k)) * unityVolume;
+          totalVolume += unityVolume;
+        }
+      }
+    }
+  }
+
+  centroid = totalPositionVolume / totalVolume;
+
+  return centroid;
+}
+
+float GetScaleFactor(float modelDim, float sdfDim = 1.0f, float sdfMargin = 0.1f)
+{
+  float kEpsilon = 1e-6;
+  if (modelDim <= kEpsilon) // avoid NaN outputs
+    modelDim = 70.0f;
+
+  return (1.0f - sdfMargin) / modelDim;
+}
+
+Mat44 GetSdfRotation(Vec3 rotationDeg)
+{
+  Mat44 mRotX = RotationMatrix(DegToRad(rotationDeg.x), Vec3(1.0f, 0.0f, 0.0f));
+  Mat44 mRotY = RotationMatrix(DegToRad(rotationDeg.y), Vec3(0.0f, 1.0f, 0.0f));
+  Mat44 mRotZ = RotationMatrix(DegToRad(rotationDeg.z), Vec3(0.0f, 0.0f, 1.0f));
+  return mRotZ * mRotY * mRotX;
+}
+
+NvFlexDistanceFieldId CreateRigidBodySDF(Mesh* mesh, const char* meshFile, bool createSDFFile, int dim, Mat44 transformation, Vec3 &centroid, float margin = 0.1f, float expand = 0.0f)
 {
 	if (!mesh)
 		throw std::runtime_error(std::string("Import mesh fail!"));
@@ -289,7 +335,7 @@ NvFlexDistanceFieldId CreateHydrographicSDF(Mesh* mesh, const char* meshFile, bo
 		printf("Cooking SDF: %s - dim: %d^3\n", sdfFile.c_str(), dim);
 
 		CreateSDF(mesh, dim, lower, upper, pfm.m_data);
-		// ...save in pfm format, to use in the next program execution
+    // ...save in pfm format, to use in the next program execution
 		PfmSave(sdfFile.c_str(), pfm);
 	}
 
@@ -323,6 +369,10 @@ NvFlexDistanceFieldId CreateHydrographicSDF(Mesh* mesh, const char* meshFile, bo
   }
 
 	NvFlexUpdateDistanceField(g_flexLib, sdf, dim, dim, dim, field.buffer);
+
+  printf("Geting centroid");
+  centroid = GetCentroid(pfm.m_data, dim);
+  printf("Centroid found in voxel positions (%.2f, %.2f, %.2f)", centroid.x, centroid.y, centroid.z);
 
 	delete[] pfm.m_data;
 
@@ -483,6 +533,7 @@ float computeStiffness(float r, float rMax, float x, float x0, float z, float z0
 			break;
 	}
 
+
   f = 1.0f - clip(f, 0.01f, 1.0f);
 
 	return f;
@@ -592,8 +643,8 @@ void CreateHydrographicSpringGrid(Vec3 lower, Vec3 meshCenter, int dx, int dy, i
 				int index1 = y*dx + x - 1;
 				Vec4 mean = 0.5f * (g_buffers->positions[baseIndex + index0] + g_buffers->positions[baseIndex + index1]);
 				float d = computeDistance(distortionCenter, Vec3(mean));
-				CreateSpring(baseIndex + index0, baseIndex + index1, computeStiffness(d, min(dx * radius, dy * radius), mean.x, distortionCenter.x, mean.z, distortionCenter.z, stretchStiffness));
-        //CreateSpring(baseIndex + index0, baseIndex + index1, stretchStiffness);
+				//CreateSpring(baseIndex + index0, baseIndex + index1, computeStiffness(d, min(dx * radius, dy * radius), mean.x, distortionCenter.x, mean.z, distortionCenter.z, stretchStiffness));
+        CreateSpring(baseIndex + index0, baseIndex + index1, stretchStiffness);
       }
 
 			if (hasBendShiftess && x > 1)
@@ -629,8 +680,8 @@ void CreateHydrographicSpringGrid(Vec3 lower, Vec3 meshCenter, int dx, int dy, i
 				int index1 = (y - 1)*dx + x;
 				Vec4 mean = 0.5f * (g_buffers->positions[baseIndex + index0] + g_buffers->positions[baseIndex + index1]);
 				float d = computeDistance(distortionCenter, Vec3(mean));
-				CreateSpring(baseIndex + index0, baseIndex + index1, computeStiffness(d, min(dx * radius, dy * radius), mean.x, distortionCenter.x, mean.z, distortionCenter.z, stretchStiffness));
-        //CreateSpring(baseIndex + index0, baseIndex + index1, stretchStiffness);
+				//CreateSpring(baseIndex + index0, baseIndex + index1, computeStiffness(d, min(dx * radius, dy * radius), mean.x, distortionCenter.x, mean.z, distortionCenter.z, stretchStiffness));
+        CreateSpring(baseIndex + index0, baseIndex + index1, stretchStiffness);
       }
 
 			if (hasBendShiftess && y > 1)

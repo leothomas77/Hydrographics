@@ -221,7 +221,6 @@ int g_numSubsteps;
 Vec3 g_meshColor;
 Vec3  g_clearColor;
 float g_lightDistance;
-float g_fogDistance;
 Vec4 g_lightColor = Vec4(1.0f, 1.0f, 1.0f, 1.0f);
 Vec4 g_ambientColor = Vec4(0.15f, 0.15f, 0.15f, 1.0f);
 Vec4 g_diffuseColor = Vec4(1.0f, 1.0f, 1.0f, 1.0f);
@@ -251,7 +250,7 @@ int g_meshFactorStep = 10;
 
 int g_voxelFactor = 64;
 int g_voxelactorMin = 64;
-int g_voxelFactorMax = 400.5;
+int g_voxelFactorMax = 400;
 float g_voxelFactorStep = 1.226; //multiplier factor to a geometric projection from 64 to 400.5
                                  //depending on memory
 
@@ -305,7 +304,7 @@ std::vector<Vec4> g_contact_normals;
 std::vector<Vec4> g_contact_uvs;
 std::vector<int> g_contact_indexes;
 float g_max_distance_uv = 0.36f;
-float g_near_distance_uv = 0.01f;
+float g_near_distance_uv = 0.001f;
 float g_weight1 = 0.0f;
 float g_weight2 = 1.0f;
 float g_tesselation_inner = 1.0f;
@@ -345,31 +344,42 @@ Colour g_colors[] =
 	Colour(0.612f, 0.194f, 0.394f)
 };
 
-// flag to request collision shapes be updated
-bool g_shapesChanged = false;
-float translateX = 0.0f;
-float translateZ = 0.0f;
-Vec3 gridPosition;
-int gridDimX = 0;
-int gridDimZ = 0;
-float gridSpacing = 0.0f;
-unsigned int texHeatmapId;
-float dippingVelocity = -0.08f;
-float horizontalInvMass = 0.9f;
-float verticalInvMass = 0.9f;
+bool g_shapesChanged = false; // flag to request collision shapes be updated
+Vec3 g_filmCenter;
+int g_filmDimX = 0;
+int g_filmDimZ = 0;
+Vec3 g_dippingVelocity = Vec3(0.0f, -0.3f, 0.0f);
+float g_horizontalInvMass = 1.0f;
+float g_verticalInvMass = 1.0f;
 
 std::vector<Vec3> g_camPos;
 std::vector<Vec3> g_camAngle;
 int g_camIndex = 0;
 Vec3 g_camVel(0.0f);
 Vec3 g_camSmoothVel(0.0f);
+float g_camDistance;
+float g_realDipping = 0.0f;
+float g_realDistanceFactor;
 Vector3 g_meshCenter = Vector3(0.0f);
 Mat44 g_model, g_view, g_proj;
+Vec3 g_centroid;
 
-float g_fov = kPi / 4.0f;
+// camera parameters
+float dx = 1307.0f;
+float dy = 925.0f;
+// 
+float dX = 297.0f;
+float dY = 210.0f;
+float dZ = 71.0f;
+
+float fx = (dx / dX)*dZ;
+float fy = (dy / dY)*dZ;
+
+float g_fov = 2 * float(atan(0.5*g_screenHeight / fy)); // *180 / M_PI;
+//float g_fov = kPi / 4.0f;
 float g_camSpeed;
-float g_camNear;
-float g_camFar;
+float g_camNear = .001f;
+float g_camFar = 1000.0f;
 
 Vec3 g_lightPos;
 Vec3 g_lightDir = Normalize(Vec3(5.0f, -15.0f, 7.5f));

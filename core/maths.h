@@ -600,6 +600,19 @@ inline Mat44 ProjectionMatrix(float fov, float aspect, float znear, float zfar)
 	return Mat44(&view[0][0]);
 }
 
+inline Mat44 ProjectionMatrix(float fx, float fy, float aspect, float znear, float zfar)
+{
+  float zd = znear - zfar;
+
+  float view[4][4] = { { fx / aspect, 0.0f, 0.0f, 0.0f },
+  { 0.0f, fy / aspect, 0.0f, 0.0f },
+  { 0.0f, 0.0f, (zfar + znear) / zd, -1.0f },
+  { 0.0f, 0.0f, (2.0f*znear*zfar) / zd, 0.0f } };
+
+  return Mat44(&view[0][0]);
+}
+
+
 // encapsulates an orientation encoded in Euler angles, not the sexiest 
 // representation but it is convenient when manipulating objects from script
 

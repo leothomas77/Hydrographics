@@ -1,120 +1,66 @@
 //#define DEBUG_GRID
 
+#define SQUARES_W 7
+#define SQUARES_H 11
+#define A4_W 210
+#define A4_H 297
+#define REAL_SQUARE_DIM 17.0f
+#define REAL_OBJECT_DEFAULT_DIM 70.0f
+#define SDF_RATIO 1.0f
+
 class Hydrographic : public Scene
 {
 public:
 
 	Hydrographic(const char* name) :
-	  Scene(name) {}
-	/**
-		M�todo para o ajuste das constantes para calibrar o simulador
-		O modelo SDF ter� sempre um bounding box de 1x1, podendo ser aplicada rota��o. Com a quina para a origem dos eixos.
-		0.0 Executar o experimento f�sico com alinhamento (usando nivel de bolha) e com aparelho eletromec�nico, com conten��es de bordas para o filme.
-			0.0 Nivelar qualquer rota��o em x e z. Em y poss�velmente poder� ocorrer, mas pode ser desfeita virtualmente.
-		0. Medir com escala em cm a rela��o entre o tam dos quadrados na folha plana e o modelo real.
-		1. Fotografar o modelo real com o xadrez alinhado .
-		2. Rodar a simula��o, sem a colis�o, com o modelo atravessando o filme. -> no metodo Update, comentar UpdateShapes();
-			2.1 Alinhar o modelo para que a lateral coincida com a borda do filme (transla��o do filme)
-			2.2	Ajustar o fator de escala da lateral do quadrado para coincidir com a medi��o real.
-			Caso n�o coincida, rodar novamente at� coincidir.
-		3. Posicionar o filme novamente para que o modelo fique ao centro
-			3.1 Rodar a simula��o, e alinhar x e z do filme para coincidir no ponto de colis�o do xadrez 
-			3.2 Verificar a necessidade de rota��o em (x, y, z), de acordo com pontos de refer�ncia da maior dimens�o x, y, z da imagem e seu alinhamento com a linha x e z do xadrez
-			3.2 Caso n�o ajuste, modificar: stretch, fator de relaxamento, drag e lift de forma a modificar o esticamento
-			3.3 Ainda � poss�vel modificar a fixa��o das bordas variando de 0 a 1.
-		4. Trazer a imagem para um editor de imagens em camadas. 
-			4.1 Trazer a foto nivelada para o editor de imagens em camadas
-			4.2 Trazer a foto da simula��o para o editor de imagens em camadas, com transpar�ncia de 30 a 50%
-			4.3 Comparar os pontos do xadrez da foto com a imagem e tirar as medidas
+	Scene(name) {}
 
-	*/
 	virtual void Initialize()
-	{	//-0.012f
+	{	
+    // real dimensions of each model in mm
+    float tetraDim = 60.0f;
+    float sphereDim = 70.0f;
+    float turtleDim = 109.0f;
+    
+    float sphereTexDim = 50.0f;
+    float cunhaDim = 74.0f;
+    float tembetaDim = 76.0f;
+    float urnaDim = 94.0f;
+    float oncaDim = 140.0f;
 
-    //modelos centro
-		  ModelData tetra = ModelData("../../data/tetrahedron2.obj", Vec3(0.0f, 0.0f, 0.0f), 0.216f, Vec3(0.0f, 90.0f, 0.0f));//fator escala medido 0.216
-      ModelData sphere = ModelData("../../data/sphere.obj", Vec3(0.0f, 0.0f, 0.0f), 0.3f, Vec3(0.0f)); //.17
-      ModelData turtle = ModelData("../../data/tartaruga-centrov2.obj", Vec3(0.0f, 0.0f, 0.0f), 0.125f, Vec3(0.0f, -95.5f, 0.0f)); //fator escala fixa medida 0.14
-      ModelData onca = ModelData("../../data/Onca_Poisson_15_16_0.obj", Vec3(-0.2f, 0.0f, 0.0f), 0.125f, Vec3(0.0f, 0.0f, 0.0f)); //fator escala fixa medida 0.14
-      ModelData earth = ModelData("../../data/Earth.obj", Vec3(0.0f, 0.0f, 0.0f), 0.3f, Vec3(0.0f, 0.0f, 0.0f)); //fator escala fixa medida 0.14
-      ModelData casco = ModelData("../../data/tartaruga-centro_casco.obj", Vec3(-0.1f, 0.0f, 0.0f), 0.18f, Vec3(0.0f, -90.0f, 0.0f)); //fator escala fixa medida 0.14
+    //models without texture to chessboard test
+		ModelData tetra = ModelData("../../data/teste/tetrahedron.obj", Vec3(0.0f, 0.0f, 0.2f), tetraDim, Vec3(0.0f, -90.0f, 0.0f));
+    ModelData sphere = ModelData("../../data/teste/sphere.obj", Vec3(0.0f, 0.0f, 0.0f), sphereDim, Vec3(0.0f));
+    ModelData turtle = ModelData("../../data/teste/tartaruga-centro_casco.obj", Vec3(0.19f, 0.0f, 0.05f), turtleDim, Vec3(0.0f, -185.6f, 0.0f));
+    //models with texture to reverse-texture test
+    ModelData sphereTex = ModelData("../../data/teste/Earth.obj", Vec3(0.0f, 0.0f, 0.0f), sphereTexDim, Vec3(0.0f, 0.0f, 0.0f));
+    ModelData cunha = ModelData("../../data/teste/cunha-centro.obj", Vec3(0.0f, 0.0f, 0.0f), cunhaDim, Vec3(0.0f, 0.0f, 180.0f));
+    ModelData tembeta = ModelData("../../data/teste/tembeta-centro.obj", Vec3(0.0f, 0.0f, 0.0f), tembetaDim, Vec3(0.0f, 0.0f, 180.0f));
+    ModelData urna = ModelData("../../data/teste/urna-centro.obj", Vec3(0.0f, 0.0f, 0.0f), urnaDim, Vec3(0.0f, 0.0f, 0.0f));
+    ModelData onca = ModelData("../../data/teste/Onca_Poisson_15_16_0.obj", Vec3(0.0f, 0.0f, 0.0f), oncaDim, Vec3(0.0f, 0.0f, 0.0f));
+    ModelData casco = ModelData("../../data/teste/tartaruga-centro_casco.obj", Vec3(0.0f, 0.0f, 0.0f), turtleDim, Vec3(0.0f, 0.0f, 0.0f));
 
-    //modelos alinhados - N�O REMOVER                                                                                                                                 //modelos alinhados trasladados
-      //ModelData tetra = ModelData("../../data/tetrahedron2.obj", Vec3(-0.02f, 0.0f, 0.3f), 0.216f, Vec3(0.0f, -90.0f, 0.0f));//fator escala medido 0.216
-		  //ModelData sphere = ModelData("../../data/sphere.obj", Vec3(0.0f, 0.0f, 0.0f), 0.17f, Vec3(0.0f)); //.17
-		  //ModelData turtle = ModelData("../../data/tartaruga_centro.obj", Vec3(0.09f, 0.0f, 0.1f), 0.125f, Vec3(0.0f, -95.5f, 0.0f)); //fator escala fixa medida 0.14
-		  //ModelData turtleRot = ModelData("tartaruga_centro.obj", Vec3(-0.07f, 0.0f, 0.2f), 0.130f, Vec3(0.0f, -95.53f, 0.0f));
+    //ModelData turtle = ModelData("../../data/tartaruga_centro.obj", Vec3(0.09f, 0.0f, 0.1f), 0.125f, Vec3(0.0f, -95.5f, 0.0f)); //fator escala fixa medida 0.14
+    //ModelData turtleRot = ModelData("tartaruga_centro.obj", Vec3(-0.07f, 0.0f, 0.2f), 0.130f, Vec3(0.0f, -95.53f, 0.0f));
 
 		models.clear();
-		models.push_back(tetra);
+		//models without texture
+    models.push_back(tetra);
 		models.push_back(sphere);
 		models.push_back(turtle);
+    //models with texture
+    models.push_back(sphereTex);
+    models.push_back(cunha);
+    models.push_back(tembeta);
+    models.push_back(urna);
     models.push_back(onca);
-    models.push_back(earth);
     models.push_back(casco);
-
-    if (g_selectedModel >= 0 && g_selectedModel < models.size())
-    {
-      selectedModel = g_selectedModel;
-    }
-    else
-    {
-      // test models without texture
-      //0: tetraedro 1: sphere 2: turtle
-      // with texture
-      //3: onca 4: texture sphere 5: casco
-      selectedModel = 4;
-    }
-
-    g_fps = 0.0f;
-    g_frame = 0;
-		//float stretchStiffness = 1.0f; // default tartaruga esfera tetra
-    float stretchStiffness = 0.5f; // not used onca: 0.2 
-    float bendStiffness = 0.75f; // not used
-		float shearStiffness = 0.5f; // not used
-		verticalInvMass = 1.0f;
-		horizontalInvMass = 1.0f;
-
-		//float radius = 0.05f;
-
-		//int dimx = factor * A4_Width;
-		//int dimz = factor * A4_Height;
-		//float spacing = spacingFactor * A4_Spacing;//radius*0.8f;
-		// para world map: dimx = 10 dimz = 5
-#ifdef DEBUG_GRID
-		// para debug alinhamento posicoes
-		factor = 1;
-		int dimx = factor * (4+1);
-		int dimz = factor * (4+1);
-		float spacing = .25f;
-#else
-    A4_Spacing = models[selectedModel].scale;
-    if (g_filmStepTest) {
-      factor = g_filmFactor;
-    }
-    if (g_meshStepTest) {
-      sphereSectors = g_meshFactor;
-    }
-    if (g_voxelStepTest) {
-      voxelDim = g_voxelFactor;
-    }
-
-		gridDimX = factor * (A4_Width + 1);
-		gridDimZ = factor * (A4_Height + 1);
-		float spacing = A4_Spacing / factor;
-#endif // DEBUG_GRID
-		gridSpacing = spacing;
-
-		gridPosition = Vec3(-(gridDimX - 1)*spacing*0.5f, gridY, -(gridDimZ - 1)*spacing*0.5f);
-
-		int phase = NvFlexMakePhase(0, eNvFlexPhaseSelfCollide | eNvFlexPhaseSelfCollideFilter);
-		
-		// general params
-    g_params.numIterations = 3; //onca: 3
+    
+		//general params
+    g_params.numIterations = 3; //5 iteracoes por default; se diminuir provoca maior esticamento
     g_numSubsteps = 1;
-    // g_params.numIterations = 5; // iteracoes pbd default
-
-    g_params.gravity[0] = 0.0f; // gravidade x, y, z
+    // gravidade x, y, z
+    g_params.gravity[0] = 0.0f; 
 		g_params.gravity[1] = 0.0f;
 		g_params.gravity[2] = 0.0f;
 		// common params
@@ -122,7 +68,7 @@ public:
 		g_params.staticFriction = 1.0;
 		g_params.particleFriction = 1.0f;
 		g_params.restitution = 0.0f; // coef. restituicao (colisao totalmente inelastica, corpos seguem juntos)
-		//g_params.adhesion = 0.08f; // coef de adesao
+		g_params.adhesion = 0.08f; // coef de adesao
     g_params.sleepThreshold = 0.01f;
 
 		//g_params.maxSpeed
@@ -136,7 +82,7 @@ public:
 		g_params.viscosity = 0.0f;
 		// cloth params
     g_params.drag = .8f;//0.3f;//3.5f;//força de arrasto ao tecido. aumenta sensa��o de elasticidade
-    g_params.lift = .8f;//0.2f;//1.8f;// forca de sustentação
+    g_params.lift = .2f;//0.2f;//1.8f;// forca de sustentação
 		// collision params
     float radius = 0.012f;
     g_params.radius = radius;//0.012f;   //radius*1.0f; // raio max de intera��o entre part�culas
@@ -149,70 +95,160 @@ public:
 		//g_params.relaxationFactor = 0.25f;
 		g_params.relaxationMode = eNvFlexRelaxationLocal;
 		g_params.relaxationFactor = 0.2f;
-		// plastic params
+		// plastic params not used
 		//g_params.plasticThreshold = 0.1f;
 		//g_params.plasticCreep = 0.3f;
 
-		//g_windStrength = 0.0f;
+    //select a model to load
+    if (g_selectedModel >= 0 && g_selectedModel < models.size())
+    {
+      selectedModel = g_selectedModel;
+    }
+    else
+    {
+      //without texture
+      //0: tetraedro 
+      //1: sphere
+      //2: turtle
+      //with texture
+      //3: sphere
+      //4: cunha
+      //5: tembeta
+      //6: urna
+      //7: onca
+      //8: tartaruga
+      selectedModel = 1;
+    }
 
-		//tetrahedron2.obj (rotacionado x) tetrahedron1.obj
-		//sphere.obj sphere960f
-		//tartaruga_centro.obj
-		//happy_vrip.ply ATENCAO!!! .ply
-		Mat44 mTrans = TranslationMatrix(translation);
-		angle = models[selectedModel].rotation;
-		Mat44 mRotX = RotationMatrix(DegToRad(angle.x), Vec3(1.0f, 0.0f, 0.0f));
-		Mat44 mRotY = RotationMatrix(DegToRad(angle.y), Vec3(0.0f, 1.0f, 0.0f));
-		Mat44 mRotZ = RotationMatrix(DegToRad(angle.z), Vec3(0.0f, 0.0f, 1.0f));
-		Mat44 mRot = mRotZ * mRotY * mRotX;
-		Mat44 mScale = ScaleMatrix(Vec3(scale, scale, scale)); //tartaruga z:0.96f
-		Mat44 transf = mTrans * mRot * mScale;
+    Mesh* mesh = NULL; //mesh model to create sdf structures
 
-		Vec3 pos = Vec3(0.0f, initialY, 0.0f);
-		Quat rot = QuatFromAxisAngle(Vec3(1.0f), 0.0f);
-    // define model matrix to start simulation
-    g_model = TranslationMatrix(Point3(pos))*RotationMatrix(Quat(rot))*ScaleMatrix(1.0f);
-
-    Mesh* mesh = NULL; // mesh model for Flex simulator
-    GpuMesh* gpuMesh = NULL; // mesh for GPU and rendering
-    if (g_meshStepTest) {
+    // used in batch tests
+    if (g_meshStepTest)
+    {
+      //create sphere mesh parametrized by sectors
+      sphereSectors = g_meshFactor;
       cout << "Selecting sphere mesh with " << sphereSectors << " segments and " << sphereSectors << " slices " << endl;
       mesh = CreateSphere(sphereSectors, sphereSectors, 1.0f);
-    } else {
+    }
+    else 
+    {
+      if (g_filmStepTest) 
+      {
+        factor = g_filmFactor;
+      }
+      if (g_voxelStepTest) 
+      {
+        voxelDim = g_voxelFactor;
+      }
+      //create mesh loading file
       mesh = ImportMesh(GetFilePathByPlatform(models[selectedModel].path).c_str());
     }
 
-    triangles = mesh->m_triangles; // copy the triangle array
-    triangleIndexes = mesh->m_triangle_index;
     cout << "Mesh positions:" << mesh->m_positions.size() << endl;
     cout << "Mesh triangles:" << mesh->m_indices.size()/3 << endl;
 
-    // define collision mesh type
-    if (1) {
-		  sdfMesh = CreateHydrographicSDF(mesh, GetFilePathByPlatform(models[selectedModel].path).c_str(), createFile, voxelDim, transf, sdfMargin, expand);
-      delete mesh;
-      AddSDF(sdfMesh, pos, rot, 1.0f);
-		}
-		else {
-      // para usar esta malha, tem que ajustar as transformacoes de escala
-		  triangleMesh = CreateTriangleMesh(ImportMesh(GetFilePathByPlatform(models[selectedModel].path).c_str()));
-		  AddTriangleMesh(triangleMesh, pos, rot, 1.0f);
-		}
+    //create sdf model
+    sdfRotation = GetSdfRotation(models[selectedModel].rotation);
+    sdfMesh = CreateRigidBodySDF(mesh, GetFilePathByPlatform(models[selectedModel].path).c_str(), createFile, voxelDim, sdfRotation, sdfCentroid, sdfMargin, expand);
+    sdfTranslationOffset = Vec3(SDF_RATIO, 0.0f, SDF_RATIO) * offsetCenterXZ; //only for sdf mesh
+    initialPos = initialRigidPos + sdfTranslationOffset + models[selectedModel].translation;
 
+    Vec3 pos = initialPos;
+    Quat rot = QuatFromAxisAngle(Vec3(1.0f), 0.0f);
+
+    AddSDF(sdfMesh, pos, rot, SDF_RATIO);
+    meshIndex = g_buffers->shapePositions.size() - 1;
+
+    // translate centroid to model matrix
+    /*
+    float dimensionFactor = 1.0f / voxelDim;
+    g_centroid = Vec3(g_model * Vec4(dimensionFactor * sdfCentroid, 1.0f));
+    printf("centroidPosition (%.2f, %.2f, %.2f)\n", g_centroid.x, g_centroid.y, g_centroid.z);
+    Mat44 translationCenter = TranslationMatrix(Point3(g_centroid));
+    Vec3 angle = Vec3(0.0f);
+    float angleStep = 0.01f;
+    
+    Mat44 rotX = RotationMatrix(angle.x, Vec3(1.0f, 0.0f, 0.0f));
+    Mat44 rotY = RotationMatrix(angle.y, Vec3(0.0f, 1.0f, 0.0f));
+    Mat44 rotZ = RotationMatrix(angle.z, Vec3(0.0f, 0.0f, 1.0f));
+    float minDiag = FLT_MAX;
+    Vec3 minPositionDiag = FLT_MAX;
+    Vec3 maxPositionDiag = -FLT_MAX;
+    Vec3 minPositionAngle = Vec3(0.0f);
+
+    for (; angle.x < 2 * M_PI; angle.x += angleStep)
+    {
+      rotX = RotationMatrix(angle.x, Vec3(1.0f, 0.0f, 0.0f));
+      for (; angle.y < 2 * M_PI; angle.y += angleStep) 
+      {
+        rotY = RotationMatrix(angle.y, Vec3(0.0f, 1.0f, 0.0f));
+        for (; angle.z < 2 * M_PI; angle.z += angleStep) {
+          rotZ = RotationMatrix(angle.z, Vec3(0.0f, 0.0f, 1.0f));
+          Mat44 rot = rotZ * rotY * rotX;
+          
+          Mat44 modelStep = translationCenter * rot;
+
+          Vec3 minPosition, maxPosition;
+          Vec3 positionAux = modelStep * Vec4(Vec3(mesh->m_positions[0]), 1.0f);
+          minPosition = maxPosition = positionAux;
+          for (int i = 0; i < mesh->m_positions.size(); i++) {
+            Vec3 positionAux = modelStep * Vec4(Vec3(mesh->m_positions[i]), 1.0f);
+            minPosition = Min(positionAux, minPosition);
+            maxPosition = Max(positionAux, maxPosition);
+          }
+
+          float diag = Length(maxPosition - minPosition);
+          if (diag < minDiag)
+          {
+            minDiag = diag;
+            minPositionAngle = angle;
+            minPositionDiag = minPosition;
+            maxPositionDiag = maxPosition;
+          }
+        }
+      }
+    }
+    */
+
+    // free memory
+    delete mesh;
+
+    // define model matrix to start simulation
+    g_model = TranslationMatrix(Point3(pos))*RotationMatrix(Quat(rot))*ScaleMatrix(1.0f);
     // gpu mesh created by assimp import optimized for loading a full texture atlas features and rendering
-    g_gpu_rigid_mesh = CreateGpuMesh(GetFilePathByPlatform(models[selectedModel].path).c_str(), transf, sdfMargin);
+    g_gpu_rigid_mesh = CreateGpuMesh(GetFilePathByPlatform(models[selectedModel].path).c_str(), sdfRotation, sdfMargin);
 
-		meshIndex = g_buffers->shapePositions.size() - 1;
-		//get the sdf center after the normalization
-		GetShapeBounds(lower, upper);
-		g_meshCenter = (lower + upper) * 0.5f;
+    // create hydrographic film
+    // parameters to create a film with M x N vertices with M an N proportinal to 7 x 11 (squares used in physical hydrographic)
+    // parametrizing the M x N dimensions and the spacing between the vertices
 
-		gridPosition.x += g_meshCenter.x + models[selectedModel].translation.x;
-		gridPosition.z += g_meshCenter.z + models[selectedModel].translation.z;
+    // factor = 1, creates a grid with 7 x 11 vertices
+    // factor = 2, creates a grid with 14 x 22 and so on
+    // these vales are still are independent of scale
+    // this make it easy vary the resolution of film by changing only one parameter (film factor) 
+    // and keeping the aspect ratio 7 x 11 constant proportional to an A4 sheet used in physical hydrographic
+    g_filmDimX = factor * (SQUARES_W + 1);
+    g_filmDimZ = factor * (SQUARES_H + 1);
+    // spacing parameter applies the simulated dimension proportional to real dimensions
+    // keeps the simulated film with squares proportional to physical film
+    // considering simulated model vs the real model dimensions, provided by the user
+    g_realDistanceFactor = GetScaleFactor(models[selectedModel].realSize, SDF_RATIO, sdfMargin);
+    SimulatedModelScaledSquareSize = REAL_SQUARE_DIM * g_realDistanceFactor;
 
-    Matrix44 filmModel = TranslationMatrix(Point3(gridPosition));
+    float spacing = SimulatedModelScaledSquareSize / factor;
 
-		CreateHydrographicSpringGrid(gridPosition, g_meshCenter, gridDimX, gridDimZ, 1, spacing, phase, stretchStiffness, bendStiffness, shearStiffness, 0.0f, 1.0f, horizontalInvMass, verticalInvMass, false, false);
+    g_verticalInvMass = 1.0f;  //default value 1.0
+    g_horizontalInvMass = 1.0f;//default value 1.0
+
+    GetShapeBounds(lower, upper);
+    g_meshCenter = (lower + upper) * 0.5f;
+
+    g_filmCenter = Vec3((g_filmDimX - 1)*spacing, gridY, (g_filmDimZ - 1)*spacing) * offsetCenterXZ;
+
+    Matrix44 filmModel = TranslationMatrix(Point3(g_filmCenter));
+
+    int phase = NvFlexMakePhase(0, eNvFlexPhaseSelfCollide | eNvFlexPhaseSelfCollideFilter);
+    CreateHydrographicSpringGrid(g_filmCenter, g_meshCenter, g_filmDimX, g_filmDimZ, 1, spacing, phase, stretchStiffness, bendStiffness, shearStiffness, 0.0f, 1.0f, g_horizontalInvMass, g_verticalInvMass, false, false);
 
     // initialize contact structures for generate reverse texture mapping
     g_contact_positions.resize(g_buffers->positions.size());
@@ -236,7 +272,7 @@ public:
     // this same structure is updated in the render procedure in the main loop, with the positions updated by flex
     g_gpu_film_mesh = CreateGpuFilm(filmModel, &g_buffers->positions[0], &g_buffers->normals[0], g_buffers->uvs.size() ? &g_buffers->uvs[0] : NULL, g_buffers->positions.size(), &g_buffers->triangles[0], g_buffers->triangles.size());
 
-    // draw options
+    //reset draw options
 		g_drawSprings = false;
     g_generateContactsTexture = true;
     g_drawReverseTexture = true;
@@ -245,8 +281,10 @@ public:
     g_pause = false;
     g_drawHydrographic = true;
     g_drawHydrographicCollisionMesh = true;
-
-		mTime = 0.0f;
+    //reset values
+    g_fps = 0.0f;
+    g_frame = 0;
+    mTime = 0.0f;
 	}
 
  	void Update()
@@ -265,14 +303,18 @@ public:
       g_generateContactsTexture = true;
 		}
 
-		Vec3 pos = Vec3(0.0f, initialY + dippingVelocity * time, 0.0f);
-		Vec3 prevPos = Vec3(0.0f, initialY + dippingVelocity * lastTime, 0.0f);
+    Vec3 pos = initialPos + g_dippingVelocity * time;
+    Vec3 prevPos = initialPos + g_dippingVelocity * lastTime;
 
 		Quat rot = QuatFromAxisAngle(Vec3(1.0f), 0.0f);
 		Quat prevRot = QuatFromAxisAngle(Vec3(1.0f), 0.0f);
     
     // updates model matrix for rendering
     g_model = TranslationMatrix(Point3(pos))*RotationMatrix(Quat(rot))*ScaleMatrix(1.0f);
+    // update centroid for render the move
+    // translate centroid to model matrix
+    float dimensionFactor = 1.0f / voxelDim;
+    g_centroid = Vec3(g_model * Vec4(dimensionFactor * sdfCentroid, 1.0f));
 
 		g_buffers->shapePositions[meshIndex] = Vec4(pos, 0.0f);
 		g_buffers->shapeRotations[meshIndex] = rot;
@@ -289,10 +331,11 @@ public:
 		imguiLabel("Hydrographic options");
 		if (imguiCheck("Create SDF file", createFile))
 			createFile = !createFile;
-    imguiSlider("Tesselation inner", &g_tesselation_inner, 0.0f, 8.0f, 0.001f);
-    imguiSlider("Tesselation outer", &g_tesselation_outer, 0.0f, 8.0f, 0.001f);
+    //imguiSlider("Tesselation inner", &g_tesselation_inner, 0.0f, 8.0f, 0.001f);
+    //imguiSlider("Tesselation outer", &g_tesselation_outer, 0.0f, 8.0f, 0.001f);
     imguiSlider("Max distance UV", &g_max_distance_uv, 0.0f, 1.0f, 0.005f);
-    imguiSlider("Max near distance UV", &g_near_distance_uv, 0.0f, 1.0f, 0.0001f);
+    imguiSlider("Texture epsilon", &g_near_distance_uv, 0.0f, 1.0f, 0.0001f);
+    /*
     if (imguiSlider("Texture Weight1", &g_weight1, 0.0f, 1.0f, 0.001f))
     {
       g_weight2 = 1.0f - g_weight1;
@@ -301,10 +344,11 @@ public:
     {
       g_weight1 = 1.0f - g_weight2;
     }
-
-    imguiSlider("Dipping velocity", &dippingVelocity, -0.5f, 0.5f, 0.005f);
-		imguiSlider("Horizontal invMass", &horizontalInvMass, 0.0f, 1.0f, 0.005f);
-		imguiSlider("Vertical invMass", &verticalInvMass, 0.0f, 1.0f, 0.005f);
+    */
+    imguiSlider("Dipping velocity", &g_dippingVelocity.y, -0.5f, 0.5f, 0.005f);
+		imguiSlider("Horizontal invMass", &g_horizontalInvMass, 0.0f, 1.0f, 0.005f);
+		imguiSlider("Vertical invMass", &g_verticalInvMass, 0.0f, 1.0f, 0.005f);
+    imguiSlider("Stretch Stiffness", &stretchStiffness, 0.0f, 1.0f, 0.0001f);
 
 		if (imguiCheck("Draw Hydrographic Film", g_drawHydrographic))
 			g_drawHydrographic = !g_drawHydrographic;
@@ -339,14 +383,16 @@ public:
     if (imguiSlider("Grid scale factor", &floatFactor, 0.0f, 45.0f, 1.0f)) {
       factor = int(floatFactor);
     }
-		imguiSeparatorLine();
+
+    imguiSeparatorLine();
 
 		for (int i = 0; i < int(models.size()); ++i)
 		{
 			unsigned int color = g_scene == i ? imguiRGBA(255, 151, 61, 255) : imguiRGBA(255, 255, 255, 200);
       if(imguiItem(models[i].path, true, color))
 			{
-				selectedModel = i;
+        g_selectedModel = i;
+        g_resetScene = true;
 			}
 		}
 	}
@@ -359,27 +405,24 @@ public:
 	int voxelDim = 128;
 	float expand = 0.0f;
 	float sdfMargin = 0.05f;
-  //model params
+  Vec3 offsetCenterXZ = Vec3(-0.5f, 0.0f, -0.5f);
+  Vec3 sdfTranslationOffset = Vec3(0.0f);
+  Vec3 sdfCentroid = Vec3(0.0f);
+  Mat44 sdfRotation;
+  //Rigid model params
 	Vec3 lower, upper;
 	int meshIndex = 0;
 	int selectedModel = 0;
-  float initialY = 1.5f;
+  Vec3 initialPos;
+  Vec3 initialRigidPos = Vec3(0.0f, 1.5f, 0.0f);
 	NvFlexDistanceFieldId sdfMesh = NULL;
-	NvFlexTriangleMeshId triangleMesh = NULL;
   int sphereSectors = 160;
 	//Film params
-  float gridY = 0.3f; // grid position
-  int factor = 23; 
-  float A4_Spacing = 0.17f;//default spacing based on sphere model
-  int A4_Width = 7; //210
-  int A4_Height = 11; //297
-	//Vec2 boundsX, boundsY, boundsZ;
-	Point3 translation = Point3(0.0f);
-	float scale = 1.0f;
-	Vec3 angle = Vec3(0.0f);
+  float stretchStiffness = 1.0f;// default value: 1.0; more stretch -> closer to .0f
+  float bendStiffness = 0.75f; // not used
+  float shearStiffness = 0.5f; // not used
+  float gridY = 0.3f; // film Y position
+  int factor = 15;
+  float SimulatedModelScaledSquareSize; //simulated scaled size of chessboard square considering the current model simulated with 1.0 square ratio
 	std::vector<ModelData> models;
-  bool tracking = false;
-  //
-  std::vector<Triangle> triangles;
-  std::vector<TriangleIndexes> triangleIndexes;
 };
