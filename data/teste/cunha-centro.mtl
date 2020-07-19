@@ -1,0 +1,9 @@
+newmtl cunha_centro:material_0_001
+illum 4
+Kd 0.00 0.00 0.00
+Ka 1.00 1.00 1.00
+Tf 1.00 1.00 1.00
+map_Kd cunha_texture1.png
+Ni 1.45
+Ks 0.00 0.00 0.00
+Ns 0.00
