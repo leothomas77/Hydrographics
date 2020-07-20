@@ -2421,7 +2421,7 @@ void DrawGpuMeshV2(GpuMesh* m, const Matrix44& modelMat, bool showTexture)
   if (m)
   {
     int hasTexture = showTexture && m->texCoordsRigid.size() > 0 ? 1 : 0;
-    if (hasTexture) 
+    if (hasTexture)
     {
       //Enable texture
       glVerify(glBindTexture(GL_TEXTURE_2D, m->mTextureId));
@@ -2435,7 +2435,7 @@ void DrawGpuMeshV2(GpuMesh* m, const Matrix44& modelMat, bool showTexture)
     //Setup normal and model mat
     glVerify(glUniformMatrix4fv(glGetUniformLocation(s_rigidBodyProgram, "normalMat"), 1, false, Transpose(AffineInverse(modelMat))));
     glVerify(glUniformMatrix4fv(glGetUniformLocation(s_rigidBodyProgram, "model"), 1, false, modelMat));
-    
+
     // bind buffers
     glBindBuffer(GL_ARRAY_BUFFER, m->mPositionsVBO);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
@@ -2449,7 +2449,7 @@ void DrawGpuMeshV2(GpuMesh* m, const Matrix44& modelMat, bool showTexture)
       glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, 0);
       glEnableVertexAttribArray(2);
     }
-    
+
     glDrawArrays(GL_TRIANGLES, 0, m->mNumVertices);
 
     glDisableVertexAttribArray(0);
@@ -3214,6 +3214,62 @@ void BindFilmShader(Matrix44 view, Matrix44 proj, Vec3 lightPos, Vec3 camPos, Ve
   }
 }
 
+void SetReverseTextureParams()
+{
+  //glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+
+  glActiveTexture(GL_TEXTURE0);
+  glDisable(GL_TEXTURE_2D);
+  glDisable(GL_TEXTURE_RECTANGLE_ARB);
+  glActiveTexture(GL_TEXTURE1);
+  glDisable(GL_TEXTURE_2D);
+  glActiveTexture(GL_TEXTURE2);
+  glDisable(GL_TEXTURE_2D);
+  glActiveTexture(GL_TEXTURE3);
+  glDisable(GL_TEXTURE_2D);
+  glActiveTexture(GL_TEXTURE4);
+  glDisable(GL_TEXTURE_2D);
+  glDisable(GL_TEXTURE_CUBE_MAP);
+  glActiveTexture(GL_TEXTURE5);
+  glDisable(GL_TEXTURE_2D);
+
+  glActiveTexture(GL_TEXTURE0);
+
+  glDisable(GL_BLEND);
+  glDisable(GL_LIGHTING);
+  glDisable(GL_BLEND);
+  glDisable(GL_POINT_SPRITE);
+
+  // save scene camera transform
+  //glMatrixMode(GL_MODELVIEW);
+  //glPushMatrix();
+  //glLoadIdentity();
+
+  //const Matrix44 ortho = OrthographicMatrix(0.0f, float(g_screenWidth), 0.0f, float(g_screenHeight), -1.0f, 1.0f);
+
+  //glMatrixMode(GL_PROJECTION);
+  //glPushMatrix();
+  //glLoadMatrixf(ortho);
+
+  //glUseProgram(0);
+  //glDisable(GL_DEPTH_TEST);
+  //glDisable(GL_CULL_FACE);
+  //glEnable(GL_BLEND);
+  //glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  //glDisable(GL_TEXTURE_2D);
+  glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+}
+
+void UnsetReverseTextureParams()
+{
+  // restore camera transform (for picking)
+  glMatrixMode(GL_MODELVIEW);
+  glPopMatrix();
+
+  glMatrixMode(GL_PROJECTION);
+  glPopMatrix();
+}
+
 void BindReverseTextureShader(Matrix44 view, Matrix44 proj, Vec3 lightPos, Vec3 camPos, 
   Vec4 lightColor, Vec4 ambientColor, Vec4 specularColor, unsigned int specularExpoent, 
   Vec4 diffuseColor, float maxDistanceUV, float nearDistanceUV, 
@@ -3254,8 +3310,8 @@ void DrawHydrographicFilm(GpuMesh* mesh, const Vec4* positions, const Vec4* norm
   glVerify(glActiveTexture(GL_TEXTURE0));//
   glVerify(glBindTexture(GL_TEXTURE_2D, GetChessboardTextureId()));
   glVerify(glUniform1i(glGetUniformLocation(s_filmProgram, "tex"), 0));//
-  //int hasTexture = showTexture && mesh->texCoordsFilm.size() > 0 ? 1 : 0;
-  //glVerify(glUniform1i(glGetUniformLocation(s_filmProgram, "showTexture"), hasTexture));
+                                                                       //int hasTexture = showTexture && mesh->texCoordsFilm.size() > 0 ? 1 : 0;
+                                                                       //glVerify(glUniform1i(glGetUniformLocation(s_filmProgram, "showTexture"), hasTexture));
   glVerify(glUniform1i(glGetUniformLocation(s_filmProgram, "showTexture"), showTexture));
   glVerify(glUniform1i(glGetUniformLocation(s_filmProgram, "showPhong"), 1));
   // update positions and normals
@@ -3313,10 +3369,10 @@ void DrawReverseTexture(GpuMesh* mesh, const Vec4* positions, const Vec4* normal
   {
     glVerify(glDrawElements(GL_TRIANGLES, nIndices, GL_UNSIGNED_INT, 0));
   }
-  
+
   glVerify(glBindVertexArray(0));
-  
-  
+
+
   // disable texture
   //if (showTexture)
   {
@@ -3338,11 +3394,11 @@ GLuint* GetTexturePixels(GLuint textureID, int width, int height, int chanels)
 
 void CreateHydrographicFilmImage(int W, int H)
 {
-  FILE   *out = fopen("../../movies/screenshot.tga", "wb");
+  FILE   *out = fopen("../../movies/texture.tga", "wb");
   char   *pixel_data = new char[3 * W*H];
   short  TGAhead[] = { 0, 2, 0, 0, 0, 0, W, H, 24 };
 
-  //glReadBuffer(GL_FRONT);
+  //glReadBuffer(GL_BACK);
   glReadPixels(0, 0, W, H, GL_BGR, GL_UNSIGNED_BYTE, pixel_data);
 
   fwrite(&TGAhead, sizeof(TGAhead), 1, out);

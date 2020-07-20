@@ -126,14 +126,16 @@ void ShadowEnd();
 struct RenderTexture;
 
 void BuildContactUVs(Vec3 position, int positionIndex, Vec3 contactPlane, GpuMesh* gpuMesh, Mat44 modelMatrix, std::vector<Vec4> contactPositions, std::vector<Vec4> &contactUVs);
-void BuildTextureSeamsPositions(const GpuMesh* filmMesh, const std::vector<Vec4> contactUVs, std::vector<int> &seamPositionsIndexes);
+//void BuildTextureSeamsPositions(const GpuMesh* filmMesh, const std::vector<Vec4> contactUVs, std::vector<int> &seamPositionsIndexes);
 void DetectTextureSeams(GpuMesh* filmMesh, std::vector<Vec4> &contactPositions, std::vector<Vec4> &contactUVs);
 void FindTextureSeam(Vec3 v0, Vec3 v1, Vec3 v2, Vec2 textCoordV0, Vec2 textCoordV1, Vec2 textCoordV2, PngImage textureImage);
 void PlotTexturePixel(Vec3 position, Vec2 textureCoords, PngImage textureImage);
 
 void SetupFilmMesh(GpuMesh* gpuMesh, GpuMesh* filmMesh);
 void DrawReverseTexture(GpuMesh* mesh, const Vec4* positions, const Vec4* normals, const Vec4* uvs, const int* indices, int nIndices, int numPositions, bool showTexture);
-void SetGpuMeshTriangles(GpuMesh* gpuMesh, std::vector<Triangle> triangles, std::vector<TriangleIndexes> triangleIndexes);
+void SetReverseTextureParams();
+void UnsetReverseTextureParams();
+//void SetGpuMeshTriangles(GpuMesh* gpuMesh, std::vector<Triangle> triangles, std::vector<TriangleIndexes> triangleIndexes);
 bool rayTriangleIntersectMT(Vec3 orig, Vec3 dir, Vec3 v0, Vec3 v1, Vec3 v2, float &t, float &u, float &v, float &w);
 void CreateHydrographicFilmImage(int W, int H);
 

@@ -234,16 +234,16 @@ void Init(int scene, bool centerCamera = true)
 	g_sceneUpper += g_params.collisionDistance;
 
   Vec3 perspectiveCamPosition = Vec3((g_sceneLower.x + g_sceneUpper.x)*0.5f, min(g_sceneUpper.y*1.25f, 6.0f), g_sceneUpper.z + min(g_sceneUpper.y, 6.0f));
-  // center camera on particles
-  // centering the main camera with perspective front view
+  //main parspective camera
   g_camPos.push_back(perspectiveCamPosition);
   g_camAngle.push_back(Vec3(0.0f, DegToRad(-30.0f), 0.0f));
-  //generate a bottom position and bottom angle for camera
+  //bottom camera
   g_camPos.push_back(Vec3(g_meshCenter.x, -2.4f, g_meshCenter.z));
   g_camAngle.push_back(Vec3(0.0f, DegToRad(90.0f), 0.0f));
-  //generate a top position for render hidrographic texture
-  g_camPos.push_back(Vec3(g_meshCenter.x, 2.4f, g_meshCenter.z));
+  //top camera
+  g_camPos.push_back(Vec3(g_meshCenter.x, 0.83f, g_meshCenter.z));
   g_camAngle.push_back(Vec3(DegToRad(90.0f), DegToRad(-90.0f), 0.0f));
+
 
   g_camIndex = 0; // select main cam view
 
@@ -437,6 +437,11 @@ void UpdateScene()
 void RenderScene()
 {
 
+  //Mat44 projOrtho = OrthographicMatrix(0.0f, float(g_screenWidth), 0.0f, float(g_screenHeight), g_camNear, g_camFar);
+  //float max = MAX(g_sceneUpper.x, g_sceneUpper.y);
+  //float r = max * g_aspect, t = max;
+  //float l = -r, b = -t;
+  //Mat44 projOrtho = OrthographicMatrix(l, r, b, t, g_camNear, g_camFar);
   //float aspect = (g_screenWidth*fy) / (g_screenHeight*fx);
   g_proj = ProjectionMatrix(RadToDeg(g_fov), g_aspect, g_camNear, g_camFar);
 
@@ -454,48 +459,44 @@ void RenderScene()
   SetCullMode(false);
   SetFillMode(g_wireframe);
 
-  if (g_drawHydrographicCollisionMesh) // draw rigid body
+  if (g_drawHydrographicCollisionMesh) // draw rigid
   {
     DrawGpuMeshV2(g_gpu_rigid_mesh, g_model, showTexture);
   }
 
-  if (g_drawHydrographic) // draw film (soft body)
+  if (g_drawHydrographic) // draw film
   {
     showTexture = true;
     BindFilmShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], g_lightColor, g_ambientColor, g_specularColor, g_specularExpoent, g_diffuseColor);
     DrawHydrographicFilm(g_gpu_film_mesh, &g_buffers->positions[0], &g_buffers->normals[0], &g_buffers->uvs[0], &g_buffers->triangles[0], g_buffers->triangles.size(), g_buffers->positions.size(), showTexture);
   }
   
-  // draw flat film with distortion after build the contacts texture
-  if (!isTestingMode() && g_drawReverseTexture && !g_generateContactsTexture)
+  // draw reverse texure
+  if (!isTestingMode() && !g_generateContactsTexture)
   {
-    // hide other meshes and draw only flat film with reverse texture
-    //g_drawHydrographic = false;
-    //g_drawHydrographicCollisionMesh = false;
-    if (1)
+    if (g_createReverseTextureFile)
     {
-      showTexture = true;
+      g_createReverseTextureFile = false;//run this only once
+      g_camIndexAux = g_camIndex;//save current view
+      g_camIndex = 2;
+      g_view = RotationMatrix(-g_camAngle[g_camIndex].x, Vec3(0.0f, 1.0f, 0.0f))*RotationMatrix(-g_camAngle[g_camIndex].y, Vec3(cosf(-g_camAngle[g_camIndex].x), 0.0f, sinf(-g_camAngle[g_camIndex].x)))*TranslationMatrix(-Point3(g_camPos[g_camIndex]));
       BindReverseTextureShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], g_lightColor, g_ambientColor, g_specularColor, g_specularExpoent, g_diffuseColor, g_max_distance_uv, g_near_distance_uv, g_weight1, g_weight2, g_tesselation_inner, g_tesselation_outer);
-      DrawReverseTexture(g_gpu_film_mesh, &g_contact_positions[0], &g_contact_normals[0], &g_contact_uvs[0], &g_contact_indexes[0], g_contact_indexes.size(), g_contact_positions.size(), showTexture);
-    }
-
-
-    // draw film  for printing swap to orthogonal projection
-    if (0)
-    {
-      float max = MAX(g_sceneUpper.x, g_sceneUpper.y);
-      float r = max * g_aspect, t = max;
-      float l = -r, b = -t;
-      Mat44 projOrtho = OrthographicMatrix(l, r, b, t, g_camNear, g_camFar);
-      BindReverseTextureShader(g_view, projOrtho, g_lightPos, g_camPos[g_camIndex], g_lightColor, g_ambientColor, g_specularColor, g_specularExpoent, g_diffuseColor, g_max_distance_uv, g_near_distance_uv, g_weight1, g_weight2, g_tesselation_inner, g_tesselation_outer);
-      DrawReverseTexture(g_gpu_film_mesh, &g_contact_positions[0], &g_contact_normals[0], &g_contact_uvs[0], &g_contact_indexes[0], g_contact_indexes.size(), g_contact_positions.size(), showTexture);
+      DrawReverseTexture(g_gpu_film_mesh, &g_contact_positions[0], &g_contact_normals[0], &g_contact_uvs[0], &g_contact_indexes[0], g_contact_indexes.size(), g_contact_positions.size(), true);
       CreateHydrographicFilmImage(g_screenWidth, g_screenHeight);
+      g_camIndex = g_camIndexAux;//restore current view
     }
-
-
+    else
+    {
+      //then now render the reverse texture if selected
+      if (g_drawReverseTexture)
+      {
+        showTexture = true;
+        BindReverseTextureShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], g_lightColor, g_ambientColor, g_specularColor, g_specularExpoent, g_diffuseColor, g_max_distance_uv, g_near_distance_uv, g_weight1, g_weight2, g_tesselation_inner, g_tesselation_outer);
+        DrawReverseTexture(g_gpu_film_mesh, &g_contact_positions[0], &g_contact_normals[0], &g_contact_uvs[0], &g_contact_indexes[0], g_contact_indexes.size(), g_contact_positions.size(), showTexture);
+      }
+    }
   }
-
-
+  
 }
 
 
@@ -551,8 +552,7 @@ void RenderDebug()
         Vec3 restB = g_contact_positions[b];
         float restLength = Length(restA - restB);
         float displacementCoef = abs(distortedLength - restLength) / restLength;
-        //color = colorGradient->getColorAtValue(displacement * 2);
-        color = colorGradient->getColorAtValue(displacementCoef);
+        color = colorGradient->getColorAtValue(displacementCoef * g_stretchFactor);
       }
 
       //Heatmap of stiffness
@@ -893,11 +893,6 @@ int DoUI()
         g_drawContacts = !g_drawContacts;
       }
 
-      if (imguiCheck("Draw Reverse Texture", g_drawReverseTexture))
-      {
-        g_drawReverseTexture = !g_drawReverseTexture;
-      }
-
 			imguiSeparatorLine();
 
 			// scene options
@@ -1119,14 +1114,12 @@ void UpdateFrame(bool &quit)
 
   if (g_generateContactsTexture && g_complete)
   {
-    // run this block only once
-    g_generateContactsTexture = false;
+    g_generateContactsTexture = false;    // run this block only once
     // this block should execute before unmap command
     // because of read buffer data from comming from gpu to cpu
     BuildReverseTextureMapping();
     //PostProcessReverseTexture();
-
-    g_drawReverseTexture = true;
+    //g_drawReverseTexture = true;
   }
 
 
@@ -1271,6 +1264,7 @@ void UpdateFrame(bool &quit)
 
 	// flush out the last frame before freeing up resources in the event of a scene change
 	// this is necessary for d3d12
+
   PresentFrame(g_vsync);
 
 	// if gui or benchmark requested a scene change process it now
@@ -1661,7 +1655,12 @@ bool InputKeyboardDown(unsigned char key, int x, int y)
 		g_pause = !g_pause;
 		break;
 	}
-	case 'h':
+  case 't':
+  {
+    g_createReverseTextureFile = !g_createReverseTextureFile;
+    break;
+  }
+  case 'h':
 	{
 		g_showHelp = !g_showHelp;
 		break;

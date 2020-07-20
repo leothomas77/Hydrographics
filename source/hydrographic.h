@@ -117,7 +117,7 @@ public:
       //6: urna
       //7: onca
       //8: tartaruga
-      selectedModel = 1;
+      selectedModel = 3;
     }
 
     Mesh* mesh = NULL; //mesh model to create sdf structures
@@ -224,7 +224,7 @@ public:
 
     // factor = 1, creates a grid with 7 x 11 vertices
     // factor = 2, creates a grid with 14 x 22 and so on
-    // these vales are still are independent of scale
+    // independent of scale
     // this make it easy vary the resolution of film by changing only one parameter (film factor) 
     // and keeping the aspect ratio 7 x 11 constant proportional to an A4 sheet used in physical hydrographic
     g_filmDimX = factor * (SQUARES_W + 1);
@@ -275,7 +275,7 @@ public:
     //reset draw options
 		g_drawSprings = false;
     g_generateContactsTexture = true;
-    g_drawReverseTexture = true;
+    g_drawReverseTexture = false;
     g_drawFixedSeams = true;
     g_complete = false;
     g_pause = false;
@@ -294,14 +294,13 @@ public:
 		float time = Max(0.0f, mTime-startTime);
 		float lastTime = Max(0.0f, time-g_dt);
 
-		GetShapeBounds(lower, upper);
-
+    GetShapeBounds(lower, upper);
 		// stop animation when hidrographics is complete and generate contacts texture
-		if (upper.y + 0.2f < gridY && !g_complete)
+		if (upper.y + 0.8f < gridY && !g_complete)
 		{
       g_complete = true;
       g_generateContactsTexture = true;
-		}
+    }
 
     Vec3 pos = initialPos + g_dippingVelocity * time;
     Vec3 prevPos = initialPos + g_dippingVelocity * lastTime;
@@ -331,30 +330,28 @@ public:
 		imguiLabel("Hydrographic options");
 		if (imguiCheck("Create SDF file", createFile))
 			createFile = !createFile;
-    //imguiSlider("Tesselation inner", &g_tesselation_inner, 0.0f, 8.0f, 0.001f);
-    //imguiSlider("Tesselation outer", &g_tesselation_outer, 0.0f, 8.0f, 0.001f);
+
     imguiSlider("Max distance UV", &g_max_distance_uv, 0.0f, 1.0f, 0.005f);
     imguiSlider("Texture epsilon", &g_near_distance_uv, 0.0f, 1.0f, 0.0001f);
-    /*
-    if (imguiSlider("Texture Weight1", &g_weight1, 0.0f, 1.0f, 0.001f))
-    {
-      g_weight2 = 1.0f - g_weight1;
-    }
-    if (imguiSlider("Texture Weight2", &g_weight2, 0.0f, 1.0f, 0.001f))
-    {
-      g_weight1 = 1.0f - g_weight2;
-    }
-    */
     imguiSlider("Dipping velocity", &g_dippingVelocity.y, -0.5f, 0.5f, 0.005f);
 		imguiSlider("Horizontal invMass", &g_horizontalInvMass, 0.0f, 1.0f, 0.005f);
 		imguiSlider("Vertical invMass", &g_verticalInvMass, 0.0f, 1.0f, 0.005f);
     imguiSlider("Stretch Stiffness", &stretchStiffness, 0.0f, 1.0f, 0.0001f);
+    imguiSlider("Stretch Factor", &g_stretchFactor, 1.0f, 5.0f, 0.0001f);
 
-		if (imguiCheck("Draw Hydrographic Film", g_drawHydrographic))
-			g_drawHydrographic = !g_drawHydrographic;
+    if (imguiCheck("Draw Collision Mesh", g_drawHydrographicCollisionMesh))
+      g_drawHydrographicCollisionMesh = !g_drawHydrographicCollisionMesh;
+    if (imguiCheck("Hydrographic Film", g_drawHydrographic))
+      g_drawHydrographic = !g_drawHydrographic;
 
-		if (imguiCheck("Draw Collision Mesh", g_drawHydrographicCollisionMesh))
-			g_drawHydrographicCollisionMesh = !g_drawHydrographicCollisionMesh;
+    if (imguiCheck("Draw Reverse Texture", g_drawReverseTexture))
+    {
+      g_drawReverseTexture = !g_drawReverseTexture;
+      g_drawHydrographic = !g_drawHydrographic;
+      g_drawHydrographicCollisionMesh = !g_drawHydrographicCollisionMesh;
+      g_createReverseTextureFile = true;
+    }
+
 
     if (imguiCheck("Draw Spring Stiffness", g_drawStiffness))
       g_drawStiffness = !g_drawStiffness;
@@ -362,13 +359,6 @@ public:
     if (imguiCheck("Draw Spring Stretching", g_drawStretching))
       g_drawStretching = !g_drawStretching;
     
-    
-		//imguiSlider("Grid Translation X", &models[selectedModel].translation[0], -5.0f, 5.0f, 0.001f);
-		//imguiSlider("Grid Translation Z", &models[selectedModel].translation[2], -5.0f, 5.0f, 0.001f);
-		//imguiSlider("Rotation angle X ", &angle.x, -90.0f, 90.0f, 10.0f);
-		//imguiSlider("Rotation angle Y ", &angle.y, -90.0f, 90.0f, 10.0f);
-		//imguiSlider("Rotation angle Z ", &angle.z, -90.0f, 90.0f, 10.0f);
-
     float floatVoxelDim = float(voxelDim);
     if (imguiSlider("Voxel dim", &floatVoxelDim, 63.0f, 512.0f, 8.0f)) {
       voxelDim = int(floatVoxelDim);
