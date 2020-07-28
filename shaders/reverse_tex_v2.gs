@@ -6,13 +6,13 @@ uniform float uNearDistanceUV;
 uniform float uWeight1;
 uniform float uWeight2;
 uniform sampler2D tex;
-uniform sampler2D heatmap;
 
 in VS_OUT
 {
   vec3 vNormal;
   vec3 vPosW;
   vec2 vTexCoords;
+  vec4 vColor;
   vec2 uv0;
   vec2 uv1;
 } gs_in[];
@@ -22,6 +22,7 @@ out GS_OUT
     vec3 vNormal;
     vec3 vPosW;
     vec2 vTexCoords;
+    vec4 vColor;
 		vec2 uv0;
 		vec2 uv1;
 } gs_out;
@@ -31,6 +32,7 @@ void EmitTextureVertex(int index)
   gl_Position = gl_in[index].gl_Position;
   gs_out.vNormal = gs_in[index].vNormal;
   gs_out.vTexCoords = gs_in[index].vTexCoords;
+  gs_out.vColor = gs_in[index].vColor;
   gs_out.uv0 = gs_in[index].uv0;
   gs_out.uv1 = gs_in[index].uv1;
   gs_out.vPosW = gs_in[index].vPosW;
@@ -42,6 +44,7 @@ void EmitWeightedTexVertex(int index1, int index2, float weight1, float weight2)
   gl_Position = 0.5f * (gl_in[index1].gl_Position + gl_in[index2].gl_Position);
   gs_out.vNormal = gs_in[index1].vNormal; // the mesh is always a plane assumes always the same normal
   gs_out.vTexCoords = (weight1 * gs_in[index1].vTexCoords + weight2 * gs_in[index2].vTexCoords); // vertex with greater texture weight
+  gs_out.vColor = (weight1 * gs_in[index1].vColor + weight2 * gs_in[index2].vColor); 
   gs_out.vPosW = 0.5 * (gs_in[index1].vPosW + gs_in[index2].vPosW);
   EmitVertex();
 }
@@ -52,8 +55,8 @@ void EmitDirectionTexVertex(int indexFrom, int indexTo, vec2 texCoordFrom, vec2 
   gs_out.vNormal = gs_in[indexFrom].vNormal; // the mesh is always a plane assumes always the same normal
   
   vec2 textDirection = normalize(texCoordTo - texCoordFrom);
-  
   gs_out.vTexCoords =  texCoordFrom + textDirection * epsilon;
+  gs_out.vColor = 0.5 * (gs_in[indexFrom].vColor + gs_in[indexTo].vColor);
   gs_out.vPosW = 0.5 * (gs_in[indexFrom].vPosW + gs_in[indexTo].vPosW);
   EmitVertex();
 }

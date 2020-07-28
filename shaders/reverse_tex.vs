@@ -2,6 +2,7 @@
 layout (location = 0) in vec4 aPosition;
 layout (location = 1) in vec4 aNormal;
 layout (location = 2) in vec4 aTexCoords;
+layout (location = 3) in vec4 aColor;
 
 uniform mat4 proj;
 uniform mat4 view;
@@ -14,6 +15,7 @@ out VS_OUT
   vec3 vNormal;
   vec3 vPosW;
   vec2 vTexCoords;
+  vec4 vColor;
   vec2 uv0;
   vec2 uv1;
 } vs_out;
@@ -23,7 +25,7 @@ void main()
 	vs_out.vNormal = (normalize(normalMat * vec4(aNormal.xyz, 1.0))).xyz;
 	vs_out.vPosW = (model * vec4(aPosition.xyz, 1.0)).xyz;
 	vs_out.vTexCoords = showTexture ? vs_out.vTexCoords = aTexCoords.xy : vec2(0.0);
-
+  vs_out.vColor = aColor;
   vs_out.uv0 = fract( vs_out.vTexCoords.xy );
   vs_out.uv1 = fract( vs_out.vTexCoords.xy + vec2(0.5,0.5) ) - vec2(0.5,0.5);
 

@@ -34,11 +34,11 @@ public:
     ModelData turtle = ModelData("../../data/teste/tartaruga-centro_casco.obj", Vec3(0.19f, 0.0f, 0.05f), turtleDim, Vec3(0.0f, -185.6f, 0.0f));
     //models with texture to reverse-texture test
     ModelData sphereTex = ModelData("../../data/teste/Earth.obj", Vec3(0.0f, 0.0f, 0.0f), sphereTexDim, Vec3(0.0f, 0.0f, 0.0f));
-    ModelData cunha = ModelData("../../data/teste/cunha-centro.obj", Vec3(0.0f, 0.0f, 0.0f), cunhaDim, Vec3(0.0f, 0.0f, 180.0f));
-    ModelData tembeta = ModelData("../../data/teste/tembeta-centro.obj", Vec3(0.0f, 0.0f, 0.0f), tembetaDim, Vec3(0.0f, 0.0f, 180.0f));
+    ModelData cunha = ModelData("../../data/teste/cunha-centro.obj", Vec3(0.0f, 0.0f, 0.0f), cunhaDim, Vec3(0.0f, 90.0f, -270.0f));
+    ModelData tembeta = ModelData("../../data/old_map/tembeta-centro.obj", Vec3(0.0f, 0.0f, 0.0f), tembetaDim, Vec3(90.0f, 0.0f, 90.0f));
     ModelData urna = ModelData("../../data/teste/urna-centro.obj", Vec3(0.0f, 0.0f, 0.0f), urnaDim, Vec3(0.0f, 0.0f, 0.0f));
     ModelData onca = ModelData("../../data/teste/Onca_Poisson_15_16_0.obj", Vec3(0.0f, 0.0f, 0.0f), oncaDim, Vec3(0.0f, 0.0f, 0.0f));
-    ModelData casco = ModelData("../../data/teste/tartaruga-centro_casco.obj", Vec3(0.0f, 0.0f, 0.0f), turtleDim, Vec3(0.0f, 0.0f, 0.0f));
+    ModelData casco = ModelData("../../data/teste/tartaruga-centro_casco.obj", Vec3(0.1f, 0.0f, 0.0f), turtleDim, Vec3(0.0f, 0.0f, 180.0f));
 
     //ModelData turtle = ModelData("../../data/tartaruga_centro.obj", Vec3(0.09f, 0.0f, 0.1f), 0.125f, Vec3(0.0f, -95.5f, 0.0f)); //fator escala fixa medida 0.14
     //ModelData turtleRot = ModelData("tartaruga_centro.obj", Vec3(-0.07f, 0.0f, 0.2f), 0.130f, Vec3(0.0f, -95.53f, 0.0f));
@@ -55,9 +55,9 @@ public:
     models.push_back(urna);
     models.push_back(onca);
     models.push_back(casco);
-    
+
 		//general params
-    g_params.numIterations = 3; //5 iteracoes por default; se diminuir provoca maior esticamento
+    g_params.numIterations = 5; //5 iteracoes por default; se diminuir provoca maior esticamento
     g_numSubsteps = 1;
     // gravidade x, y, z
     g_params.gravity[0] = 0.0f; 
@@ -81,8 +81,8 @@ public:
 		// fluid params not used
 		g_params.viscosity = 0.0f;
 		// cloth params
-    g_params.drag = .8f;//0.3f;//3.5f;//força de arrasto ao tecido. aumenta sensa��o de elasticidade
-    g_params.lift = .2f;//0.2f;//1.8f;// forca de sustentação
+    g_params.drag = 1.8f;//0.3f;//3.5f;//força de arrasto ao tecido. aumenta sensa��o de elasticidade
+    g_params.lift = 1.2f;//0.2f;//1.8f;// forca de sustentação
 		// collision params
     float radius = 0.012f;
     g_params.radius = radius;//0.012f;   //radius*1.0f; // raio max de intera��o entre part�culas
@@ -91,10 +91,10 @@ public:
 		g_params.shapeCollisionMargin = radius*0.5f;//
 		g_params.numPlanes = 0;
 		// relaxation solver params
-		//g_params.relaxationMode = eNvFlexRelaxationGlobal;
-		//g_params.relaxationFactor = 0.25f;
-		g_params.relaxationMode = eNvFlexRelaxationLocal;
-		g_params.relaxationFactor = 0.2f;
+		g_params.relaxationMode = eNvFlexRelaxationGlobal;
+		g_params.relaxationFactor = 0.25f;
+		//g_params.relaxationMode = eNvFlexRelaxationLocal;
+		//g_params.relaxationFactor = 0.2f;
 		// plastic params not used
 		//g_params.plasticThreshold = 0.1f;
 		//g_params.plasticCreep = 0.3f;
@@ -117,7 +117,7 @@ public:
       //6: urna
       //7: onca
       //8: tartaruga
-      selectedModel = 3;
+      selectedModel = 4;
     }
 
     Mesh* mesh = NULL; //mesh model to create sdf structures
@@ -150,7 +150,11 @@ public:
     //create sdf model
     sdfRotation = GetSdfRotation(models[selectedModel].rotation);
     sdfMesh = CreateRigidBodySDF(mesh, GetFilePathByPlatform(models[selectedModel].path).c_str(), createFile, voxelDim, sdfRotation, sdfCentroid, sdfMargin, expand);
-    sdfTranslationOffset = Vec3(SDF_RATIO, 0.0f, SDF_RATIO) * offsetCenterXZ; //only for sdf mesh
+
+    dimensionFactor = SDF_RATIO / voxelDim;
+    g_centroid = dimensionFactor * sdfCentroid;
+
+    sdfTranslationOffset = -Vec3(g_centroid.x, 0.0f, g_centroid.z) ; //only for sdf mesh
     initialPos = initialRigidPos + sdfTranslationOffset + models[selectedModel].translation;
 
     Vec3 pos = initialPos;
@@ -237,9 +241,6 @@ public:
 
     float spacing = SimulatedModelScaledSquareSize / factor;
 
-    g_verticalInvMass = 1.0f;  //default value 1.0
-    g_horizontalInvMass = 1.0f;//default value 1.0
-
     GetShapeBounds(lower, upper);
     g_meshCenter = (lower + upper) * 0.5f;
 
@@ -250,17 +251,30 @@ public:
     int phase = NvFlexMakePhase(0, eNvFlexPhaseSelfCollide | eNvFlexPhaseSelfCollideFilter);
     CreateHydrographicSpringGrid(g_filmCenter, g_meshCenter, g_filmDimX, g_filmDimZ, 1, spacing, phase, stretchStiffness, bendStiffness, shearStiffness, 0.0f, 1.0f, g_horizontalInvMass, g_verticalInvMass, false, false);
 
+    // compute original ABC triangle area
+    // 0.5 * | AB X AC |
+    Vec3 v0 = Vec3(g_buffers->positions[g_buffers->triangles[0]]);
+    Vec3 v1 = Vec3(g_buffers->positions[g_buffers->triangles[1]]);
+    Vec3 v2 = Vec3(g_buffers->positions[g_buffers->triangles[2]]);
+
+    g_originalArea = 0.5 * Length(Cross(v1-v0, v2-v0));
+
     // initialize contact structures for generate reverse texture mapping
     g_contact_positions.resize(g_buffers->positions.size());
     g_contact_normals.resize(g_buffers->normals.size());
     g_contact_indexes.resize(g_buffers->triangles.size());
     g_contact_uvs.resize(g_buffers->positions.size());
+    g_stretch_colors.resize(g_buffers->positions.size());
+    g_compens_colors.resize(g_buffers->positions.size());
+
     // create a copy of flat film positinos before deformation occurs
     // do the same to normals and triangles array
     g_buffers->positions.copyto(&g_contact_positions[0], g_buffers->positions.size());
     for (int i = 0; i < g_buffers->positions.size(); i++)
     {
       g_contact_uvs[i] = Vec4(-1.0f); // initialize contact uv with -1 means this vertice has not contact with rigid body
+      g_stretch_colors[i] = Vec4(1.0f);
+      g_compens_colors[i] = Vec4(1.0f);
     }
     g_buffers->normals.copyto(&g_contact_normals[0], g_buffers->normals.size());
     g_buffers->triangles.copyto(&g_contact_indexes[0], g_buffers->triangles.size());
@@ -310,9 +324,8 @@ public:
     
     // updates model matrix for rendering
     g_model = TranslationMatrix(Point3(pos))*RotationMatrix(Quat(rot))*ScaleMatrix(1.0f);
-    // update centroid for render the move
+    // update centroid for render the centroid move
     // translate centroid to model matrix
-    float dimensionFactor = 1.0f / voxelDim;
     g_centroid = Vec3(g_model * Vec4(dimensionFactor * sdfCentroid, 1.0f));
 
 		g_buffers->shapePositions[meshIndex] = Vec4(pos, 0.0f);
@@ -358,6 +371,20 @@ public:
 
     if (imguiCheck("Draw Spring Stretching", g_drawStretching))
       g_drawStretching = !g_drawStretching;
+
+    if (imguiCheck("Draw stretch colors", g_drawStretchColor))
+    {
+      g_drawStretchColor = !g_drawStretchColor;
+      g_drawReverseTexture = false;
+      g_drawStretchFactor = false;
+    }
+
+    if (imguiCheck("Draw stretch factor", g_drawStretchFactor))
+    {
+      g_drawStretchFactor = !g_drawStretchFactor;
+      g_drawStretchColor = false;
+      g_drawReverseTexture = false;
+    }
     
     float floatVoxelDim = float(voxelDim);
     if (imguiSlider("Voxel dim", &floatVoxelDim, 63.0f, 512.0f, 8.0f)) {
@@ -397,6 +424,7 @@ public:
 	float sdfMargin = 0.05f;
   Vec3 offsetCenterXZ = Vec3(-0.5f, 0.0f, -0.5f);
   Vec3 sdfTranslationOffset = Vec3(0.0f);
+  float dimensionFactor = 1.0f;
   Vec3 sdfCentroid = Vec3(0.0f);
   Mat44 sdfRotation;
   //Rigid model params

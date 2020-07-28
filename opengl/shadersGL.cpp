@@ -25,6 +25,7 @@
 //
 // Copyright (c) 20132017 NVIDIA Corporation. All rights reserved.
 #include "../source/shaders.h"
+#include "../source/ColorGradient.h"
 
 #include "../core/mesh.h"
 #include "../core/tga.h"	
@@ -35,6 +36,7 @@
 #include "../external/glad/src/glad.c"
 #include <glm/gtc/matrix_transform.hpp> 
 #include "shader.h"
+
 
 #define STB_IMAGE_STATIC
 #ifndef STB_IMAGE_IMPLEMENTATION
@@ -250,6 +252,7 @@ GLchar *FILM_VERTEX_SHADER = "#version 430\n" STRINGIFY(
 layout(location = 0) in vec4 aPosition;
 layout(location = 1) in vec4 aNormal;
 layout(location = 2) in vec4 aTexCoords;
+layout(location = 3) in vec4 aColors;
 uniform mat4 proj;
 uniform mat4 view;
 uniform mat4 model;
@@ -258,12 +261,14 @@ uniform bool showTexture;
 out vec3 vNormal;
 out vec3 vPosW;
 out vec2 vTexCoords;
+out vec4 vColor;
 
 void main()
 {
   vNormal = (normalize(normalMat * vec4(aNormal.xyz, 1.0))).xyz;
   vPosW = (model * vec4(aPosition.xyz, 1.0)).xyz;
   vTexCoords = showTexture ? vTexCoords = aTexCoords.xy : vec2(0.0);
+  vColor = aColors;
   gl_Position = proj * view * model * vec4(aPosition.xyz, 1.0);
 }
 );
@@ -272,6 +277,7 @@ GLchar *FILM_FRAGMENT_SHADER = "#version 430\n" STRINGIFY(
   in vec3 vNormal;
   in vec3 vPosW;
   in vec2 vTexCoords;
+  in vec4 vColor;
   uniform vec3 uLPos;
   uniform vec4 uLColor;
   uniform vec4 uColor;
@@ -296,7 +302,7 @@ GLchar *FILM_FRAGMENT_SHADER = "#version 430\n" STRINGIFY(
 
     vec4 matDif;
 
-    matDif = showTexture ? texture(tex, vTexCoords) : uColor;
+    matDif = showTexture ? texture(tex, vTexCoords) : vColor;
 
     if (showPhong)
     {
@@ -405,39 +411,50 @@ GLchar *RIGID_FRAGMENT_SHADER = "#version 430\n" STRINGIFY(
 
 GLchar *REVERSE_TEX_VERTEX_SHADER = "#version 430\n" STRINGIFY(
   layout(location = 0) in vec4 aPosition;
-  layout(location = 1) in vec4 aNormal;
-  layout(location = 2) in vec4 aTexCoords;
+layout(location = 1) in vec4 aNormal;
+layout(location = 2) in vec4 aTexCoords;
+layout(location = 3) in vec4 aColor;
 
-  uniform mat4 proj;
-  uniform mat4 view;
-  uniform mat4 model;
-  uniform mat4 normalMat;
-  uniform bool showTexture;
+uniform mat4 proj;
+uniform mat4 view;
+uniform mat4 model;
+uniform mat4 normalMat;
+uniform bool showTexture;
 
-  out VS_OUT
-  {
-    vec3 vNormal;
-  vec3 vPosW;
-  vec2 vTexCoords;
-  } vs_out;
+out VS_OUT
+{
+  vec3 vNormal;
+vec3 vPosW;
+vec2 vTexCoords;
+vec4 vColor;
+vec2 uv0;
+vec2 uv1;
+} vs_out;
 
-  //out vec3 WorldPos_CS_in;
-  //out vec2 TexCoord_CS_in;
-  //out vec3 Normal_CS_in;
+void main()
+{
+  vs_out.vNormal = (normalize(normalMat * vec4(aNormal.xyz, 1.0))).xyz;
+  vs_out.vPosW = (model * vec4(aPosition.xyz, 1.0)).xyz;
+  vs_out.vTexCoords = showTexture ? vs_out.vTexCoords = aTexCoords.xy : vec2(0.0);
+  vs_out.vColor = aColor;
+  vs_out.uv0 = fract(vs_out.vTexCoords.xy);
+  vs_out.uv1 = fract(vs_out.vTexCoords.xy + vec2(0.5, 0.5)) - vec2(0.5, 0.5);
 
-  void main()
-  {
-    //Normal_CS_in = (normalize(normalMat * vec4(aNormal.xyz, 1.0))).xyz;
-    //WorldPos_CS_in = (model * vec4(aPosition.xyz, 1.0)).xyz;
-    //TexCoord_CS_in = showTexture ? TexCoord_CS_in = aTexCoords.xy : vec2(0.0);
+  //int indexOffset = gl_VertexID % 3;
+  //int indexV0; int indexV1; int indexV2;
+  //indexV0 = gl_VertexID - indexOffset + 0; 
+  //indexV1 = gl_VertexID - indexOffset + 1; 
+  //indexV2 = gl_VertexID - indexOffset + 2;  
 
-    vs_out.vNormal = (normalize(normalMat * vec4(aNormal.xyz, 1.0))).xyz;
-    vs_out.vPosW = (model * vec4(aPosition.xyz, 1.0)).xyz;
-    vs_out.vTexCoords = showTexture ? vs_out.vTexCoords = aTexCoords.xy : vec2(0.0);
+  //vs_out.vertexID = gl_VertexID;
 
-    gl_Position = proj * view * model * vec4(aPosition.xyz, 1.0);
-  }
+  //vs_out.triangleIndexes[0] = indexV0;
+  //vs_out.triangleIndexes[1] = indexV1;
+  //vs_out.triangleIndexes[2] = indexV2;
 
+  gl_Position = proj * view * model * vec4(aPosition.xyz, 1.0);
+}
+//
 );
 
 GLchar *REVERSE_TEX_TESSELATION_CONTROL_SHADER = "#version 430\n" STRINGIFY(
@@ -519,59 +536,74 @@ void main()
 
 GLchar *REVERSE_TEX_FRAGMENT_SHADER = "#version 430\n" STRINGIFY(
   uniform vec3 uLPos;
-  uniform vec4 uLColor;
-  uniform vec4 uColor;
-  uniform vec3 uCamPos;
-  uniform vec4 uAmbient;
-  uniform vec4 uSpecular;
-  uniform uint uSpecularExpoent;
-  uniform bool showTexture;
-  uniform sampler2D tex;
+uniform vec4 uLColor;
+uniform vec4 uColor;
+uniform vec3 uCamPos;
+uniform vec4 uAmbient;
+uniform vec4 uSpecular;
+uniform uint uSpecularExpoent;
+uniform bool showTexture;
+uniform sampler2D tex;
+//inputs from geometry shader
+in GS_OUT
+{
+  vec3 vNormal;
+vec3 vPosW;
+vec2 vTexCoords;
+vec4 vColor;
+vec2 uv0;
+vec2 uv1;
 
-  in GS_OUT
+} fs_in;
+
+out vec4 outFragColor;
+
+void main(void) {
+  vec4 diffuse = vec4(0.0);
+  vec4 specular = vec4(0.0);
+  vec4 textureBorderColor = vec4(0.0, 0.0, 0.0, 0.0);
+  // always show front facing (avoid black color showing)
+  vec3 normal = gl_FrontFacing ? normalize(-fs_in.vNormal) : normalize(fs_in.vNormal);
+  vec4 lColor = uLColor;
+  // material properties
+  vec4 matAmb = uAmbient;
+
+  vec4 matDif;
+
+  //vec2 uvT; //Tarini 
+  //uvT.x = ( fwidth( fs_in.uv0.x ) < fwidth( fs_in.uv1.x )-0.001 )? fs_in.uv0.x : fs_in.uv1.x;
+  //uvT.y = ( fwidth( fs_in.uv0.y ) < fwidth( fs_in.uv1.y )-0.001 )? fs_in.uv0.y : fs_in.uv1.y;
+
+  //uvT.x = ( fwidth( fs_in.uv0.x ) < fwidth( fs_in.uv0.x +0.001) )? fs_in.uv0.x : fs_in.uv0.x +000.1;
+  //uvT.y = ( fwidth( fs_in.uv0.y ) < fwidth( fs_in.uv0.y +0.001) )? fs_in.uv0.y : fs_in.uv0.y +000.1;
+
+  matDif = showTexture ? texture(tex, fs_in.vTexCoords) : fs_in.vColor;
+  //matDif  = showTexture ? texture(tex, uvT) : uColor;
+
+
+  vec4 matSpec = uSpecular;
+  //ambient
+  vec4 ambient = matAmb;
+  //diffuse
+  vec3 pos = normalize(fs_in.vPosW);
+  vec3 vL = normalize(uLPos - pos);
+  float NdotL = dot(normal, vL);
+  if (NdotL > 0)
   {
-    vec3 vNormal;
-    vec3 vPosW;
-    vec2 vTexCoords;
-  } gs_out;
-
-  out vec4 outFragColor;
-
-  void main(void) {
-
-    vec4 lColor = uLColor;
-
-    float radius = 2.0f;
-    float resolution = 1.0f;
-    float blur = 5.0f;//radius / resolution;
-    //(1.0, 0.0)->x - axis blur
-    //(0.0, 1.0)->y - axis blur
-    float hstep = 1.0f;
-    float vstep = 1.0f;
-
-    vec4 sum = vec4(0.0);
-
-    vec4 matDif;
-
-    matDif = showTexture ? texture(tex, gs_out.vTexCoords) : uColor;
-
-    vec2 tc = gs_out.vTexCoords;
-
-    sum += texture2D(tex, vec2(tc.x - 4.0*blur*hstep, tc.y - 4.0*blur*vstep)) * 0.0162162162;
-    sum += texture2D(tex, vec2(tc.x - 3.0*blur*hstep, tc.y - 3.0*blur*vstep)) * 0.0540540541;
-    sum += texture2D(tex, vec2(tc.x - 2.0*blur*hstep, tc.y - 2.0*blur*vstep)) * 0.1216216216;
-    sum += texture2D(tex, vec2(tc.x - 1.0*blur*hstep, tc.y - 1.0*blur*vstep)) * 0.1945945946;
-
-    sum += texture2D(tex, vec2(tc.x, tc.y)) * 0.2270270270;
-
-    sum += texture2D(tex, vec2(tc.x + 1.0*blur*hstep, tc.y + 1.0*blur*vstep)) * 0.1945945946;
-    sum += texture2D(tex, vec2(tc.x + 2.0*blur*hstep, tc.y + 2.0*blur*vstep)) * 0.1216216216;
-    sum += texture2D(tex, vec2(tc.x + 3.0*blur*hstep, tc.y + 3.0*blur*vstep)) * 0.0540540541;
-    sum += texture2D(tex, vec2(tc.x + 4.0*blur*hstep, tc.y + 4.0*blur*vstep)) * 0.0162162162;
-
-    outFragColor = matDif * vec4(sum.rgb, 1.0);
-
+    diffuse = matDif * NdotL;
   }
+  //specular
+  vec3 vV = normalize(uCamPos - pos);
+  vec3 vR = normalize(reflect(-vL, normal));
+  float RdotV = dot(vV, vR);
+  if (RdotV > 0)
+  {
+    specular = matSpec * pow(RdotV, uSpecularExpoent);
+  }
+  // should use other components to apply phong
+  outFragColor = matDif;
+}
+//
 );
 
 GLchar *REVERSE_TEX_GEOMETRY_SHADER = "#version 430\n" STRINGIFY(
@@ -799,120 +831,131 @@ GLchar *REVERSE_TEX_GEOMETRY_SHADER = "#version 430\n" STRINGIFY(
 
 
 GLchar *REVERSE_TEX_GEOMETRY_SHADER_V2 = "#version 430\n" STRINGIFY(
-  layout(triangles) in;\n
-layout(triangle_strip, max_vertices = 36) out; \n
-uniform float uMaxDistanceUV; \n
-uniform float uNearDistanceUV; \n
-uniform float uWeight1; \n
-uniform float uWeight2; \n
-uniform sampler2D tex; \n
-uniform sampler2D heatmap; \n
-\n
-in VS_OUT\n
-{ \n
-  vec3 vNormal; \n
-vec3 vPosW; \n
-vec2 vTexCoords; \n
-} gs_in[]; \n
-\n
-out GS_OUT\n
-{ \n
-  vec3 vNormal; \n
-vec3 vPosW; \n
-vec2 vTexCoords; \n
-} gs_out; \n
-\n
-void EmitTextureVertex(int index)\n
-{ \n
-  gl_Position = gl_in[index].gl_Position; \n
-  gs_out.vNormal = gs_in[index].vNormal; \n
-  gs_out.vTexCoords = gs_in[index].vTexCoords; \n
-  gs_out.vPosW = gs_in[index].vPosW; \n
-  EmitVertex(); \n
-}\n
-\n
-void EmitWeightedTexVertex(int index1, int index2, float weight1, float weight2)\n
-{ \n
-  gl_Position = 0.5f * (gl_in[index1].gl_Position + gl_in[index2].gl_Position); \n
-  gs_out.vNormal = gs_in[index1].vNormal; // the mesh is always a plane assumes always the same normal\n
-  gs_out.vTexCoords = (weight1 * gs_in[index1].vTexCoords + weight2 * gs_in[index2].vTexCoords); // vertex with greater texture weight\n
-  gs_out.vPosW = 0.5 * (gs_in[index1].vPosW + gs_in[index2].vPosW); \n
-  EmitVertex(); \n
-}\n
-\n
-void EmitWeightedTexVertexCenter(int index1, int index2, vec2 texCoord1, vec2 texCoord2, vec2 texCoord3, float epsilon)\n
-{ \n
-  gl_Position = 0.5f * (gl_in[index1].gl_Position + gl_in[index2].gl_Position); \n
-  gs_out.vNormal = gs_in[index1].vNormal; // the mesh is always a plane assumes always the same normal\n
-  \n
-    vec2 centerTexCoord = 0.33f * (texCoord1 + texCoord2 + texCoord3); \n
-    //vec2 centerTexDirection = normalize(centerTexCoord - texCoord1); \n
-    \n
-    gs_out.vTexCoords = centerTexCoord;//texCoord1 + centerTexDirection * epsilon; \n
-  gs_out.vPosW = 0.5 * (gs_in[index1].vPosW + gs_in[index2].vPosW); \n
-  EmitVertex(); \n
-}\n
-\n
-void EmitTexVertexByNearColor(int index1, int index2, vec2 texCoords)\n
-{ \n
-  gl_Position = 0.5f * (gl_in[index1].gl_Position + gl_in[index2].gl_Position); \n
-  gs_out.vNormal = gs_in[index1].vNormal; // the mesh is always a plane assumes always the same normal\n
-  gs_out.vTexCoords = texCoords; \n
-    gs_out.vPosW = 0.5 * (gs_in[index1].vPosW + gs_in[index2].vPosW); \n
-    EmitVertex(); \n
-  }\n
-    \n
-    void EmitStrips(int farVertexIndex, int nearVertex1, int nearVertex2, float w1, float w2, int level)\n
-  { \n
-    // v0 cross the seam\n
-    // strip 1\n
-    level++;
+  layout(triangles) in;
+layout(triangle_strip, max_vertices = 36) out;
+uniform float uMaxDistanceUV;
+uniform float uNearDistanceUV;
+uniform float uWeight1;
+uniform float uWeight2;
+uniform sampler2D tex;
 
-  EmitTextureVertex(nearVertex1); \n
-  EmitWeightedTexVertex(farVertexIndex, nearVertex1, w1, w2); \n
-  EmitWeightedTexVertex(nearVertex1, nearVertex2, 0.5f, 0.5f); \n
-  EmitWeightedTexVertex(farVertexIndex, nearVertex2, w1, w2); \n
-  EmitTextureVertex(nearVertex2); \n
-    \n
-  EndPrimitive(); \n
-    \n
-  // strip 2\n
-  EmitWeightedTexVertex(nearVertex1, farVertexIndex, w1, w2); \n
-  EmitTextureVertex(farVertexIndex); \n
-  EmitWeightedTexVertex(nearVertex2, farVertexIndex, w1, w2); \n
-    \n
-  EndPrimitive(); \n
-    \n
+in VS_OUT
+{
+  vec3 vNormal;
+vec3 vPosW;
+vec2 vTexCoords;
+vec4 vColor;
+vec2 uv0;
+vec2 uv1;
+} gs_in[];
 
-  }\n
-\n
-bool isSeam(float maxDistanceUV, bool cross01, bool cross02, bool cross12, bool crossAll)\n
-{ \n
-  return (cross01 || cross02 || cross12 || crossAll); \n
-}\n
-\n
-bool v0_CrossTheSeam(bool cross01, bool cross02)\n
-{ \n
-  return (cross01 && cross02); \n
-}\n
+out GS_OUT
+{
+  vec3 vNormal;
+vec3 vPosW;
+vec2 vTexCoords;
+vec2 uv0;
+vec2 uv1;
+} gs_out;
 
-bool v1_CrossTheSeam(bool cross01, bool cross12)\n
-{ \n
-  return (cross01 && cross12); \n
-}\n
-\n
-bool v2_CrossTheSeam(bool cross02, bool cross12)\n
-{ \n
-  return (cross02 && cross12); \n
-}\n
-\n
-bool all_CrossTheSeam(float maxDistanceUV, float distance01, float distance02, float distance12)\n
-{ \n
-  float crossAllMaxDistanceUV = 0.33f * maxDistanceUV; \n
-    \n
+void EmitTextureVertex(int index)
+{
+  gl_Position = gl_in[index].gl_Position;
+  gs_out.vNormal = gs_in[index].vNormal;
+  gs_out.vTexCoords = gs_in[index].vTexCoords;
+  gs_out.uv0 = gs_in[index].uv0;
+  gs_out.uv1 = gs_in[index].uv1;
+  gs_out.vPosW = gs_in[index].vPosW;
+  EmitVertex();
+}
+
+void EmitWeightedTexVertex(int index1, int index2, float weight1, float weight2)
+{
+  gl_Position = 0.5f * (gl_in[index1].gl_Position + gl_in[index2].gl_Position);
+  gs_out.vNormal = gs_in[index1].vNormal; // the mesh is always a plane assumes always the same normal
+  gs_out.vTexCoords = (weight1 * gs_in[index1].vTexCoords + weight2 * gs_in[index2].vTexCoords); // vertex with greater texture weight
+  gs_out.vPosW = 0.5 * (gs_in[index1].vPosW + gs_in[index2].vPosW);
+  EmitVertex();
+}
+
+void EmitDirectionTexVertex(int indexFrom, int indexTo, vec2 texCoordFrom, vec2 texCoordTo, float epsilon)
+{
+  gl_Position = 0.5f * (gl_in[indexFrom].gl_Position + gl_in[indexTo].gl_Position);
+  gs_out.vNormal = gs_in[indexFrom].vNormal; // the mesh is always a plane assumes always the same normal
+
+  vec2 textDirection = normalize(texCoordTo - texCoordFrom);
+  gs_out.vTexCoords = texCoordFrom + textDirection * epsilon;
+  gs_out.vPosW = 0.5 * (gs_in[indexFrom].vPosW + gs_in[indexTo].vPosW);
+  EmitVertex();
+}
+
+void EmitStrips(int farVertexIndex, int nearVertex1, int nearVertex2, float w1, float w2)
+{
+  // v0 cross the seam
+  // strip 1
+  EmitTextureVertex(nearVertex1);
+  EmitWeightedTexVertex(farVertexIndex, nearVertex1, .01f, .99f);
+  EmitWeightedTexVertex(nearVertex1, nearVertex2, .5f, .5f);
+  EmitWeightedTexVertex(farVertexIndex, nearVertex2, .01f, .99f);
+  EmitTextureVertex(nearVertex2);
+  EndPrimitive();
+
+  // strip 2
+  EmitWeightedTexVertex(nearVertex1, farVertexIndex, .01f, .99f);
+  EmitTextureVertex(farVertexIndex);
+  EmitWeightedTexVertex(nearVertex2, farVertexIndex, .01f, .99f);
+  EndPrimitive();
+}
+
+void EmitStrips(int farVertexIndex, int nearVertex1, int nearVertex2, float epsilon)
+{
+  vec2 texFar = gs_in[farVertexIndex].vTexCoords;
+  vec2 texNear1 = gs_in[nearVertex1].vTexCoords;
+  vec2 texNear2 = gs_in[nearVertex2].vTexCoords;
+
+  // v0 cross the seam
+  // strip 1
+  EmitTextureVertex(nearVertex1);
+  EmitDirectionTexVertex(farVertexIndex, nearVertex1, texNear1, texFar, epsilon);
+  EmitWeightedTexVertex(nearVertex1, nearVertex2, .5f, .5f);
+  EmitDirectionTexVertex(farVertexIndex, nearVertex2, texNear2, texFar, epsilon);
+  EmitTextureVertex(nearVertex2);
+  EndPrimitive();
+
+  // strip 2
+  EmitDirectionTexVertex(nearVertex1, farVertexIndex, texFar, texNear1, epsilon);
+  EmitTextureVertex(farVertexIndex);
+  EmitDirectionTexVertex(nearVertex2, farVertexIndex, texFar, texNear2, epsilon);
+  EndPrimitive();
+}
+
+bool isSeam(float maxDistanceUV, bool cross01, bool cross02, bool cross12, bool crossAll)
+{
+  return (cross01 || cross02 || cross12 || crossAll);
+}
+
+bool v0_CrossTheSeam(bool cross01, bool cross02)
+{
+  return (cross01 && cross02);
+}
+
+bool v1_CrossTheSeam(bool cross01, bool cross12)
+{
+  return (cross01 && cross12);
+}
+
+bool v2_CrossTheSeam(bool cross02, bool cross12)
+{
+  return (cross02 && cross12);
+}
+
+bool all_CrossTheSeam(float maxDistanceUV, float distance01, float distance02, float distance12)
+{
+  float crossAllMaxDistanceUV = 0.33f * maxDistanceUV;
+
   return (distance01 > crossAllMaxDistanceUV && distance02 > crossAllMaxDistanceUV && distance12 > crossAllMaxDistanceUV);
-}\n
-\n
+}
+
 void ComputeTexDistance(vec2 texV0, vec2 texV1, vec2 texV2, inout float distance01, inout float distance02, inout float distance12)
 {
   distance01 = length(texV0 - texV1);
@@ -934,49 +977,19 @@ void ComputeHalfTextures(vec2 texV0, vec2 texV1, vec2 texV2, inout vec2 halfTex0
   halfTex12 = 0.5f * (texV1 + texV2);
 }
 
-void ComputeHalfDistances(vec4 v0, vec4 v1, vec4 v2, inout vec4 half01, inout vec4 half02, inout vec4 half12)
-{
-  half01 = 0.5f * (v0 + v1);
-  half02 = 0.5f * (v0 + v2);
-  half12 = 0.5f * (v1 + v2);
-}
+/*
 
-vec2 GetTexCoordsByNearColor(vec2 texCoords, float epsilon)
-{
-  vec4 texColor = texture(tex, texCoords);
+Seam fix scheme
+near1    near2 (near vertex in the texture)
+_ * _
+*       *
+| / |  /
+_ * _ * _ _ _ seam
+|  /
+*
+far (vertex far then the 2 others)
 
-  float distances[8];
-  vec2 nearTexCoords[8];
-
-  distances[0] = length(texColor - texture(tex, texCoords + vec2(0.0f, epsilon)));
-  distances[1] = length(texColor - texture(tex, texCoords + vec2(0.0f, -epsilon)));
-  distances[2] = length(texColor - texture(tex, texCoords + vec2(-epsilon, 0.0f)));
-  distances[3] = length(texColor - texture(tex, texCoords + vec2(epsilon, 0.0f)));
-  distances[4] = length(texColor - texture(tex, texCoords + vec2(epsilon, epsilon)));
-  distances[5] = length(texColor - texture(tex, texCoords + vec2(epsilon, -epsilon)));
-  distances[6] = length(texColor - texture(tex, texCoords + vec2(-epsilon, epsilon)));
-  distances[7] = length(texColor - texture(tex, texCoords + vec2(-epsilon, -epsilon)));
-
-
-  nearTexCoords[0] = texCoords + vec2(0.0f, epsilon);
-  nearTexCoords[1] = texCoords + vec2(0.0f, -epsilon);
-  nearTexCoords[2] = texCoords + vec2(-epsilon, 0.0f);
-  nearTexCoords[3] = texCoords + vec2(epsilon, 0.0f);
-  nearTexCoords[4] = texCoords + vec2(epsilon, epsilon);
-  nearTexCoords[5] = texCoords + vec2(epsilon, -epsilon);
-  nearTexCoords[6] = texCoords + vec2(-epsilon, epsilon);
-  nearTexCoords[7] = texCoords + vec2(-epsilon, -epsilon);
-
-  int nearColorIndex = 0;
-  for (int i; i < 8; i++)
-  {
-    if (distances[i] < distances[nearColorIndex])
-    {
-      nearColorIndex = i;
-    }
-  }
-  return nearTexCoords[nearColorIndex];
-}
+*/
 
 void main(void) {
 
@@ -985,22 +998,19 @@ void main(void) {
   float w1 = uWeight1;
   float w2 = uWeight2;
 
-  int farVertexIndex; int nearVertex1; int nearVertex2;
-  float texDistance01; float texDistance02; float texDistance12;
-  bool cross01; bool cross02; bool cross12; \n
-  int level = 0;\n
+  float w3 = uWeight1;
+  float w4 = uWeight2;
 
-  vec2 halfTex01; vec2 halfTex02; vec2 halfTex12;
-  vec4 half01; vec4 half02; vec4 half12;
+  float texDistance01, texDistance02, texDistance12;
+  bool cross01, cross02, cross12;
+  vec2 halfTex01, halfTex02, halfTex12;
 
   ComputeHalfTextures(gs_in[0].vTexCoords, gs_in[1].vTexCoords, gs_in[2].vTexCoords, halfTex01, halfTex02, halfTex12);
-  ComputeHalfDistances(gl_in[0].gl_Position, gl_in[1].gl_Position, gl_in[2].gl_Position, half01, half02, half12);
-
   ComputeTexDistance(gs_in[0].vTexCoords, gs_in[1].vTexCoords, gs_in[2].vTexCoords, texDistance01, texDistance02, texDistance12);
-
   ComputeCrossSeam(maxDistanceUV, texDistance01, texDistance02, texDistance12, cross01, cross02, cross12);
 
   bool crossAll = all_CrossTheSeam(maxDistanceUV, texDistance01, texDistance02, texDistance12);
+
   if (isSeam(maxDistanceUV, cross01, cross02, cross12, crossAll))
   {
     if (crossAll)
@@ -1008,52 +1018,58 @@ void main(void) {
       // all cross the stream
       // strip 1
       EmitTextureVertex(1);
-      EmitWeightedTexVertex(1, 0, .9f, .1f);
-      EmitWeightedTexVertex(1, 2, .9f, .1f);
-
+      EmitDirectionTexVertex(1, 0, gs_in[1].vTexCoords, gs_in[0].vTexCoords, epsilon);
+      EmitDirectionTexVertex(1, 2, gs_in[1].vTexCoords, gs_in[2].vTexCoords, epsilon);
       EndPrimitive();
 
       // strip 2
-      EmitWeightedTexVertex(2, 1, .9f, .1f);
-      EmitWeightedTexVertex(2, 0, .9f, .1f);
+      EmitDirectionTexVertex(2, 1, gs_in[2].vTexCoords, gs_in[1].vTexCoords, epsilon);
+      EmitDirectionTexVertex(2, 0, gs_in[2].vTexCoords, gs_in[0].vTexCoords, epsilon);
       EmitTextureVertex(2);
-
       EndPrimitive();
 
       // strip 3
-      EmitWeightedTexVertex(0, 1, .9f, .1f);
+      EmitDirectionTexVertex(0, 1, gs_in[0].vTexCoords, gs_in[1].vTexCoords, epsilon);
       EmitTextureVertex(0);
-      EmitWeightedTexVertex(0, 2, .9f, .1f);
-
+      EmitDirectionTexVertex(0, 2, gs_in[0].vTexCoords, gs_in[2].vTexCoords, epsilon);
       EndPrimitive();
 
       // strip 4 center  
-      EmitWeightedTexVertexCenter(0, 1, halfTex01, halfTex02, halfTex12, epsilon); \n
-      EmitWeightedTexVertexCenter(0, 2, halfTex01, halfTex02, halfTex12, epsilon); \n
-      EmitWeightedTexVertexCenter(1, 2, halfTex01, halfTex02, halfTex12, epsilon); \n
-
+      vec2 texCenter = 0.33f * (gs_in[0].vTexCoords + gs_in[1].vTexCoords + gs_in[2].vTexCoords);
+      EmitDirectionTexVertex(0, 1, texCenter, halfTex01, epsilon);
+      EmitDirectionTexVertex(1, 2, texCenter, halfTex12, epsilon);
+      EmitDirectionTexVertex(0, 2, texCenter, halfTex02, epsilon);
       EndPrimitive();
 
     }
     else if (v0_CrossTheSeam(cross01, cross02))
     {
-      farVertexIndex = 0; nearVertex1 = 1; nearVertex2 = 2;
 
-      EmitStrips(farVertexIndex, nearVertex1, nearVertex2, w1, w2, level);
+      int farVertexIndex = 0;
+      int nearVertex1 = 1;
+      int nearVertex2 = 2;
+
+      EmitStrips(farVertexIndex, nearVertex1, nearVertex2, epsilon);
 
     }
     else if (v1_CrossTheSeam(cross01, cross12))
     {
-      farVertexIndex = 1; nearVertex1 = 2; nearVertex2 = 0;
 
-      EmitStrips(farVertexIndex, nearVertex1, nearVertex2, w1, w2, level);
+      int farVertexIndex = 1;
+      int nearVertex1 = 2;
+      int nearVertex2 = 0;
+
+      EmitStrips(farVertexIndex, nearVertex1, nearVertex2, epsilon);
 
     }
     else if (v2_CrossTheSeam(cross02, cross12))
     {
-      farVertexIndex = 2; nearVertex1 = 0; nearVertex2 = 1;
 
-      EmitStrips(farVertexIndex, nearVertex1, nearVertex2, w1, w2, level);
+      int farVertexIndex = 2;
+      int nearVertex1 = 0;
+      int nearVertex2 = 1;
+
+      EmitStrips(farVertexIndex, nearVertex1, nearVertex2, epsilon);
 
     }
   }
@@ -1063,11 +1079,10 @@ void main(void) {
     EmitTextureVertex(0);
     EmitTextureVertex(1);
     EmitTextureVertex(2);
-
     EndPrimitive();
-
   }
 }
+//
 );
 
 GLchar *REVERSE_TEX_GEOMETRY_SHADER_V3 = "#version 430\n" STRINGIFY(
@@ -2545,6 +2560,57 @@ void PlotTexturePixel(Vec3 position, Vec2 textureCoords, PngImage textureImage)
 
 }
 
+inline int GridIndex(int x, int y, int dx) { return y*dx + x; } // duplicated fnc
+
+void BuildColorCompensation(Vec4* stretchColors, Vec4* compensColors, Vec4* filmPositions, std::vector<Vec4> flatFilmPositions, const int dimX, const int dimZ)
+{
+  ColorGradient *colorGradient = new ColorGradient();
+
+  for (int z = 0; z < dimZ; z++)
+  {
+    for (int x = 0; x < dimX; x++)
+    {
+      if (x > 0 && z > 0)
+      {
+        float restLength0 = Length(Vec3(flatFilmPositions[GridIndex(x, z, dimX)]) - Vec3(flatFilmPositions[GridIndex(x, z - 1, dimX)]));
+        float restLength1 = Length(Vec3(flatFilmPositions[GridIndex(x, z, dimX)]) - Vec3(flatFilmPositions[GridIndex(x + 1, z, dimX)]));
+        float restLength2 = Length(Vec3(flatFilmPositions[GridIndex(x, z, dimX)]) - Vec3(flatFilmPositions[GridIndex(x, z + 1, dimX)]));
+        float restLength3 = Length(Vec3(flatFilmPositions[GridIndex(x, z, dimX)]) - Vec3(flatFilmPositions[GridIndex(x - 1, z, dimX)]));
+
+        float restLength4 = Length(Vec3(flatFilmPositions[GridIndex(x, z, dimX)]) - Vec3(flatFilmPositions[GridIndex(x - 1, z - 1, dimX)]));
+        float restLength5 = Length(Vec3(flatFilmPositions[GridIndex(x, z, dimX)]) - Vec3(flatFilmPositions[GridIndex(x - 1, z + 1, dimX)]));
+        float restLength6 = Length(Vec3(flatFilmPositions[GridIndex(x, z, dimX)]) - Vec3(flatFilmPositions[GridIndex(x + 1, z + 1, dimX)]));
+        float restLength7 = Length(Vec3(flatFilmPositions[GridIndex(x, z, dimX)]) - Vec3(flatFilmPositions[GridIndex(x - 1, z + 1, dimX)]));
+
+
+        float finalLength0 = Length(Vec3(filmPositions[GridIndex(x, z, dimX)]) - Vec3(filmPositions[GridIndex(x, z - 1, dimX)]));
+        float finalLength1 = Length(Vec3(filmPositions[GridIndex(x, z, dimX)]) - Vec3(filmPositions[GridIndex(x + 1, z, dimX)]));
+        float finalLength2 = Length(Vec3(filmPositions[GridIndex(x, z, dimX)]) - Vec3(filmPositions[GridIndex(x, z + 1, dimX)]));
+        float finalLength3 = Length(Vec3(filmPositions[GridIndex(x, z, dimX)]) - Vec3(filmPositions[GridIndex(x - 1, z, dimX)]));
+
+        float finalLength4 = Length(Vec3(filmPositions[GridIndex(x, z, dimX)]) - Vec3(filmPositions[GridIndex(x - 1, z - 1, dimX)]));
+        float finalLength5 = Length(Vec3(filmPositions[GridIndex(x, z, dimX)]) - Vec3(filmPositions[GridIndex(x - 1, z + 1, dimX)]));
+        float finalLength6 = Length(Vec3(filmPositions[GridIndex(x, z, dimX)]) - Vec3(filmPositions[GridIndex(x + 1, z + 1, dimX)]));
+        float finalLength7 = Length(Vec3(filmPositions[GridIndex(x, z, dimX)]) - Vec3(filmPositions[GridIndex(x - 1, z + 1, dimX)]));
+
+        float variation0 = abs(finalLength0 - restLength0) / restLength0;
+        float variation1 = abs(finalLength1 - restLength1) / restLength1;
+        float variation2 = abs(finalLength2 - restLength2) / restLength2;
+        float variation3 = abs(finalLength3 - restLength3) / restLength3;
+        float variation4 = abs(finalLength4 - restLength4) / restLength4;
+        float variation5 = abs(finalLength5 - restLength5) / restLength5;
+        float variation6 = abs(finalLength6 - restLength6) / restLength6;
+        float variation7 = abs(finalLength7 - restLength7) / restLength7;
+
+        float avgVariation = (variation0 + variation1 + variation2 + variation3 + variation4 + variation5 + variation6 + variation7) / 8.0f;
+
+        stretchColors[GridIndex(x, z, dimX)] = colorGradient->getColorAtValue(avgVariation);
+        compensColors[GridIndex(x, z, dimX)] = Vec4(Vec3(1 - avgVariation), 1.0f);
+      }
+    }
+  }
+}
+
 
 void BuildContactUVs(Vec3 filmContactVertex, int filmContactVertexIndex, Vec3 filmContactPlane, GpuMesh* gpuMesh, Mat44 modelMatrix, std::vector<Vec4> contactPositions, std::vector<Vec4> &contactUVs)
 {
@@ -2991,6 +3057,7 @@ GpuMesh* CreateGpuFilm(Matrix44 model, Vec4* positions, Vec4* normals, Vec4* uvs
   {
     mesh->positions.push_back(Vec3(positions[i]));
     mesh->texCoordsFilm.push_back(uvs[i]);
+    mesh->colors.push_back(Vec4(1.0f));
   }
 
   for (int i = 0; i < nIndices; i++)
@@ -3009,11 +3076,13 @@ GpuMesh* CreateGpuFilm(Matrix44 model, Vec4* positions, Vec4* normals, Vec4* uvs
 
   glVerify(glBindVertexArray(mesh->mVAO));
   glVerify(glBindBuffer(GL_ARRAY_BUFFER, mesh->mPositionsVBO));
-  glVerify(glBufferData(GL_ARRAY_BUFFER, nVertices * (sizeof(Vec4) + sizeof(Vec4) + sizeof(Vec4)), NULL, GL_DYNAMIC_DRAW));
+  //glVerify(glBufferData(GL_ARRAY_BUFFER, nVertices * (sizeof(Vec4) + sizeof(Vec4) + sizeof(Vec4)), NULL, GL_DYNAMIC_DRAW));
+  glVerify(glBufferData(GL_ARRAY_BUFFER, nVertices * (sizeof(Vec4) + sizeof(Vec4) + sizeof(Vec4) + sizeof(Vec4)), NULL, GL_DYNAMIC_DRAW));
 
   glVerify(glBufferSubData(GL_ARRAY_BUFFER, 0, nVertices * sizeof(Vec4), &positions[0]));
   glVerify(glBufferSubData(GL_ARRAY_BUFFER, nVertices * sizeof(Vec4), nVertices * sizeof(Vec4), &normals[0]));
   glVerify(glBufferSubData(GL_ARRAY_BUFFER, nVertices * (sizeof(Vec4) + sizeof(Vec4)), nVertices * sizeof(Vec4), &uvs[0]));
+  glVerify(glBufferSubData(GL_ARRAY_BUFFER, nVertices * (sizeof(Vec4) + sizeof(Vec4) + sizeof(Vec4)), nVertices * sizeof(Vec4), &mesh->colors[0]));
 
   glVerify(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->mIndicesIBO));
   glVerify(glBufferData(GL_ELEMENT_ARRAY_BUFFER, nIndices * sizeof(int), &indices[0], GL_STATIC_DRAW));
@@ -3024,6 +3093,8 @@ GpuMesh* CreateGpuFilm(Matrix44 model, Vec4* positions, Vec4* normals, Vec4* uvs
   glVerify(glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(nVertices * sizeof(Vec4))));
   glVerify(glEnableVertexAttribArray(2));
   glVerify(glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(nVertices * (sizeof(Vec4) + sizeof(Vec4)))));
+  glVerify(glEnableVertexAttribArray(3));
+  glVerify(glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(nVertices * (sizeof(Vec4) + sizeof(Vec4) + sizeof(Vec4)))));
 
   glVerify(glBindVertexArray(0));
 
@@ -3042,15 +3113,32 @@ static char* readShaderSource(const char* shaderFile) {
   long size = ftell(fp);
 
   fseek(fp, 0L, SEEK_SET);
-  char* buf = new char[size + 2];
+  //char* buf = new char[size + 2];
+  char* buf = new char[size];
   memset(buf, 0, size);
   fread(buf, 1, size, fp);
 
-  buf[size] = '\r';
-  buf[size + 1] = '\n';
+  //buf[size] = '\r';
+  //buf[size + 1] = '\n';
   fclose(fp);
 
   return buf;
+}
+
+
+//https://stackoverflow.com/questions/7344640/getting-garbage-chars-when-reading-glsl-files
+std::string loadFileToString(char const * const fname)
+{
+  std::ifstream ifile(fname);
+  std::string filetext;
+
+  while (ifile.good()) {
+    std::string line;
+    std::getline(ifile, line);
+    filetext.append(line + "\n");
+  }
+
+  return filetext;
 }
 
 
@@ -3072,7 +3160,7 @@ unsigned int InitShader(const Shader *shaders, const bool readFile)
 
     if (readFile)
     {
-      shaderSource = readShaderSource(s.filename);
+      shaderSource = loadFileToString(s.filename);
     } 
     else
     {
@@ -3331,7 +3419,7 @@ void DrawHydrographicFilm(GpuMesh* mesh, const Vec4* positions, const Vec4* norm
   glDisable(GL_TEXTURE_2D);
 }
 
-void DrawReverseTexture(GpuMesh* mesh, const Vec4* positions, const Vec4* normals, const Vec4* uvs, const int* indices, int nIndices, int numPositions, bool showTexture)
+void DrawReverseTexture(GpuMesh* mesh, const Vec4* positions, const Vec4* normals, const Vec4* uvs, const int* indices, int nIndices, int numPositions, bool showTexture, Vec4* stretchColors)
 {
   //int hasTexture = showTexture && mesh->texCoordsFilm.size() ? 1 : 0;
   //if (showTexture)
@@ -3341,8 +3429,8 @@ void DrawReverseTexture(GpuMesh* mesh, const Vec4* positions, const Vec4* normal
     glVerify(glActiveTexture(GL_TEXTURE0));//
     glVerify(glBindTexture(GL_TEXTURE_2D, GetRigidModelTextureId()));
     glVerify(glUniform1i(glGetUniformLocation(s_reverseTexProgram, "tex"), 0));//
-    glVerify(glUniform1i(glGetUniformLocation(s_reverseTexProgram, "showTexture"), showTexture));
   }
+  glVerify(glUniform1i(glGetUniformLocation(s_reverseTexProgram, "showTexture"), showTexture));
   // Enable blending for transparency
   //glEnable(GL_BLEND);
   //glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -3351,9 +3439,10 @@ void DrawReverseTexture(GpuMesh* mesh, const Vec4* positions, const Vec4* normal
   glVerify(glBufferSubData(GL_ARRAY_BUFFER, 0, mesh->mNumVertices * sizeof(Vec4), positions));
   glVerify(glBufferSubData(GL_ARRAY_BUFFER, mesh->mNumVertices * sizeof(Vec4), mesh->mNumVertices * sizeof(Vec4), normals));
   // update texture coords
-  if (showTexture)
+  //if (showTexture)
   {
     glVerify(glBufferSubData(GL_ARRAY_BUFFER, mesh->mNumVertices * (sizeof(Vec4) + sizeof(Vec4)), mesh->mNumVertices * sizeof(Vec4), uvs));
+    glVerify(glBufferSubData(GL_ARRAY_BUFFER, mesh->mNumVertices * (sizeof(Vec4) + sizeof(Vec4) + sizeof(Vec4)), mesh->mNumVertices * sizeof(Vec4), stretchColors));
   }
   // draw VAO
   glVerify(glBindVertexArray(mesh->mVAO));

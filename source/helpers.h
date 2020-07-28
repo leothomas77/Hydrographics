@@ -95,16 +95,6 @@ void CreateSpring(int i, int j, float stiffness, float give=0.0f)
 	g_buffers->springStiffness.push_back(stiffness);	
 }
 
-#ifdef TRACK_DISPLACEMENTS
-void CreateDisplacementsSpring(int i, int j, float stiffness, float give = 0.0f)
-{
-  g_displacement_buffers->springIndices.push_back(i);
-  g_displacement_buffers->springIndices.push_back(j);
-  g_displacement_buffers->springLengths.push_back((1.0f + give)*Length(Vec3(g_displacement_buffers->positions[i]) - Vec3(g_displacement_buffers->positions[j])));
-  g_displacement_buffers->springStiffness.push_back(stiffness);
-}
-#endif;
-
 void AddSphere(float radius, Vec3 position, Quat rotation)
 {
 	NvFlexCollisionGeometry geo;

@@ -302,6 +302,8 @@ NvFlexLibrary* g_flexLib;
 std::vector<Vec4> g_contact_positions;
 std::vector<Vec4> g_contact_normals;
 std::vector<Vec4> g_contact_uvs;
+std::vector<Vec4> g_stretch_colors;
+std::vector<Vec4> g_compens_colors;
 std::vector<int> g_contact_indexes;
 float g_max_distance_uv = 0.36f;
 float g_near_distance_uv = 0.001f;
@@ -331,19 +333,6 @@ GpuMesh* g_gpu_rigid_mesh;
 std::map<NvFlexTriangleMeshId, GpuMesh*> g_meshes;
 NvFlexDistanceFieldId g_sdf_mesh;
 
-/* Note that this array of colors is altered by demo code, and is also read from global by graphics API impls */
-Colour g_colors[] =
-{
-	Colour(0.0f, 0.5f, 1.0f),
-	Colour(0.797f, 0.354f, 0.000f),
-	Colour(0.092f, 0.465f, 0.820f),
-	Colour(0.000f, 0.349f, 0.173f),
-	Colour(0.875f, 0.782f, 0.051f),
-	Colour(0.000f, 0.170f, 0.453f),
-	Colour(0.673f, 0.111f, 0.000f),
-	Colour(0.612f, 0.194f, 0.394f)
-};
-
 bool g_shapesChanged = false; // flag to request collision shapes be updated
 Vec3 g_filmCenter;
 int g_filmDimX = 0;
@@ -351,7 +340,7 @@ int g_filmDimZ = 0;
 Vec3 g_dippingVelocity = Vec3(0.0f, -0.3f, 0.0f);
 float g_horizontalInvMass = 1.0f;
 float g_verticalInvMass = 1.0f;
-
+float g_originalArea = 0.0f;
 std::vector<Vec3> g_camPos;
 std::vector<Vec3> g_camAngle;
 int g_camIndex = 0;
@@ -376,8 +365,8 @@ float dZ = 71.0f;
 float fx = (dx / dX)*dZ;
 float fy = (dy / dY)*dZ;
 
-float g_fov = 2 * float(atan(0.5*g_screenHeight / fy)); // *180 / M_PI;
-//float g_fov = kPi / 4.0f;
+//float g_fov = 2 * float(atan(0.5*g_screenHeight / fy)); // *180 / M_PI;
+float g_fov = kPi / 4.0f;
 float g_camSpeed;
 float g_camNear = .001f;
 float g_camFar = 1000.0f;
@@ -405,6 +394,8 @@ bool g_drawHydrographic = true;
 bool g_drawHydrographicCollisionMesh = true;
 bool g_drawStiffness = false;
 bool g_drawStretching = false;
+bool g_drawStretchColor = false;
+bool g_drawStretchFactor = false;
 float g_stretchFactor = 2.0f;
 int g_drawSprings;		// 0: no draw, 1: draw stretch 2: draw tether
 bool g_drawBases = false;

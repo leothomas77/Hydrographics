@@ -96,6 +96,9 @@ void Init(int scene, bool centerCamera = true)
   g_contact_normals.resize(0);
   g_contact_uvs.resize(0);
   g_contact_indexes.resize(0);
+  // for draw color compensation
+  g_stretch_colors.resize(0);
+  g_compens_colors.resize(0);
 
   // for compute fps and the metrics
   g_avgFPS = g_avgUpdateTime = g_avgRenderTime = g_avgWaitTime = g_avgLatencyTime = 0.0;
@@ -173,9 +176,6 @@ void Init(int scene, bool centerCamera = true)
 	// planes created after particles
 	g_params.numPlanes = 1;
 
-	// reset phase 0 particle color to blue
-  g_colors[0] = Colour(0.0f, 0.5f, 1.0f);
-
 	g_numSolidParticles = 0;
 
 	g_warmup = false;
@@ -241,7 +241,8 @@ void Init(int scene, bool centerCamera = true)
   g_camPos.push_back(Vec3(g_meshCenter.x, -2.4f, g_meshCenter.z));
   g_camAngle.push_back(Vec3(0.0f, DegToRad(90.0f), 0.0f));
   //top camera
-  g_camPos.push_back(Vec3(g_meshCenter.x, 0.83f, g_meshCenter.z));
+  g_camPos.push_back(Vec3(0.0f, 0.83f, 0.0f));
+  //g_camPos.push_back(Vec3(0.0f, 0.48f, 0.0f));
   g_camAngle.push_back(Vec3(DegToRad(90.0f), DegToRad(-90.0f), 0.0f));
 
 
@@ -481,7 +482,7 @@ void RenderScene()
       g_camIndex = 2;
       g_view = RotationMatrix(-g_camAngle[g_camIndex].x, Vec3(0.0f, 1.0f, 0.0f))*RotationMatrix(-g_camAngle[g_camIndex].y, Vec3(cosf(-g_camAngle[g_camIndex].x), 0.0f, sinf(-g_camAngle[g_camIndex].x)))*TranslationMatrix(-Point3(g_camPos[g_camIndex]));
       BindReverseTextureShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], g_lightColor, g_ambientColor, g_specularColor, g_specularExpoent, g_diffuseColor, g_max_distance_uv, g_near_distance_uv, g_weight1, g_weight2, g_tesselation_inner, g_tesselation_outer);
-      DrawReverseTexture(g_gpu_film_mesh, &g_contact_positions[0], &g_contact_normals[0], &g_contact_uvs[0], &g_contact_indexes[0], g_contact_indexes.size(), g_contact_positions.size(), true);
+      DrawReverseTexture(g_gpu_film_mesh, &g_contact_positions[0], &g_contact_normals[0], &g_contact_uvs[0], &g_contact_indexes[0], g_contact_indexes.size(), g_contact_positions.size(), true, &g_compens_colors[0]);
       CreateHydrographicFilmImage(g_screenWidth, g_screenHeight);
       g_camIndex = g_camIndexAux;//restore current view
     }
@@ -492,7 +493,19 @@ void RenderScene()
       {
         showTexture = true;
         BindReverseTextureShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], g_lightColor, g_ambientColor, g_specularColor, g_specularExpoent, g_diffuseColor, g_max_distance_uv, g_near_distance_uv, g_weight1, g_weight2, g_tesselation_inner, g_tesselation_outer);
-        DrawReverseTexture(g_gpu_film_mesh, &g_contact_positions[0], &g_contact_normals[0], &g_contact_uvs[0], &g_contact_indexes[0], g_contact_indexes.size(), g_contact_positions.size(), showTexture);
+        DrawReverseTexture(g_gpu_film_mesh, &g_contact_positions[0], &g_contact_normals[0], &g_contact_uvs[0], &g_contact_indexes[0], g_contact_indexes.size(), g_contact_positions.size(), showTexture, &g_compens_colors[0]);
+      }
+      if (g_drawStretchColor)
+      {
+        showTexture = false;
+        BindReverseTextureShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], g_lightColor, g_ambientColor, g_specularColor, g_specularExpoent, g_diffuseColor, g_max_distance_uv, g_near_distance_uv, g_weight1, g_weight2, g_tesselation_inner, g_tesselation_outer);
+        DrawReverseTexture(g_gpu_film_mesh, &g_contact_positions[0], &g_contact_normals[0], &g_contact_uvs[0], &g_contact_indexes[0], g_contact_indexes.size(), g_contact_positions.size(), showTexture, &g_stretch_colors[0]);
+      }
+      if (g_drawStretchFactor)
+      {
+        showTexture = false;
+        BindReverseTextureShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], g_lightColor, g_ambientColor, g_specularColor, g_specularExpoent, g_diffuseColor, g_max_distance_uv, g_near_distance_uv, g_weight1, g_weight2, g_tesselation_inner, g_tesselation_outer);
+        DrawReverseTexture(g_gpu_film_mesh, &g_contact_positions[0], &g_contact_normals[0], &g_contact_uvs[0], &g_contact_indexes[0], g_contact_indexes.size(), g_contact_positions.size(), showTexture, &g_compens_colors[0]);
       }
     }
   }
@@ -527,8 +540,6 @@ void RenderDebug()
 		int start = 0;
 
 		ColorGradient *colorGradient = new ColorGradient();
-
-    std::vector<Vec4> pixels;
 
     float maxDisplacement = 0.0f;
 
@@ -1118,6 +1129,7 @@ void UpdateFrame(bool &quit)
     // this block should execute before unmap command
     // because of read buffer data from comming from gpu to cpu
     BuildReverseTextureMapping();
+    BuildColorCompensation(&g_stretch_colors[0], &g_compens_colors[0], &g_buffers->positions[0], g_contact_positions, g_filmDimX, g_filmDimZ);
     //PostProcessReverseTexture();
     //g_drawReverseTexture = true;
   }
