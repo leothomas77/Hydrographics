@@ -7,6 +7,7 @@ uniform vec3 uCamPos;
 uniform vec4 uAmbient;
 uniform vec4 uSpecular;
 uniform uint uSpecularExpoent;
+uniform bool uColorCompensation;
 uniform bool showTexture;
 uniform sampler2D tex;
 //inputs from geometry shader
@@ -26,9 +27,7 @@ out vec4 outFragColor;
 void main(void) {
 	vec4 diffuse  = vec4(0.0);
 	vec4 specular = vec4(0.0);
-  vec4 textureBorderColor = vec4(0.0, 0.0, 0.0, 0.0);
-  // always show front facing (avoid black color showing)
-	vec3 normal  = gl_FrontFacing ? normalize(-fs_in.vNormal) : normalize(fs_in.vNormal);
+	vec3 normal  = normalize(-fs_in.vNormal);
 	vec4 lColor	 = uLColor;
 	// material properties
 	vec4 matAmb	 = uAmbient;
@@ -70,6 +69,11 @@ void main(void) {
 	  specular = matSpec * pow(RdotV, uSpecularExpoent);
 	}
 	// should use other components to apply phong
-  outFragColor = mix(matDif, bgColor, 0.2f);
+
+  if (uColorCompensation)
+  {
+    matDif = matDif * bgColor;  
+  }
+  outFragColor = matDif;
 }
 //

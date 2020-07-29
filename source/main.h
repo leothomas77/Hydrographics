@@ -1,4 +1,6 @@
 #pragma once
+#define CAM_DISTANCE_R 93.7f //163.02f
+#define IMG_WIDTH 1082
 
 #define SDL_CONTROLLER_BUTTON_LEFT_TRIGGER (SDL_CONTROLLER_BUTTON_MAX + 1)
 #define SDL_CONTROLLER_BUTTON_RIGHT_TRIGGER (SDL_CONTROLLER_BUTTON_MAX + 2)
@@ -361,6 +363,7 @@ float dy = 925.0f;
 float dX = 297.0f;
 float dY = 210.0f;
 float dZ = 71.0f;
+//
 
 float fx = (dx / dX)*dZ;
 float fy = (dy / dY)*dZ;
@@ -368,7 +371,7 @@ float fy = (dy / dY)*dZ;
 //float g_fov = 2 * float(atan(0.5*g_screenHeight / fy)); // *180 / M_PI;
 float g_fov = kPi / 4.0f;
 float g_camSpeed;
-float g_camNear = .001f;
+float g_camNear = .0001f;
 float g_camFar = 1000.0f;
 
 Vec3 g_lightPos;
@@ -400,6 +403,7 @@ float g_stretchFactor = 2.0f;
 int g_drawSprings;		// 0: no draw, 1: draw stretch 2: draw tether
 bool g_drawBases = false;
 bool g_drawReverseTexture = false;
+bool g_colorCompensation = false;
 bool g_createReverseTextureFile = false;
 bool g_drawFixedSeams = false;
 bool g_drawContacts = false;

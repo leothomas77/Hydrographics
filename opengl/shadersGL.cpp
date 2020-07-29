@@ -2566,6 +2566,7 @@ void BuildColorCompensation(Vec4* stretchColors, Vec4* compensColors, Vec4* film
 {
   ColorGradient *colorGradient = new ColorGradient();
 
+
   for (int z = 0; z < dimZ; z++)
   {
     for (int x = 0; x < dimX; x++)
@@ -3258,6 +3259,11 @@ void SetViewport(int x, int y, int width, int height)
   glVerify(glViewport(x, y, width, height));
 }
 
+void GetFrustum(float l, float r, float b, float t, float n, float f)
+{
+  glFrustum(l, r, b, t, n, f);
+}
+
 void BindRigidBodyShader(Matrix44 view, Matrix44 proj, Vec3 lightPos, Vec3 camPos, Vec4 lightColor, Vec4 ambientColor, Vec4 specularColor, unsigned int specularExpoent, Vec4 diffuseColor)
 {
   
@@ -3419,10 +3425,10 @@ void DrawHydrographicFilm(GpuMesh* mesh, const Vec4* positions, const Vec4* norm
   glDisable(GL_TEXTURE_2D);
 }
 
-void DrawReverseTexture(GpuMesh* mesh, const Vec4* positions, const Vec4* normals, const Vec4* uvs, const int* indices, int nIndices, int numPositions, bool showTexture, Vec4* stretchColors)
+void DrawReverseTexture(GpuMesh* mesh, const Vec4* positions, const Vec4* normals, const Vec4* uvs, const int* indices, int nIndices, int numPositions, bool showTexture, Vec4* stretchColors, bool colorCompensation)
 {
   //int hasTexture = showTexture && mesh->texCoordsFilm.size() ? 1 : 0;
-  //if (showTexture)
+  if (showTexture)
   {
     // Enable texture
     glVerify(glEnable(GL_TEXTURE_2D));//
@@ -3431,6 +3437,8 @@ void DrawReverseTexture(GpuMesh* mesh, const Vec4* positions, const Vec4* normal
     glVerify(glUniform1i(glGetUniformLocation(s_reverseTexProgram, "tex"), 0));//
   }
   glVerify(glUniform1i(glGetUniformLocation(s_reverseTexProgram, "showTexture"), showTexture));
+  glVerify(glUniform1i(glGetUniformLocation(s_reverseTexProgram, "uColorCompensation"), colorCompensation));
+
   // Enable blending for transparency
   //glEnable(GL_BLEND);
   //glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -3439,11 +3447,11 @@ void DrawReverseTexture(GpuMesh* mesh, const Vec4* positions, const Vec4* normal
   glVerify(glBufferSubData(GL_ARRAY_BUFFER, 0, mesh->mNumVertices * sizeof(Vec4), positions));
   glVerify(glBufferSubData(GL_ARRAY_BUFFER, mesh->mNumVertices * sizeof(Vec4), mesh->mNumVertices * sizeof(Vec4), normals));
   // update texture coords
-  //if (showTexture)
+  if (showTexture)
   {
     glVerify(glBufferSubData(GL_ARRAY_BUFFER, mesh->mNumVertices * (sizeof(Vec4) + sizeof(Vec4)), mesh->mNumVertices * sizeof(Vec4), uvs));
-    glVerify(glBufferSubData(GL_ARRAY_BUFFER, mesh->mNumVertices * (sizeof(Vec4) + sizeof(Vec4) + sizeof(Vec4)), mesh->mNumVertices * sizeof(Vec4), stretchColors));
   }
+  glVerify(glBufferSubData(GL_ARRAY_BUFFER, mesh->mNumVertices * (sizeof(Vec4) + sizeof(Vec4) + sizeof(Vec4)), mesh->mNumVertices * sizeof(Vec4), stretchColors));
   // draw VAO
   glVerify(glBindVertexArray(mesh->mVAO));
   // update indices (in the case of seams corrections) // NOT NECESSARY
@@ -3463,7 +3471,7 @@ void DrawReverseTexture(GpuMesh* mesh, const Vec4* positions, const Vec4* normal
 
 
   // disable texture
-  //if (showTexture)
+  if (showTexture)
   {
     glActiveTexture(GL_TEXTURE0);
     glDisable(GL_TEXTURE_2D);
@@ -3481,17 +3489,18 @@ GLuint* GetTexturePixels(GLuint textureID, int width, int height, int chanels)
 }
 
 
-void CreateHydrographicFilmImage(int W, int H)
+void CreateHydrographicFilmImage(int W, int H, int imgW)
 {
   FILE   *out = fopen("../../movies/texture.tga", "wb");
-  char   *pixel_data = new char[3 * W*H];
-  short  TGAhead[] = { 0, 2, 0, 0, 0, 0, W, H, 24 };
+  char   *pixel_data = new char[3 * imgW*H];
+  short  TGAhead[] = { 0, 2, 0, 0, 0, 0, imgW, H, 24 };
 
   //glReadBuffer(GL_BACK);
-  glReadPixels(0, 0, W, H, GL_BGR, GL_UNSIGNED_BYTE, pixel_data);
+  glPixelStorei(GL_PACK_ALIGNMENT, 1);
+  glReadPixels(int((W - imgW)*0.5f), 0, imgW, H, GL_BGR, GL_UNSIGNED_BYTE, pixel_data);
 
   fwrite(&TGAhead, sizeof(TGAhead), 1, out);
-  fwrite(pixel_data, 3 * W*H, 1, out);
+  fwrite(pixel_data, 3 * imgW*H, 1, out);
   fclose(out);
 
   delete[] pixel_data;

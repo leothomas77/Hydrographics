@@ -242,7 +242,6 @@ void Init(int scene, bool centerCamera = true)
   g_camAngle.push_back(Vec3(0.0f, DegToRad(90.0f), 0.0f));
   //top camera
   g_camPos.push_back(Vec3(0.0f, 0.83f, 0.0f));
-  //g_camPos.push_back(Vec3(0.0f, 0.48f, 0.0f));
   g_camAngle.push_back(Vec3(DegToRad(90.0f), DegToRad(-90.0f), 0.0f));
 
 
@@ -444,8 +443,10 @@ void RenderScene()
   //float l = -r, b = -t;
   //Mat44 projOrtho = OrthographicMatrix(l, r, b, t, g_camNear, g_camFar);
   //float aspect = (g_screenWidth*fy) / (g_screenHeight*fx);
-  g_proj = ProjectionMatrix(RadToDeg(g_fov), g_aspect, g_camNear, g_camFar);
+  //g_proj = projOrtho;
 
+  g_proj = Frustum(-g_screenWidth, g_screenWidth, -g_screenHeight, g_screenHeight, g_camNear, g_camFar);
+  //g_proj = ProjectionMatrix(RadToDeg(g_fov), g_aspect, g_camNear, g_camFar);
   g_camDistance = Length(g_camPos[g_camIndex] - g_centroid);
  
   g_view = RotationMatrix(-g_camAngle[g_camIndex].x, Vec3(0.0f, 1.0f, 0.0f))*RotationMatrix(-g_camAngle[g_camIndex].y, Vec3(cosf(-g_camAngle[g_camIndex].x), 0.0f, sinf(-g_camAngle[g_camIndex].x)))*TranslationMatrix(-Point3(g_camPos[g_camIndex]));
@@ -480,10 +481,13 @@ void RenderScene()
       g_createReverseTextureFile = false;//run this only once
       g_camIndexAux = g_camIndex;//save current view
       g_camIndex = 2;
-      g_view = RotationMatrix(-g_camAngle[g_camIndex].x, Vec3(0.0f, 1.0f, 0.0f))*RotationMatrix(-g_camAngle[g_camIndex].y, Vec3(cosf(-g_camAngle[g_camIndex].x), 0.0f, sinf(-g_camAngle[g_camIndex].x)))*TranslationMatrix(-Point3(g_camPos[g_camIndex]));
-      BindReverseTextureShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], g_lightColor, g_ambientColor, g_specularColor, g_specularExpoent, g_diffuseColor, g_max_distance_uv, g_near_distance_uv, g_weight1, g_weight2, g_tesselation_inner, g_tesselation_outer);
-      DrawReverseTexture(g_gpu_film_mesh, &g_contact_positions[0], &g_contact_normals[0], &g_contact_uvs[0], &g_contact_indexes[0], g_contact_indexes.size(), g_contact_positions.size(), true, &g_compens_colors[0]);
-      CreateHydrographicFilmImage(g_screenWidth, g_screenHeight);
+      Vec3 camPos = g_camPos[g_camIndex];
+      camPos.y = CAM_DISTANCE_R * g_realDistanceFactor;
+      g_proj = Frustum(-IMG_WIDTH, IMG_WIDTH, -g_screenHeight, g_screenHeight, g_camNear, g_camFar);
+      g_view = RotationMatrix(-g_camAngle[g_camIndex].x, Vec3(0.0f, 1.0f, 0.0f))*RotationMatrix(-g_camAngle[g_camIndex].y, Vec3(cosf(-g_camAngle[g_camIndex].x), 0.0f, sinf(-g_camAngle[g_camIndex].x)))*TranslationMatrix(-Point3(camPos));
+      BindReverseTextureShader(g_view, g_proj, g_lightPos, camPos, g_lightColor, g_ambientColor, g_specularColor, g_specularExpoent, g_diffuseColor, g_max_distance_uv, g_near_distance_uv, g_weight1, g_weight2, g_tesselation_inner, g_tesselation_outer);
+      DrawReverseTexture(g_gpu_film_mesh, &g_contact_positions[0], &g_contact_normals[0], &g_contact_uvs[0], &g_contact_indexes[0], g_contact_indexes.size(), g_contact_positions.size(), true, &g_compens_colors[0], g_colorCompensation);
+      CreateHydrographicFilmImage(g_screenWidth, g_screenHeight, IMG_WIDTH);
       g_camIndex = g_camIndexAux;//restore current view
     }
     else
@@ -493,19 +497,19 @@ void RenderScene()
       {
         showTexture = true;
         BindReverseTextureShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], g_lightColor, g_ambientColor, g_specularColor, g_specularExpoent, g_diffuseColor, g_max_distance_uv, g_near_distance_uv, g_weight1, g_weight2, g_tesselation_inner, g_tesselation_outer);
-        DrawReverseTexture(g_gpu_film_mesh, &g_contact_positions[0], &g_contact_normals[0], &g_contact_uvs[0], &g_contact_indexes[0], g_contact_indexes.size(), g_contact_positions.size(), showTexture, &g_compens_colors[0]);
+        DrawReverseTexture(g_gpu_film_mesh, &g_contact_positions[0], &g_contact_normals[0], &g_contact_uvs[0], &g_contact_indexes[0], g_contact_indexes.size(), g_contact_positions.size(), showTexture, &g_compens_colors[0], g_colorCompensation);
       }
       if (g_drawStretchColor)
       {
         showTexture = false;
         BindReverseTextureShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], g_lightColor, g_ambientColor, g_specularColor, g_specularExpoent, g_diffuseColor, g_max_distance_uv, g_near_distance_uv, g_weight1, g_weight2, g_tesselation_inner, g_tesselation_outer);
-        DrawReverseTexture(g_gpu_film_mesh, &g_contact_positions[0], &g_contact_normals[0], &g_contact_uvs[0], &g_contact_indexes[0], g_contact_indexes.size(), g_contact_positions.size(), showTexture, &g_stretch_colors[0]);
+        DrawReverseTexture(g_gpu_film_mesh, &g_contact_positions[0], &g_contact_normals[0], &g_contact_uvs[0], &g_contact_indexes[0], g_contact_indexes.size(), g_contact_positions.size(), showTexture, &g_stretch_colors[0], true);
       }
       if (g_drawStretchFactor)
       {
         showTexture = false;
         BindReverseTextureShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], g_lightColor, g_ambientColor, g_specularColor, g_specularExpoent, g_diffuseColor, g_max_distance_uv, g_near_distance_uv, g_weight1, g_weight2, g_tesselation_inner, g_tesselation_outer);
-        DrawReverseTexture(g_gpu_film_mesh, &g_contact_positions[0], &g_contact_normals[0], &g_contact_uvs[0], &g_contact_indexes[0], g_contact_indexes.size(), g_contact_positions.size(), showTexture, &g_compens_colors[0]);
+        DrawReverseTexture(g_gpu_film_mesh, &g_contact_positions[0], &g_contact_normals[0], &g_contact_uvs[0], &g_contact_indexes[0], g_contact_indexes.size(), g_contact_positions.size(), showTexture, &g_compens_colors[0], true);
       }
     }
   }

@@ -552,7 +552,7 @@ void CreateHydrographicSpringGrid(Vec3 lower, Vec3 meshCenter, int dx, int dy, i
 				if (x == 0 || x == dx - 1) {
 					g_buffers->positions.push_back(Vec4(position.x, position.y, position.z, invMassV));// 0.08f aumenta o arrasto nas bordas
         }
-				else if (y == 0 || y== dy - 1) {
+				else if (y == 0 || y == dy - 1) {
 					g_buffers->positions.push_back(Vec4(position.x, position.y, position.z, invMassH));// 0.08f aumenta o arrasto nas bordas
         }
 				else {

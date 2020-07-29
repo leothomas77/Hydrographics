@@ -365,12 +365,8 @@ public:
       g_createReverseTextureFile = true;
     }
 
-
-    if (imguiCheck("Draw Spring Stiffness", g_drawStiffness))
-      g_drawStiffness = !g_drawStiffness;
-
-    if (imguiCheck("Draw Spring Stretching", g_drawStretching))
-      g_drawStretching = !g_drawStretching;
+    if (imguiCheck("Color compensation", g_colorCompensation))
+      g_colorCompensation = !g_colorCompensation;
 
     if (imguiCheck("Draw stretch colors", g_drawStretchColor))
     {
@@ -385,6 +381,14 @@ public:
       g_drawStretchColor = false;
       g_drawReverseTexture = false;
     }
+
+    /*
+    if (imguiCheck("Draw Spring Stiffness", g_drawStiffness))
+      g_drawStiffness = !g_drawStiffness;
+
+    if (imguiCheck("Draw Spring Stretching", g_drawStretching))
+      g_drawStretching = !g_drawStretching;
+    */
     
     float floatVoxelDim = float(voxelDim);
     if (imguiSlider("Voxel dim", &floatVoxelDim, 63.0f, 512.0f, 8.0f)) {

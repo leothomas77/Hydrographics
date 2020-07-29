@@ -136,12 +136,12 @@ void FindTextureSeam(Vec3 v0, Vec3 v1, Vec3 v2, Vec2 textCoordV0, Vec2 textCoord
 void PlotTexturePixel(Vec3 position, Vec2 textureCoords, PngImage textureImage);
 
 void SetupFilmMesh(GpuMesh* gpuMesh, GpuMesh* filmMesh);
-void DrawReverseTexture(GpuMesh* mesh, const Vec4* positions, const Vec4* normals, const Vec4* uvs, const int* indices, int nIndices, int numPositions, bool showTexture, Vec4* stretchColors);
+void DrawReverseTexture(GpuMesh* mesh, const Vec4* positions, const Vec4* normals, const Vec4* uvs, const int* indices, int nIndices, int numPositions, bool showTexture, Vec4* stretchColors, bool colorCompensation);
 void SetReverseTextureParams();
 void UnsetReverseTextureParams();
 //void SetGpuMeshTriangles(GpuMesh* gpuMesh, std::vector<Triangle> triangles, std::vector<TriangleIndexes> triangleIndexes);
 bool rayTriangleIntersectMT(Vec3 orig, Vec3 dir, Vec3 v0, Vec3 v1, Vec3 v2, float &t, float &u, float &v, float &w);
-void CreateHydrographicFilmImage(int W, int H);
+void CreateHydrographicFilmImage(int W, int H, int imgW);
 
 struct RenderMaterial
 {

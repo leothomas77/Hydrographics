@@ -574,6 +574,26 @@ inline Mat44 TranslationMatrix(const Point3& t)
 	return m;
 }
 
+//https://stackoverflow.com/questions/19108414/render-cropped-image-in-opengl
+inline Mat44 Frustum(float left, float right, float bottom, float top, float znear, float zfar)
+{
+  float zd = zfar - znear;
+  float rl = right - left;
+  float tb = top - bottom;
+
+  float a = (right + left) / rl;
+  float b = (top + bottom) / tb;
+  float c = -(zfar + znear) / zd;
+  float d = -(2.0f * zfar * znear) / zd;
+
+  float view[4][4] = { { (2.0f * zfar) / rl, 0.0f, 0.0f, 0.0f },
+  { 0.0f, (2.0f * zfar) / tb, 0.0f, 0.0f },
+  { a, b, c, -1.0f },
+  { 0.0f, 0.0f, d, 0.0f } };
+
+  return Mat44(&view[0][0]);
+}
+
 inline Mat44 OrthographicMatrix(float left, float right, float bottom, float top, float n, float f)
 {
 	
