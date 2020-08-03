@@ -2571,7 +2571,7 @@ void BuildColorCompensation(Vec4* stretchColors, Vec4* compensColors, Vec4* film
   {
     for (int x = 0; x < dimX; x++)
     {
-      if (x > 0 && z > 0)
+      if (x > 0 && z > 0 && x < (dimX - 1) && z < (dimZ - 1))
       {
         float restLength0 = Length(Vec3(flatFilmPositions[GridIndex(x, z, dimX)]) - Vec3(flatFilmPositions[GridIndex(x, z - 1, dimX)]));
         float restLength1 = Length(Vec3(flatFilmPositions[GridIndex(x, z, dimX)]) - Vec3(flatFilmPositions[GridIndex(x + 1, z, dimX)]));
@@ -2606,7 +2606,7 @@ void BuildColorCompensation(Vec4* stretchColors, Vec4* compensColors, Vec4* film
         float avgVariation = (variation0 + variation1 + variation2 + variation3 + variation4 + variation5 + variation6 + variation7) / 8.0f;
 
         stretchColors[GridIndex(x, z, dimX)] = colorGradient->getColorAtValue(avgVariation);
-        compensColors[GridIndex(x, z, dimX)] = Vec4(Vec3(1 - avgVariation), 1.0f);
+        compensColors[GridIndex(x, z, dimX)] = Vec4(Vec3(1.0f - avgVariation), 1.0f);
       }
     }
   }

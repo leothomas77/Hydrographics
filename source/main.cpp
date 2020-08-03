@@ -60,7 +60,7 @@
 
 using namespace std;
 
-void Init(int scene, bool centerCamera = true)
+void Init(int scene, bool centerCamera = true, bool resetSimParams = true)
 {
 	RandInit();
 
@@ -120,65 +120,67 @@ void Init(int scene, bool centerCamera = true)
 	g_camSpeed = 0.05f;
   
 	// sim params
-	g_params.gravity[0] = 0.0f;
-	g_params.gravity[1] = -9.8f;
-	g_params.gravity[2] = 0.0f;
+  if (resetSimParams)
+  {
+    g_params.gravity[0] = 0.0f;
+    g_params.gravity[1] = 0.0f;
+    g_params.gravity[2] = 0.0f;
 
-	g_params.wind[0] = 0.0f;
-	g_params.wind[1] = 0.0f;
-	g_params.wind[2] = 0.0f;
+    g_params.wind[0] = 0.0f;
+    g_params.wind[1] = 0.0f;
+    g_params.wind[2] = 0.0f;
 
-	g_params.radius = 0.15f;
-	g_params.viscosity = 0.0f;
-	g_params.dynamicFriction = 0.0f;
-	g_params.staticFriction = 0.0f;
-	g_params.particleFriction = 0.0f; // scale friction between particles by default
-	g_params.freeSurfaceDrag = 0.0f;
-	g_params.drag = 0.0f;
-	g_params.lift = 0.0f;
-	g_params.numIterations = 3;
-	g_params.fluidRestDistance = 0.0f;
-	g_params.solidRestDistance = 0.0f;
+    g_params.radius = 0.15f;
+    g_params.viscosity = 0.0f;
+    g_params.dynamicFriction = 0.0f;
+    g_params.staticFriction = 0.0f;
+    g_params.particleFriction = 0.0f; // scale friction between particles by default
+    g_params.freeSurfaceDrag = 0.0f;
+    g_params.drag = 0.0f;
+    g_params.lift = 0.0f;
+    g_params.numIterations = 3;
+    g_numSubsteps = 2;
+    g_params.fluidRestDistance = 0.0f;
+    g_params.solidRestDistance = 0.0f;
 
-	g_params.anisotropyScale = 1.0f;
-	g_params.anisotropyMin = 0.1f;
-	g_params.anisotropyMax = 2.0f;
-	g_params.smoothing = 1.0f;
+    g_params.anisotropyScale = 1.0f;
+    g_params.anisotropyMin = 0.1f;
+    g_params.anisotropyMax = 2.0f;
+    g_params.smoothing = 1.0f;
 
-	g_params.dissipation = 0.0f;
-	g_params.damping = 0.0f;
-	g_params.particleCollisionMargin = 0.0f;
-	g_params.shapeCollisionMargin = 0.0f;
-	g_params.collisionDistance = 0.0f;
-	g_params.sleepThreshold = 0.0f;
-	g_params.shockPropagation = 0.0f;
-	g_params.restitution = 0.0f;
+    g_params.dissipation = 0.0f;
+    g_params.damping = 0.0f;
+    g_params.particleCollisionMargin = 0.0f;
+    g_params.shapeCollisionMargin = 0.0f;
+    g_params.collisionDistance = 0.0f;
+    g_params.sleepThreshold = 0.0f;
+    g_params.shockPropagation = 0.0f;
+    g_params.restitution = 0.0f;
 
-	g_params.maxSpeed = FLT_MAX;
-	g_params.maxAcceleration = 100.0f;	// approximately 10x gravity
+    g_params.maxSpeed = FLT_MAX;
+    g_params.maxAcceleration = 100.0f;	// approximately 10x gravity
 
-	g_params.relaxationMode = eNvFlexRelaxationLocal;
-	g_params.relaxationFactor = 1.0f;
-	g_params.solidPressure = 1.0f;
-	g_params.adhesion = 0.0f;
-	g_params.cohesion = 0.025f;
-	g_params.surfaceTension = 0.0f;
-	g_params.vorticityConfinement = 0.0f;
-	g_params.buoyancy = 1.0f;
-	g_params.diffuseThreshold = 100.0f;
-	g_params.diffuseBuoyancy = 1.0f;
-	g_params.diffuseDrag = 0.8f;
-	g_params.diffuseBallistic = 16;
-	g_params.diffuseLifetime = 2.0f;
+    g_params.relaxationMode = eNvFlexRelaxationLocal;
+    g_params.relaxationFactor = 1.0f;
+    g_params.solidPressure = 1.0f;
+    g_params.adhesion = 0.0f;
+    g_params.cohesion = 0.025f;
+    g_params.surfaceTension = 0.0f;
+    g_params.vorticityConfinement = 0.0f;
+    g_params.buoyancy = 1.0f;
+    g_params.diffuseThreshold = 100.0f;
+    g_params.diffuseBuoyancy = 1.0f;
+    g_params.diffuseDrag = 0.8f;
+    g_params.diffuseBallistic = 16;
+    g_params.diffuseLifetime = 2.0f;
 
-	g_numSubsteps = 2;
 
-	// planes created after particles
-	g_params.numPlanes = 1;
+    // planes created after particles
+    g_params.numPlanes = 1;
 
-	g_numSolidParticles = 0;
+  }
 
-	g_warmup = false;
+  g_warmup = false;
 
 	g_maxDiffuseParticles = 0;	// number of diffuse particles
 	g_maxNeighborsPerParticle = 96;
@@ -193,7 +195,7 @@ void Init(int scene, bool centerCamera = true)
 
 	// create scene
 	StartGpuWork();
-	g_scenes[g_scene]->Initialize();
+	g_scenes[g_scene]->Initialize(resetSimParams);
 	EndGpuWork();
 
 	uint32_t numParticles = g_buffers->positions.size();
@@ -244,7 +246,6 @@ void Init(int scene, bool centerCamera = true)
   g_camPos.push_back(Vec3(0.0f, 0.83f, 0.0f));
   g_camAngle.push_back(Vec3(DegToRad(90.0f), DegToRad(-90.0f), 0.0f));
 
-
   g_camIndex = 0; // select main cam view
 
 	g_solverDesc.maxParticles = maxParticles;
@@ -289,7 +290,6 @@ void Init(int scene, bool centerCamera = true)
   }
 
 	// unmap so we can start transferring data to GPU
-
 	UnmapBuffers(g_buffers);
 
   //-----------------------------
@@ -369,7 +369,8 @@ void Init(int scene, bool centerCamera = true)
 
 void Reset()
 {
-	Init(g_scene, true);
+	Init(g_scene, true, g_resetSimParams);
+  g_resetSimParams = true;
 }
 
 void Destroy()
@@ -445,8 +446,8 @@ void RenderScene()
   //float aspect = (g_screenWidth*fy) / (g_screenHeight*fx);
   //g_proj = projOrtho;
 
-  g_proj = Frustum(-g_screenWidth, g_screenWidth, -g_screenHeight, g_screenHeight, g_camNear, g_camFar);
-  //g_proj = ProjectionMatrix(RadToDeg(g_fov), g_aspect, g_camNear, g_camFar);
+  //g_proj = Frustum(-g_screenWidth, g_screenWidth, -g_screenHeight, g_screenHeight, g_camNear, g_camFar);
+  g_proj = ProjectionMatrix(RadToDeg(g_fov), g_aspect, g_camNear, g_camFar);
   g_camDistance = Length(g_camPos[g_camIndex] - g_centroid);
  
   g_view = RotationMatrix(-g_camAngle[g_camIndex].x, Vec3(0.0f, 1.0f, 0.0f))*RotationMatrix(-g_camAngle[g_camIndex].y, Vec3(cosf(-g_camAngle[g_camIndex].x), 0.0f, sinf(-g_camAngle[g_camIndex].x)))*TranslationMatrix(-Point3(g_camPos[g_camIndex]));
@@ -843,6 +844,7 @@ int DoUI()
 		if (imguiButton("Reset Scene"))
 		{
 			g_resetScene = true;
+      g_resetSimParams = true;
 		}
 		imguiSeparatorLine();
 
@@ -915,17 +917,19 @@ int DoUI()
 
 			imguiSeparatorLine();
 
-			float n = float(g_numSubsteps);
-      if (imguiSlider("Num Substeps", &n, 1, 10, 1))
+      g_numSubstepsAux = float(g_numSubsteps);
+      if (imguiSlider("Num Substeps", &g_numSubstepsAux, 0.1f, 10.0f, 1.0f))
       {
-        g_numSubsteps = int(n);
-        g_resetSolver = true;
+        g_numSubsteps = int(g_numSubstepsAux);
+        g_resetScene = true;
+        g_resetSimParams = false;
       }
-			n = float(g_params.numIterations);
-      if (imguiSlider("Num Iterations", &n, 1, 20, 1))
+      g_numIterationsAux = float(g_params.numIterations);
+      if (imguiSlider("Num Iterations", &g_numIterationsAux, 0.1f, 20.0f, 1.0f))
       {
-				g_params.numIterations = int(n);
-        g_resetSolver = true;
+				g_params.numIterations = int(g_numIterationsAux);
+        g_resetScene = true;
+        g_resetSimParams = false;
       }
 
 			imguiSeparatorLine();
@@ -1199,13 +1203,6 @@ void UpdateFrame(bool &quit)
 		g_resetScene = false;
 	}
 
-  // reset solver
-  if (g_resetSolver)
-  {
-    Shutdown();
-    NvFlexParams copy = g_params;
-    g_solver = NvFlexCreateSolver(g_flexLib, &g_solverDesc);
-  }
 	//-------------------------------------------------------------------
 	// Flex Update
 

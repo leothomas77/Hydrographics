@@ -33,7 +33,7 @@ void main(void) {
 	vec4 matAmb	 = uAmbient;
 
   vec4 matDif;
-  vec4 bgColor = vec4(1.0f);
+  vec4 compFactor = vec4(1.0f);
   //vec2 uvT; //Tarini 
   //uvT.x = ( fwidth( fs_in.uv0.x ) < fwidth( fs_in.uv1.x )-0.001 )? fs_in.uv0.x : fs_in.uv1.x;
 	//uvT.y = ( fwidth( fs_in.uv0.y ) < fwidth( fs_in.uv1.y )-0.001 )? fs_in.uv0.y : fs_in.uv1.y;
@@ -44,7 +44,7 @@ void main(void) {
   matDif  = showTexture ? texture(tex, fs_in.vTexCoords) : fs_in.vColor;
   if (fs_in.vTexCoords.x >= 0.0f && fs_in.vTexCoords.y >= 0.0f)
   {
-    bgColor = fs_in.vColor;
+    compFactor = fs_in.vColor;
   }
   //matDif  = showTexture ? texture(tex, uvT) : uColor;
 
@@ -72,7 +72,7 @@ void main(void) {
 
   if (uColorCompensation)
   {
-    matDif = matDif * bgColor;  
+    matDif = matDif * compFactor;  
   }
   outFragColor = matDif;
 }

@@ -50,7 +50,7 @@ SDL_GameController* g_gamecontroller = NULL;
 
 // main functions
 // simulation
-void Init(int scene, bool centerCamera);
+void Init(int scene, bool centerCamera, bool resetSimParams);
 void RandInit();
 void Reset();
 void Destroy();
@@ -218,7 +218,8 @@ float g_aspect = float(g_screenWidth) / g_screenHeight;
 int g_msaaSamples = 8;
 
 int g_numSubsteps;
-
+float g_numSubstepsAux;
+float g_numIterationsAux;
 // render phong parameters
 Vec3 g_meshColor;
 Vec3  g_clearColor;
@@ -342,7 +343,6 @@ int g_filmDimZ = 0;
 Vec3 g_dippingVelocity = Vec3(0.0f, -0.3f, 0.0f);
 float g_horizontalInvMass = 1.0f;
 float g_verticalInvMass = 1.0f;
-float g_originalArea = 0.0f;
 std::vector<Vec3> g_camPos;
 std::vector<Vec3> g_camAngle;
 int g_camIndex = 0;
@@ -426,9 +426,8 @@ int g_scene = 0;
 int g_selectedScene = g_scene;
 int g_levelScroll;			// offset for level selection scroll area
 bool g_resetScene = false;  //if the user clicks the reset button or presses the reset key this is set to true;
-bool g_resetSolver = false;
+bool g_resetSimParams = true;
 int g_frame = -1;
-int g_numSolidParticles = 0;
 
 // mouse
 int g_lastx;

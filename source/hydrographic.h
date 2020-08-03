@@ -15,12 +15,12 @@ public:
 	Hydrographic(const char* name) :
 	Scene(name) {}
 
-	virtual void Initialize()
+	virtual void Initialize(bool resetSimParams = true)
 	{	
     // real dimensions of each model in mm
     float tetraDim = 60.0f;
     float sphereDim = 70.0f;
-    float turtleDim = 109.0f;
+    float turtleDim = 96.0f;
     
     float sphereTexDim = 50.0f;
     float cunhaDim = 74.0f;
@@ -29,9 +29,9 @@ public:
     float oncaDim = 140.0f;
 
     //models without texture to chessboard test
-		ModelData tetra = ModelData("../../data/teste/tetrahedron.obj", Vec3(0.0f, 0.0f, 0.2f), tetraDim, Vec3(0.0f, -90.0f, 0.0f));
+		ModelData tetra = ModelData("../../data/teste/tetrahedron.obj", Vec3(0.0f, 0.0f, 0.01f), tetraDim, Vec3(0.0f, -90.0f, 0.0f));
     ModelData sphere = ModelData("../../data/teste/sphere.obj", Vec3(0.0f, 0.0f, 0.0f), sphereDim, Vec3(0.0f));
-    ModelData turtle = ModelData("../../data/teste/tartaruga-centro_casco.obj", Vec3(0.19f, 0.0f, 0.05f), turtleDim, Vec3(0.0f, -185.6f, 0.0f));
+    ModelData turtle = ModelData("../../data/teste/tartaruga-centro_casco.obj", Vec3(0.09f, 0.0f, 0.025f), turtleDim, Vec3(0.0f, -185.6f, 0.0f));
     //models with texture to reverse-texture test
     ModelData sphereTex = ModelData("../../data/teste/Earth.obj", Vec3(0.0f, 0.0f, 0.0f), sphereTexDim, Vec3(0.0f, 0.0f, 0.0f));
     ModelData cunha = ModelData("../../data/teste/cunha-centro.obj", Vec3(0.0f, 0.0f, 0.0f), cunhaDim, Vec3(0.0f, 90.0f, -270.0f));
@@ -57,47 +57,44 @@ public:
     models.push_back(casco);
 
 		//general params
-    g_params.numIterations = 5; //5 iteracoes por default; se diminuir provoca maior esticamento
-    g_numSubsteps = 1;
-    // gravidade x, y, z
-    g_params.gravity[0] = 0.0f; 
-		g_params.gravity[1] = 0.0f;
-		g_params.gravity[2] = 0.0f;
-		// common params
-		g_params.dynamicFriction = 1.0f;// coefs de friccao - altos valores substituem o recurso de ades�o
-		g_params.staticFriction = 1.0;
-		g_params.particleFriction = 1.0f;
-		g_params.restitution = 0.0f; // coef. restituicao (colisao totalmente inelastica, corpos seguem juntos)
-		g_params.adhesion = 0.08f; // coef de adesao
-    g_params.sleepThreshold = 0.01f;
+    if (resetSimParams)
+    {
+      g_params.numIterations = 5; //5 iteracoes por default; se diminuir provoca maior esticamento
+      g_numSubsteps = 1;
+      // common params
+      g_params.dynamicFriction = 1.0f;// coefs de friccao - altos valores substituem o recurso de ades�o
+      g_params.staticFriction = 1.0;
+      g_params.particleFriction = 1.0f;
+      g_params.restitution = 0.0f; // coef. restituicao (colisao totalmente inelastica, corpos seguem juntos)
+      g_params.adhesion = 0.08f; // coef de adesao
+      g_params.sleepThreshold = 0.01f;
 
-		//g_params.maxSpeed
-		//g_params.maxAcceleration
+      //g_params.maxSpeed
+      //g_params.maxAcceleration
 
-		//g_params.shockPropagation = 0.3f;
-		//g_params.dissipation = 0.25f;
-		//g_params.damping = 0.5f;
+      //g_params.shockPropagation = 0.3f;
+      //g_params.dissipation = 0.25f;
+      //g_params.damping = 0.5f;
 
-		// fluid params not used
-		g_params.viscosity = 0.0f;
-		// cloth params
-    g_params.drag = 1.8f;//0.3f;//3.5f;//força de arrasto ao tecido. aumenta sensa��o de elasticidade
-    g_params.lift = 1.2f;//0.2f;//1.8f;// forca de sustentação
-		// collision params
-    float radius = 0.012f;
-    g_params.radius = radius;//0.012f;   //radius*1.0f; // raio max de intera��o entre part�culas
-    g_params.collisionDistance = 0.012f;	//dist�ncia mantida entre a part�cula e o shape ap�s colis�o
-		g_params.particleCollisionMargin = radius*0.5f;//
-		g_params.shapeCollisionMargin = radius*0.5f;//
-		g_params.numPlanes = 0;
-		// relaxation solver params
-		g_params.relaxationMode = eNvFlexRelaxationGlobal;
-		g_params.relaxationFactor = 0.25f;
-		//g_params.relaxationMode = eNvFlexRelaxationLocal;
-		//g_params.relaxationFactor = 0.2f;
-		// plastic params not used
-		//g_params.plasticThreshold = 0.1f;
-		//g_params.plasticCreep = 0.3f;
+      // cloth params
+      g_params.drag = 1.8f;//0.3f;//3.5f;//força de arrasto ao tecido. aumenta sensa��o de elasticidade
+      g_params.lift = 1.2f;//0.2f;//1.8f;// forca de sustentação
+                           // collision params
+      float radius = 0.012f;
+      g_params.radius = radius;//0.012f;   //radius*1.0f; // raio max de intera��o entre part�culas
+      g_params.collisionDistance = 0.012f;	//dist�ncia mantida entre a part�cula e o shape ap�s colis�o
+      g_params.particleCollisionMargin = radius*0.5f;//
+      g_params.shapeCollisionMargin = radius*0.5f;//
+      g_params.numPlanes = 0;
+      // relaxation solver params
+      g_params.relaxationMode = eNvFlexRelaxationGlobal;
+      g_params.relaxationFactor = 0.25f;
+      //g_params.relaxationMode = eNvFlexRelaxationLocal;
+      //g_params.relaxationFactor = 0.2f;
+      // plastic params not used
+      //g_params.plasticThreshold = 0.1f;
+      //g_params.plasticCreep = 0.3f;
+    }
 
     //select a model to load
     if (g_selectedModel >= 0 && g_selectedModel < models.size())
@@ -117,7 +114,7 @@ public:
       //6: urna
       //7: onca
       //8: tartaruga
-      selectedModel = 4;
+      selectedModel = 2;
     }
 
     Mesh* mesh = NULL; //mesh model to create sdf structures
@@ -251,14 +248,6 @@ public:
     int phase = NvFlexMakePhase(0, eNvFlexPhaseSelfCollide | eNvFlexPhaseSelfCollideFilter);
     CreateHydrographicSpringGrid(g_filmCenter, g_meshCenter, g_filmDimX, g_filmDimZ, 1, spacing, phase, stretchStiffness, bendStiffness, shearStiffness, 0.0f, 1.0f, g_horizontalInvMass, g_verticalInvMass, false, false);
 
-    // compute original ABC triangle area
-    // 0.5 * | AB X AC |
-    Vec3 v0 = Vec3(g_buffers->positions[g_buffers->triangles[0]]);
-    Vec3 v1 = Vec3(g_buffers->positions[g_buffers->triangles[1]]);
-    Vec3 v2 = Vec3(g_buffers->positions[g_buffers->triangles[2]]);
-
-    g_originalArea = 0.5 * Length(Cross(v1-v0, v2-v0));
-
     // initialize contact structures for generate reverse texture mapping
     g_contact_positions.resize(g_buffers->positions.size());
     g_contact_normals.resize(g_buffers->normals.size());
@@ -273,8 +262,8 @@ public:
     for (int i = 0; i < g_buffers->positions.size(); i++)
     {
       g_contact_uvs[i] = Vec4(-1.0f); // initialize contact uv with -1 means this vertice has not contact with rigid body
-      g_stretch_colors[i] = Vec4(1.0f);
-      g_compens_colors[i] = Vec4(1.0f);
+      g_stretch_colors[i] = Vec4(0.0f); // initial stretch is zero
+      g_compens_colors[i] = Vec4(1.0f); // initial compens is neutral value
     }
     g_buffers->normals.copyto(&g_contact_normals[0], g_buffers->normals.size());
     g_buffers->triangles.copyto(&g_contact_indexes[0], g_buffers->triangles.size());
