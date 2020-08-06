@@ -1,4 +1,3 @@
-//#define DEBUG_GRID
 
 #define SQUARES_W 7
 #define SQUARES_H 11

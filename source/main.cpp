@@ -360,8 +360,6 @@ void Init(int scene, bool centerCamera = true, bool resetSimParams = true)
 
 		// udpate host copy
 		NvFlexGetParticles(g_solver, g_buffers->positions.buffer, NULL);
-		//NvFlexGetSmoothParticles(g_solver, g_buffers->smoothPositions.buffer, NULL);
-		//NvFlexGetAnisotropy(g_solver, g_buffers->anisotropy1.buffer, g_buffers->anisotropy2.buffer, g_buffers->anisotropy3.buffer, NULL);
 	
 		printf("Finished warm up.\n");
 	}
@@ -438,6 +436,7 @@ void UpdateScene()
 void RenderScene()
 {
 
+
   //Mat44 projOrtho = OrthographicMatrix(0.0f, float(g_screenWidth), 0.0f, float(g_screenHeight), g_camNear, g_camFar);
   //float max = MAX(g_sceneUpper.x, g_sceneUpper.y);
   //float r = max * g_aspect, t = max;
@@ -445,9 +444,9 @@ void RenderScene()
   //Mat44 projOrtho = OrthographicMatrix(l, r, b, t, g_camNear, g_camFar);
   //float aspect = (g_screenWidth*fy) / (g_screenHeight*fx);
   //g_proj = projOrtho;
+  //g_proj = ProjectionMatrix(RadToDeg(g_fov), g_aspect, g_camNear, g_camFar);
 
-  //g_proj = Frustum(-g_screenWidth, g_screenWidth, -g_screenHeight, g_screenHeight, g_camNear, g_camFar);
-  g_proj = ProjectionMatrix(RadToDeg(g_fov), g_aspect, g_camNear, g_camFar);
+  g_proj = Frustum(-g_screenWidth, g_screenWidth, -g_screenHeight, g_screenHeight, g_camNear, g_camFar);
   g_camDistance = Length(g_camPos[g_camIndex] - g_centroid);
  
   g_view = RotationMatrix(-g_camAngle[g_camIndex].x, Vec3(0.0f, 1.0f, 0.0f))*RotationMatrix(-g_camAngle[g_camIndex].y, Vec3(cosf(-g_camAngle[g_camIndex].x), 0.0f, sinf(-g_camAngle[g_camIndex].x)))*TranslationMatrix(-Point3(g_camPos[g_camIndex]));
@@ -1152,7 +1151,9 @@ void UpdateFrame(bool &quit)
 
   RenderScene();
 
+#ifdef DEBUG_SIM
   RenderDebug(); // this should run beteen map / unmap command, because of reading buffer data incoming from gpu to cpu
+#endif
 
   EndFrameV2();
 
@@ -2112,7 +2113,7 @@ int main(int argc, char* argv[])
 	CreateDemoContext(g_graphics);
 
 	std::string str;
-	str = "Hydrographics Simulator v4.1 ";
+	str = "Hydrographics Simulator v4.2 ";
 	switch (g_graphics)
 	{
 	case 0:

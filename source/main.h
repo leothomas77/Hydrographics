@@ -1,4 +1,8 @@
 #pragma once
+
+//#define DEBUG_SIM
+
+
 #define CAM_DISTANCE_R 93.7f //163.02f
 #define IMG_WIDTH 1082
 
