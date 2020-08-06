@@ -80,3 +80,25 @@ namespace OGL_Renderer
 	GLuint CompileProgram(const char *vsource = NULL, const char *fsource = NULL, const char* gsource = NULL);
 	void DrawPlane(const Vec4& p, bool color = true);
 }
+
+
+const std::string shaderdata = R"(
+uniform sampler2D objtexture;
+uniform sampler2D fogtexture;
+uniform sampler2D lighttexture;
+
+void main()
+{
+    // Load textures into pixels
+    vec4 objpixel = texture2D(objtexture, gl_TexCoord[0].xy);
+    vec4 fogpixel = texture2D(fogtexture, gl_TexCoord[0].xy);
+    vec4 lightpixel = texture2D(lighttexture, gl_TexCoord[0].xy);
+
+    // Draw objects if a lighttexture pixel is fully-transparent
+    // Otherwise, hide objects behind fog
+    bool changealpha = bool(ceil(lightpixel.a));
+    objpixel = vec4((lightpixel.rgb) * float(changealpha) + objpixel.rgb * float(!changealpha), lightpixel.a * float(changealpha) + objpixel.a * float(!changealpha));
+    objpixel = mix(objpixel, fogpixel, fogpixel.a);
+
+    gl_FragColor = objpixel;
+})";

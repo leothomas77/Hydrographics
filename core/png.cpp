@@ -9,15 +9,14 @@
 bool PngLoad(const char* filename, PngImage& image)
 {	
 	int x, y, c;
-	
-	uint8_t* data = stbi_load(filename, &x, &y, &c, 4);
+	uint8_t* data = stbi_load(filename, &x, &y, &c, STBI_rgb_alpha);
 	
 	if (data)
 	{
 		int s = x*y;
 		
 		image.m_data = new uint32_t[s];
-		memcpy(image.m_data, data, s*sizeof(char)*4);
+		memcpy(image.m_data, data, s*sizeof(char)*STBI_rgb_alpha);
 		
 		image.m_width = (unsigned short)x;
 		image.m_height = (unsigned short)y;

@@ -24,15 +24,6 @@
 // NVIDIA Corporation.
 //
 // Copyright (c) 2013-2017 NVIDIA Corporation. All rights reserved.
-#ifndef TRACK_DISPLACEMENTS
-  //#define TRACK_DISPLACEMENTS
-#endif
-#ifndef RENDER_V2
-  #define RENDER_V2
-#endif
-
-//#define NEARBY_TEXTURE_COORECTION
-
 
 #include "../core/types.h"
 #include "../core/maths.h"
@@ -59,9 +50,9 @@
 #include "shaders.h"
 #include "imgui.h"
 #include "shadersDemoContext.h"
-//#include "ColorGradient.h"
+#include "ColorGradient.h"
 
-
+#include "model_data.h"
 #include "main.h"
 #include "helpers.h"
 #include "../source/scenes.h"
@@ -69,72 +60,14 @@
 
 using namespace std;
 
-void Init(int scene, bool centerCamera = true)
+void Init(int scene, bool centerCamera = true, bool resetSimParams = true)
 {
 	RandInit();
 
 	if (g_solver)
 	{
-		if (g_buffers)
-			DestroyBuffers(g_buffers);
-
-    for (auto& iter : g_meshes)
-		{
-			NvFlexDestroyTriangleMesh(g_flexLib, iter.first);
-			DestroyGpuMesh(iter.second);
-		}
-
-		//for (auto& iter : g_fields)
-		//{
-			//NvFlexDestroyDistanceField(g_flexLib, iter.first);
-			//DestroyGpuMesh(iter.second);
-		//}
-
-		//g_fields.clear();
-
-    NvFlexDestroyDistanceField(g_flexLib, g_sdf_mesh);
-    DestroyGpuMesh(g_gpu_mesh);
-
-		g_meshes.clear();
-
-		NvFlexDestroySolver(g_solver);
-		g_solver = NULL;
+    Destroy();
 	}
-
-
-#ifdef TRACK_DISPLACEMENTS
-  if (g_displacements_solver)
-  {
-    //displacement buffers
-    if (g_displacement_buffers)
-      DestroyBuffers(g_displacement_buffers);
-
-    NvFlexDestroySolver(g_displacements_solver);
-    g_displacements_solver = NULL;
-
-  }
-  //displacements init
-  g_displacement_buffers = AllocBuffers(g_flexLib);
-
-  MapBuffers(g_displacement_buffers);
-
-
-  g_displacement_buffers->positions.resize(0);
-  g_displacement_buffers->velocities.resize(0);
-  g_displacement_buffers->phases.resize(0);
-
-  //g_displacement_buffers->springIndices.resize(0);
-  //g_displacement_buffers->springLengths.resize(0);
-  //g_displacement_buffers->springStiffness.resize(0);
-
-  // for compute hydrographic distortion 
-  g_displacement_buffers->originalPositions.resize(0);
-  //displacedPositions.resize(0);
-  //displacements.resize(0);
-
-  //
-  filmContactCount.resize(0);
-#endif
 
 	// alloc buffers
 	g_buffers = AllocBuffers(g_flexLib);
@@ -156,145 +89,98 @@ void Init(int scene, bool centerCamera = true)
 	g_buffers->triangleNormals.resize(0);
 	g_buffers->uvs.resize(0);
 
-	g_buffers->shapeGeometry.resize(0);
-	g_buffers->shapePositions.resize(0);
-	g_buffers->shapeRotations.resize(0);
-	g_buffers->shapePrevPositions.resize(0);
-	g_buffers->shapePrevRotations.resize(0);
-	g_buffers->shapeFlags.resize(0);
+  ClearShapes();
 
   // for draw distortions
   g_contact_positions.resize(0);
   g_contact_normals.resize(0);
   g_contact_uvs.resize(0);
   g_contact_indexes.resize(0);
+  // for draw color compensation
+  g_stretch_colors.resize(0);
+  g_compens_colors.resize(0);
 
-  // for compute fps
+  // for compute fps and the metrics
   g_avgFPS = g_avgUpdateTime = g_avgRenderTime = g_avgWaitTime = g_avgLatencyTime = 0.0;
+  g_fps = g_updateTime = g_renderTime = g_waitTime = g_simLatency = 0.0f;
   frametimes.resize(0);
   update_times.resize(0);
   render_times.resize(0);
   wait_times.resize(0);
   latency_times.resize(0);
 
-	// remove collision shapes
-  // delete g_mesh_debug;
-  // g_mesh_debug = NULL;
-	delete g_mesh; g_mesh = NULL;
-
 	g_frame = 0;
 	g_pause = false;
 
   g_dt = 1.0f / 60.0f;
 
-	g_blur = 1.0f;
-	//g_fluidColor = Vec4(0.1f, 0.4f, 0.8f, 1.0f);
-	g_meshColor = Vec3(0.9f, 0.9f, 0.9f);
-	g_drawEllipsoids = false;
-	g_drawPoints = true;
-	g_drawCloth = true;
-	g_expandCloth = 0.0f;
-	g_drawShadows = true;
-
-	g_drawOpaque = false;
-	g_drawSprings = false;
-	g_drawDiffuse = false;
-	g_drawMesh = true;
-	g_drawDensity = false;
-	//g_ior = 1.0f;
 	g_lightDistance = 2.0f;
-	g_fogDistance = 0.005f;
 
-  //Vec3 perspectiveCam = Vec3(6.0f, 8.0f, 18.0f);
   g_camPos.resize(0);
-  //g_camPos.push_back(perspectiveCam);
-  //g_camIndex = g_camPos.size() - 1;
-
-  //g_camAngle.push_back(Vec3(0.0f, -DegToRad(20.0f), 0.0f));
-
-	g_camSpeed = 0.05f;//0.075f;
-	g_camNear = 0.01f;
-	g_camFar = 1000.0f;
+	g_camSpeed = 0.05f;
   
-	g_pointScale = 1.0f;
-	g_ropeScale = 1.0f;
-	g_drawPlaneBias = 0.0f;
-
 	// sim params
-	g_params.gravity[0] = 0.0f;
-	g_params.gravity[1] = -9.8f;
-	g_params.gravity[2] = 0.0f;
+  if (resetSimParams)
+  {
+    g_params.gravity[0] = 0.0f;
+    g_params.gravity[1] = 0.0f;
+    g_params.gravity[2] = 0.0f;
 
-	g_params.wind[0] = 0.0f;
-	g_params.wind[1] = 0.0f;
-	g_params.wind[2] = 0.0f;
+    g_params.wind[0] = 0.0f;
+    g_params.wind[1] = 0.0f;
+    g_params.wind[2] = 0.0f;
 
-	g_params.radius = 0.15f;
-	g_params.viscosity = 0.0f;
-	g_params.dynamicFriction = 0.0f;
-	g_params.staticFriction = 0.0f;
-	g_params.particleFriction = 0.0f; // scale friction between particles by default
-	g_params.freeSurfaceDrag = 0.0f;
-	g_params.drag = 0.0f;
-	g_params.lift = 0.0f;
-	g_params.numIterations = 3;
-	g_params.fluidRestDistance = 0.0f;
-	g_params.solidRestDistance = 0.0f;
+    g_params.radius = 0.15f;
+    g_params.viscosity = 0.0f;
+    g_params.dynamicFriction = 0.0f;
+    g_params.staticFriction = 0.0f;
+    g_params.particleFriction = 0.0f; // scale friction between particles by default
+    g_params.freeSurfaceDrag = 0.0f;
+    g_params.drag = 0.0f;
+    g_params.lift = 0.0f;
+    g_params.numIterations = 3;
+    g_numSubsteps = 2;
+    g_params.fluidRestDistance = 0.0f;
+    g_params.solidRestDistance = 0.0f;
 
-	g_params.anisotropyScale = 1.0f;
-	g_params.anisotropyMin = 0.1f;
-	g_params.anisotropyMax = 2.0f;
-	g_params.smoothing = 1.0f;
+    g_params.anisotropyScale = 1.0f;
+    g_params.anisotropyMin = 0.1f;
+    g_params.anisotropyMax = 2.0f;
+    g_params.smoothing = 1.0f;
 
-	g_params.dissipation = 0.0f;
-	g_params.damping = 0.0f;
-	g_params.particleCollisionMargin = 0.0f;
-	g_params.shapeCollisionMargin = 0.0f;
-	g_params.collisionDistance = 0.0f;
-	g_params.sleepThreshold = 0.0f;
-	g_params.shockPropagation = 0.0f;
-	g_params.restitution = 0.0f;
+    g_params.dissipation = 0.0f;
+    g_params.damping = 0.0f;
+    g_params.particleCollisionMargin = 0.0f;
+    g_params.shapeCollisionMargin = 0.0f;
+    g_params.collisionDistance = 0.0f;
+    g_params.sleepThreshold = 0.0f;
+    g_params.shockPropagation = 0.0f;
+    g_params.restitution = 0.0f;
 
-	g_params.maxSpeed = FLT_MAX;
-	g_params.maxAcceleration = 100.0f;	// approximately 10x gravity
+    g_params.maxSpeed = FLT_MAX;
+    g_params.maxAcceleration = 100.0f;	// approximately 10x gravity
 
-	g_params.relaxationMode = eNvFlexRelaxationLocal;
-	g_params.relaxationFactor = 1.0f;
-	g_params.solidPressure = 1.0f;
-	g_params.adhesion = 0.0f;
-	g_params.cohesion = 0.025f;
-	g_params.surfaceTension = 0.0f;
-	g_params.vorticityConfinement = 0.0f;
-	g_params.buoyancy = 1.0f;
-	g_params.diffuseThreshold = 100.0f;
-	g_params.diffuseBuoyancy = 1.0f;
-	g_params.diffuseDrag = 0.8f;
-	g_params.diffuseBallistic = 16;
-	//g_params.diffuseSortAxis[0] = 0.0f;
-	//g_params.diffuseSortAxis[1] = 0.0f;
-	//g_params.diffuseSortAxis[2] = 0.0f;
-	g_params.diffuseLifetime = 2.0f;
+    g_params.relaxationMode = eNvFlexRelaxationLocal;
+    g_params.relaxationFactor = 1.0f;
+    g_params.solidPressure = 1.0f;
+    g_params.adhesion = 0.0f;
+    g_params.cohesion = 0.025f;
+    g_params.surfaceTension = 0.0f;
+    g_params.vorticityConfinement = 0.0f;
+    g_params.buoyancy = 1.0f;
+    g_params.diffuseThreshold = 100.0f;
+    g_params.diffuseBuoyancy = 1.0f;
+    g_params.diffuseDrag = 0.8f;
+    g_params.diffuseBallistic = 16;
+    g_params.diffuseLifetime = 2.0f;
 
-	g_numSubsteps = 2;
 
-	// planes created after particles
-	g_params.numPlanes = 1;
+    // planes created after particles
+    g_params.numPlanes = 1;
 
-	g_diffuseScale = 0.5f;
-	g_diffuseColor = 1.0f;
-	g_diffuseMotionScale = 1.0f;
-	g_diffuseShadow = false;
-	g_diffuseInscatter = 0.8f;
-	g_diffuseOutscatter = 0.53f;
+  }
 
-	// reset phase 0 particle color to blue
-  g_colors[0] = Colour(0.0f, 0.5f, 1.0f);
-
-	g_numSolidParticles = 0;
-
-	g_warmup = false;
-
-	g_mouseParticle = -1;
+  g_warmup = false;
 
 	g_maxDiffuseParticles = 0;	// number of diffuse particles
 	g_maxNeighborsPerParticle = 96;
@@ -309,7 +195,7 @@ void Init(int scene, bool centerCamera = true)
 
 	// create scene
 	StartGpuWork();
-	g_scenes[g_scene]->Initialize();
+	g_scenes[g_scene]->Initialize(resetSimParams);
 	EndGpuWork();
 
 	uint32_t numParticles = g_buffers->positions.size();
@@ -350,87 +236,18 @@ void Init(int scene, bool centerCamera = true)
 	g_sceneUpper += g_params.collisionDistance;
 
   Vec3 perspectiveCamPosition = Vec3((g_sceneLower.x + g_sceneUpper.x)*0.5f, min(g_sceneUpper.y*1.25f, 6.0f), g_sceneUpper.z + min(g_sceneUpper.y, 6.0f));
-  // center camera on particles
-  // centering the main camera with perspective front view
+  //main parspective camera
   g_camPos.push_back(perspectiveCamPosition);
   g_camAngle.push_back(Vec3(0.0f, DegToRad(-30.0f), 0.0f));
-  //generate a bottom position and bottom angle for camera
+  //bottom camera
   g_camPos.push_back(Vec3(g_meshCenter.x, -2.4f, g_meshCenter.z));
   g_camAngle.push_back(Vec3(0.0f, DegToRad(90.0f), 0.0f));
+  //top camera
+  g_camPos.push_back(Vec3(0.0f, 0.83f, 0.0f));
+  g_camAngle.push_back(Vec3(DegToRad(90.0f), DegToRad(-90.0f), 0.0f));
+
   g_camIndex = 0; // select main cam view
 
-
-	// update collision planes to match flexs
-	Vec3 up = Normalize(Vec3(-g_waveFloorTilt, 1.0f, 0.0f));
-
-	(Vec4&)g_params.planes[0] = Vec4(up.x, up.y, up.z, 0.0f);
-	(Vec4&)g_params.planes[1] = Vec4(0.0f, 0.0f, 1.0f, -g_sceneLower.z);
-	(Vec4&)g_params.planes[2] = Vec4(1.0f, 0.0f, 0.0f, -g_sceneLower.x);
-	(Vec4&)g_params.planes[3] = Vec4(-1.0f, 0.0f, 0.0f, g_sceneUpper.x);
-	(Vec4&)g_params.planes[4] = Vec4(0.0f, 0.0f, -1.0f, g_sceneUpper.z);
-	(Vec4&)g_params.planes[5] = Vec4(0.0f, -1.0f, 0.0f, g_sceneUpper.y);
-
-  g_buffers->diffuseCount.resize(1, 0);
-
-	// initialize normals (just for rendering before simulation starts)
-  /*
-	g_buffers->normals.resize(0);
-	g_buffers->normals.resize(maxParticles);
-	int numTris = g_buffers->triangles.size() / 3;
-	for (int i = 0; i < numTris; ++i)
-	{
-		Vec3 v0 = Vec3(g_buffers->positions[g_buffers->triangles[i * 3 + 0]]);
-		Vec3 v1 = Vec3(g_buffers->positions[g_buffers->triangles[i * 3 + 1]]);
-		Vec3 v2 = Vec3(g_buffers->positions[g_buffers->triangles[i * 3 + 2]]);
-
-		Vec3 n = Cross(v1 - v0, v2 - v0);
-
-		g_buffers->normals[g_buffers->triangles[i * 3 + 0]] += Vec4(n, 0.0f);
-		g_buffers->normals[g_buffers->triangles[i * 3 + 1]] += Vec4(n, 0.0f);
-		g_buffers->normals[g_buffers->triangles[i * 3 + 2]] += Vec4(n, 0.0f);
-	}
-
-  for (int i = 0; i < int(maxParticles); ++i)
-  {
-		g_buffers->normals[i] = Vec4(SafeNormalize(Vec3(g_buffers->normals[i]), Vec3(0.0f, 1.0f, 0.0f)), 0.0f);
-  }
-  */
-
-  // initialize contact structures for rendering
-  g_contact_positions.resize(g_buffers->positions.size());
-  g_contact_normals.resize(g_buffers->normals.size());
-  g_contact_indexes.resize(g_buffers->triangles.size());
-  g_contact_uvs.resize(g_buffers->positions.size());
-
-  g_buffers->positions.copyto(&g_contact_positions[0], g_buffers->positions.size());
-  g_buffers->normals.copyto(&g_contact_normals[0], g_buffers->normals.size());
-  g_buffers->uvs.copyto(&g_contact_uvs[0], g_buffers->uvs.size());
-  g_buffers->triangles.copyto(&g_contact_indexes[0], g_buffers->triangles.size());
-
-#ifdef TRACK_DISPLACEMENTS
-  g_displacement_buffers->normals.resize(0);
-  g_displacement_buffers->normals.resize(maxParticles);
-
-  // initialize normals (just for rendering before simulation starts)
-  for (int i = 0; i < numTris; ++i)
-  {
-    Vec3 v0 = Vec3(g_displacement_buffers->positions[g_buffers->triangles[i * 3 + 0]]);
-    Vec3 v1 = Vec3(g_displacement_buffers->positions[g_buffers->triangles[i * 3 + 1]]);
-    Vec3 v2 = Vec3(g_displacement_buffers->positions[g_buffers->triangles[i * 3 + 2]]);
-
-    Vec3 n = Cross(v1 - v0, v2 - v0);
-
-    g_displacement_buffers->normals[g_buffers->triangles[i * 3 + 0]] += Vec4(n, 0.0f);
-    g_displacement_buffers->normals[g_buffers->triangles[i * 3 + 1]] += Vec4(n, 0.0f);
-    g_displacement_buffers->normals[g_buffers->triangles[i * 3 + 2]] += Vec4(n, 0.0f);
-  }
-
-  for (int i = 0; i < int(maxParticles); ++i)
-  {
-    g_displacement_buffers->normals[i] = Vec4(SafeNormalize(Vec3(g_displacement_buffers->normals[i]), Vec3(0.0f, 1.0f, 0.0f)), 0.0f);
-  }
-#endif
-	
 	g_solverDesc.maxParticles = maxParticles;
 	g_solverDesc.maxDiffuseParticles = g_maxDiffuseParticles;
 	g_solverDesc.maxNeighborsPerParticle = g_maxNeighborsPerParticle;
@@ -439,13 +256,8 @@ void Init(int scene, bool centerCamera = true)
 	// main create method for the Flex solver
 	g_solver = NvFlexCreateSolver(g_flexLib, &g_solverDesc);
 
-#ifdef TRACK_DISPLACEMENTS
-  g_displacements_solver = NvFlexCreateSolver(g_flexLib, &g_solverDesc);
-#endif
 	// give scene a chance to do some post solver initialization
 	g_scenes[g_scene]->PostInitialize();
-
-
 
 	if (centerCamera)
 	{
@@ -459,15 +271,10 @@ void Init(int scene, bool centerCamera = true)
 
 	// create active indices (just a contiguous block for the demo)
   g_buffers->activeIndices.resize(g_buffers->positions.size());
-#ifdef TRACK_DISPLACEMENTS
-  g_displacement_buffers->activeIndices.resize(g_displacement_buffers->positions.size());
-#endif
+
   for (int i = 0; i < g_buffers->activeIndices.size(); ++i)
   {
 		g_buffers->activeIndices[i] = i;
-#ifdef TRACK_DISPLACEMENTS
-    g_displacement_buffers->activeIndices[i] = i;
-#endif
   }
 
 	// resize particle buffers to fit
@@ -475,34 +282,17 @@ void Init(int scene, bool centerCamera = true)
 	g_buffers->velocities.resize(maxParticles);
 	g_buffers->phases.resize(maxParticles);
 
-#ifdef TRACK_DISPLACEMENTS
-  // displacements
-  g_displacement_buffers->positions.resize(maxParticles);
-  g_displacement_buffers->velocities.resize(maxParticles);
-  g_displacement_buffers->phases.resize(maxParticles);
-#endif
-
 	// save rest positions
 	g_buffers->restPositions.resize(g_buffers->positions.size());
-#ifdef TRACK_DISPLACEMENTS
-  g_displacement_buffers->restPositions.resize(g_displacement_buffers->positions.size());
-#endif
   for (int i = 0; i < g_buffers->positions.size(); ++i)
   {
 		g_buffers->restPositions[i] = g_buffers->positions[i];
-#ifdef TRACK_DISPLACEMENTS
-    g_displacement_buffers->restPositions[i] = g_displacement_buffers->positions[i];
-#endif
   }
 
 	// unmap so we can start transferring data to GPU
-
 	UnmapBuffers(g_buffers);
-#ifdef TRACK_DISPLACEMENTS
-  UnmapBuffers(g_displacement_buffers);
-#endif
 
-	//-----------------------------
+  //-----------------------------
 	// Send data to Flex
 
 	NvFlexCopyDesc copyDesc;
@@ -549,28 +339,6 @@ void Init(int scene, bool centerCamera = true)
 			int(g_buffers->shapeFlags.size()));
 	}
 
-#ifdef TRACK_DISPLACEMENTS
-  // send displacements data to flex
-  NvFlexSetParams(g_displacements_solver, &g_params);
-  NvFlexSetParticles(g_displacements_solver, g_displacement_buffers->positions.buffer, &copyDesc);
-  NvFlexSetVelocities(g_displacements_solver, g_displacement_buffers->velocities.buffer, &copyDesc);
-  NvFlexSetNormals(g_displacements_solver, g_buffers->normals.buffer, &copyDesc);
-  NvFlexSetPhases(g_displacements_solver, g_displacement_buffers->phases.buffer, &copyDesc);
-  NvFlexSetRestParticles(g_displacements_solver, g_displacement_buffers->restPositions.buffer, &copyDesc);
-  NvFlexSetActive(g_displacements_solver, g_displacement_buffers->activeIndices.buffer, &copyDesc);
-  if (g_buffers->springIndices.size())
-  {
-    assert((g_buffers->springIndices.size() & 1) == 0);
-    assert((g_buffers->springIndices.size() / 2) == g_buffers->springLengths.size());
-    NvFlexSetSprings(g_displacements_solver, g_buffers->springIndices.buffer, g_buffers->springLengths.buffer, g_buffers->springStiffness.buffer, g_buffers->springLengths.size());
-  }
-  // dynamic triangles
-  if (g_buffers->triangles.size())
-  {
-    NvFlexSetDynamicTriangles(g_displacements_solver, g_buffers->triangles.buffer, g_buffers->triangleNormals.buffer, g_buffers->triangles.size() / 3);
-  }
-  // send displacements data to flex - end
-#endif
 	// perform initial sim warm up
 	if (g_warmup)
 	{
@@ -592,8 +360,6 @@ void Init(int scene, bool centerCamera = true)
 
 		// udpate host copy
 		NvFlexGetParticles(g_solver, g_buffers->positions.buffer, NULL);
-		//NvFlexGetSmoothParticles(g_solver, g_buffers->smoothPositions.buffer, NULL);
-		//NvFlexGetAnisotropy(g_solver, g_buffers->anisotropy1.buffer, g_buffers->anisotropy2.buffer, g_buffers->anisotropy3.buffer, NULL);
 	
 		printf("Finished warm up.\n");
 	}
@@ -601,35 +367,42 @@ void Init(int scene, bool centerCamera = true)
 
 void Reset()
 {
-	Init(g_scene, true);
+	Init(g_scene, true, g_resetSimParams);
+  g_resetSimParams = true;
+}
+
+void Destroy()
+{
+  // free buffers
+  DestroyBuffers(g_buffers);
+
+  for (auto& iter : g_meshes)
+  {
+    NvFlexDestroyTriangleMesh(g_flexLib, iter.first);
+    DestroyGpuMesh(iter.second);
+  }
+
+  int sdfCount = 0;
+  NvFlexGetDistanceFields(g_flexLib, &g_sdf_mesh, sdfCount);
+  if (sdfCount != 0)
+  {
+    printf("Destroying existing SDF");
+    NvFlexDestroyDistanceField(g_flexLib, g_sdf_mesh);
+  }
+
+  DestroyGpuMesh(g_gpu_rigid_mesh);
+
+  DestroyGpuMesh(g_gpu_film_mesh);
+
+  g_meshes.clear();
+
+  NvFlexDestroySolver(g_solver);
+
 }
 
 void Shutdown()
 {
-	// free buffers
-	DestroyBuffers(g_buffers);
-
-	for (auto& iter : g_meshes)
-	{
-		NvFlexDestroyTriangleMesh(g_flexLib, iter.first);
-		DestroyGpuMesh(iter.second);
-	}
-
-	//for (auto& iter : g_fields)
-	//{
-		NvFlexDestroyDistanceField(g_flexLib, g_sdf_mesh);
-		DestroyGpuMesh(g_gpu_mesh);
-	//}
-
-	//g_fields.clear();
-	g_meshes.clear();
-
-	NvFlexDestroySolver(g_solver);
-
-#ifdef TRACK_DISPLACEMENTS
-  DestroyBuffers(g_displacement_buffers);
-  NvFlexDestroySolver(g_displacements_solver);
-#endif
+  Destroy();
 
   NvFlexShutdown(g_flexLib);
 
@@ -660,95 +433,82 @@ void UpdateScene()
 	g_scenes[g_scene]->Update();
 }
 
-void RenderSceneV2()
+void RenderScene()
 {
-  g_proj = ProjectionMatrix(RadToDeg(g_fov), g_aspect, g_camNear, g_camFar);
-  if (0) // swap to orthogonal projection
-  {
-    float max = MAX(g_sceneUpper.x, g_sceneUpper.y);
-    float r = max * g_aspect, t = max;
-    float l = -r, b = -t;
-    g_proj = OrthographicMatrix(l, r, b, t, g_camNear, g_camFar);
-  }
 
+
+  //Mat44 projOrtho = OrthographicMatrix(0.0f, float(g_screenWidth), 0.0f, float(g_screenHeight), g_camNear, g_camFar);
+  //float max = MAX(g_sceneUpper.x, g_sceneUpper.y);
+  //float r = max * g_aspect, t = max;
+  //float l = -r, b = -t;
+  //Mat44 projOrtho = OrthographicMatrix(l, r, b, t, g_camNear, g_camFar);
+  //float aspect = (g_screenWidth*fy) / (g_screenHeight*fx);
+  //g_proj = projOrtho;
+  //g_proj = ProjectionMatrix(RadToDeg(g_fov), g_aspect, g_camNear, g_camFar);
+
+  g_proj = Frustum(-g_screenWidth, g_screenWidth, -g_screenHeight, g_screenHeight, g_camNear, g_camFar);
+  g_camDistance = Length(g_camPos[g_camIndex] - g_centroid);
+ 
   g_view = RotationMatrix(-g_camAngle[g_camIndex].x, Vec3(0.0f, 1.0f, 0.0f))*RotationMatrix(-g_camAngle[g_camIndex].y, Vec3(cosf(-g_camAngle[g_camIndex].x), 0.0f, sinf(-g_camAngle[g_camIndex].x)))*TranslationMatrix(-Point3(g_camPos[g_camIndex]));
 
   g_lightPos = g_camPos[g_camIndex]; // cam target always iluminated
-  Vec4 lightColor = Vec4(1.0f, 1.0f, 1.0f, 1.0f);
-  Vec4 ambientColor = Vec4(0.15f, 0.15f, 0.15f, 1.0f);
-  Vec4 diffuseColor = Vec4(1.0f, 1.0f, 1.0f, 1.0f);
-  Vec4 specularColor = Vec4(1.0f, 1.0f, 1.0f, 1.0f);
-  unsigned int specularExpoent = 40;
   bool showTexture = true;
-  BindSolidShaderV2(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], lightColor, ambientColor, specularColor, specularExpoent, diffuseColor, showTexture);
+  
+  SetViewport(0, 0, g_screenWidth, g_screenHeight);
+
+  BindRigidBodyShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], g_lightColor, g_ambientColor, g_specularColor, g_specularExpoent, g_diffuseColor);
 
   SetCullMode(false);
   SetFillMode(g_wireframe);
 
-  if (g_drawHydrographicCollisionMesh) // draw rigid body
+  if (g_drawHydrographicCollisionMesh) // draw rigid
   {
-    DrawGpuMeshV2(g_gpu_mesh, g_model, showTexture);
+    DrawGpuMeshV2(g_gpu_rigid_mesh, g_model, showTexture);
   }
 
   if (g_drawHydrographic) // draw film
   {
     showTexture = true;
-    BindFilmShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], lightColor, ambientColor, specularColor, specularExpoent, diffuseColor, showTexture);
-    DrawHydrographicV2(g_film_mesh, &g_buffers->positions[0], &g_buffers->normals[0], &g_buffers->uvs[0], &g_buffers->triangles[0], g_buffers->triangles.size(), g_buffers->positions.size(), showTexture);
+    BindFilmShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], g_lightColor, g_ambientColor, g_specularColor, g_specularExpoent, g_diffuseColor);
+    DrawHydrographicFilm(g_gpu_film_mesh, &g_buffers->positions[0], &g_buffers->normals[0], &g_buffers->uvs[0], &g_buffers->triangles[0], g_buffers->triangles.size(), g_buffers->positions.size(), showTexture);
   }
   
-#ifdef TRACK_DISPLACEMENTS
-  if (g_drawDisplacements) // draw displacements
+  // draw reverse texure
+  if (!isTestingMode() && !g_generateContactsTexture)
   {
-    // setup the film texture to mesh texture
-    showTexture = false;
-    BindFilmShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], lightColor, ambientColor, specularColor, specularExpoent, diffuseColor, showTexture);
-    DrawHydrographicV2(g_film_mesh, &g_displacement_buffers->positions[0], &g_displacement_buffers->normals[0], &g_buffers->uvs[0], &g_buffers->triangles[0], g_buffers->triangles.size(), g_displacement_buffers->positions.size(), showTexture);
+    if (g_createReverseTextureFile)
+    {
+      g_createReverseTextureFile = false;//run this only once
+      g_camIndexAux = g_camIndex;//save current view
+      g_camIndex = 2;
+      Vec3 camPos = g_camPos[g_camIndex];
+      camPos.y = CAM_DISTANCE_R * g_realDistanceFactor;
+      g_proj = Frustum(-IMG_WIDTH, IMG_WIDTH, -g_screenHeight, g_screenHeight, g_camNear, g_camFar);
+      g_view = RotationMatrix(-g_camAngle[g_camIndex].x, Vec3(0.0f, 1.0f, 0.0f))*RotationMatrix(-g_camAngle[g_camIndex].y, Vec3(cosf(-g_camAngle[g_camIndex].x), 0.0f, sinf(-g_camAngle[g_camIndex].x)))*TranslationMatrix(-Point3(camPos));
+      BindReverseTextureShader(g_view, g_proj, g_lightPos, camPos, g_lightColor, g_ambientColor, g_specularColor, g_specularExpoent, g_diffuseColor, g_max_distance_uv, g_near_distance_uv, g_weight1, g_weight2, g_tesselation_inner, g_tesselation_outer);
+      DrawReverseTexture(g_gpu_film_mesh, &g_contact_positions[0], &g_contact_normals[0], &g_contact_uvs[0], &g_contact_indexes[0], g_contact_indexes.size(), g_contact_positions.size(), &g_compens_colors[0], g_textureMode);
+      CreateHydrographicFilmImage(g_screenWidth, g_screenHeight, IMG_WIDTH);
+      g_camIndex = g_camIndexAux;//restore current view
+    }
+    else
+    {
+      if (g_drawReverseTexture || g_drawStretchColor || g_drawColorCompensation) {
+        //render the reverse texture in the selected mode
+        BindReverseTextureShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], g_lightColor, g_ambientColor, g_specularColor, g_specularExpoent, g_diffuseColor, g_max_distance_uv, g_near_distance_uv, g_weight1, g_weight2, g_tesselation_inner, g_tesselation_outer);
+        DrawReverseTexture(g_gpu_film_mesh, &g_contact_positions[0], &g_contact_normals[0], &g_contact_uvs[0], &g_contact_indexes[0], g_contact_indexes.size(), g_contact_positions.size(), &g_compens_colors[0], g_textureMode);
+      }
+    }
   }
-#endif
-
-  if (g_drawContacts) // draw displacements
-  {
-    showTexture = true;
-    BindFilmShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], lightColor, ambientColor, specularColor, specularExpoent, diffuseColor, showTexture);
-    SetupFilmMesh(g_gpu_mesh, g_film_mesh);
-    DrawDistortion(g_film_mesh, &g_contact_positions[0], &g_contact_normals[0], &g_contact_uvs[0], &g_contact_indexes[0], g_contact_indexes.size(), g_contact_positions.size(), showTexture, g_model);
-  }
-
-
+  
 }
 
-#ifdef TRACK_DISPLACEMENTS
-void RenderDisplacements()
-{
-  //const int numParticles = NvFlexGetActiveCount(g_flex_displacements);
-  float fov = kPi / 4.0f;
-  float aspect = float(g_screenWidth) / g_screenHeight;
 
-  Matrix44 proj = ProjectionMatrix(RadToDeg(fov), aspect, g_camNear, g_camFar);
-  Matrix44 view = RotationMatrix(-g_camAngle[g_camIndex].x, Vec3(0.0f, 1.0f, 0.0f))*RotationMatrix(-g_camAngle[g_camIndex].y, Vec3(cosf(-g_camAngle[g_camIndex].x), 0.0f, sinf(-g_camAngle[g_camIndex].x)))*TranslationMatrix(-Point3(g_camPos[g_camIndex]));
-
-  BindDisplacementsShader(view, proj, Vec3(0.0f), Vec3(0.0f));
-  //EnableDisplacementsTexture();
-  //SetupVertexArrays(&g_displacement_buffers->positions[0], &g_buffers->normals[0], g_buffers->uvs.size() ? &g_buffers->uvs[0] : NULL, &g_buffers->triangles[0], g_buffers->triangles.size() / 3, g_displacement_buffers->positions.size());
-  DrawDisplacements(&g_displacement_buffers->positions[0], &g_displacement_buffers->normals[0], g_buffers->uvs.size() ? &g_buffers->uvs[0] : NULL, g_displacement_buffers->positions.size(), &g_buffers->triangles[0], g_buffers->triangles.size() / 3);
-  DisableTexture();
-}
-#endif
 void RenderDebug()
 {
 
   SetView(g_view, g_proj);
   SetCullMode(true);
-  /*
-  if (g_mouseParticle != -1)
-	{
-		// draw mouse spring
-		BeginLines();
-		DrawLine(g_mousePos, Vec3(g_buffers->positions[g_mouseParticle]), Vec4(1.0f));
-		EndLines();
-	}
-  */
+
   // springs
 	if (g_drawSprings)
 	{
@@ -765,13 +525,13 @@ void RenderDebug()
 			color = Vec4(0.0f, 1.0f, 0.0f, 0.8f);
 		}
 
-		BeginLines();
-    //BeginPoints(5.0f);
+		//BeginLines();
+    BeginPoints(3.0f);
 		int start = 0;
 
-		//ColorGradient *colorGradient = new ColorGradient();
+		ColorGradient *colorGradient = new ColorGradient();
 
-		std::vector<Vec4> pixels;
+    float maxDisplacement = 0.0f;
 
 		for (int i = start; i < g_buffers->springLengths.size(); ++i)
 		{
@@ -782,31 +542,37 @@ void RenderDebug()
 
 			int a = g_buffers->springIndices[i * 2];
 			int b = g_buffers->springIndices[i * 2 + 1];
-			float distortedLength = Length(g_buffers->positions[a] - g_buffers->positions[b]);
+			
+      //Heatmap of distortions
+      if (g_drawStretching)
+      {
+        g_drawStiffness = false;
 
-			//Vec3 restA = originalPositions[a];
-			//Vec3 restB = originalPositions[b];
-			//float restLength = Length(restA - restB);
+        float distortedLength = Length(g_buffers->positions[a] - g_buffers->positions[b]);
+        Vec3 restA = g_contact_positions[a];
+        Vec3 restB = g_contact_positions[b];
+        float restLength = Length(restA - restB);
+        float displacementCoef = abs(distortedLength - restLength) / restLength;
+        //color = colorGradient->getColorAtValue(displacementCoef * g_stretchFactor);
+      }
 
-			//Heatmap of distortions
-			//float displacement = abs(distortedLength - restLength) / restLength;
-			//color = colorGradient->getColorAtValue(displacement );
+      //Heatmap of stiffness
+      if (g_drawStiffness)
+      {
+        color = colorGradient->getColorAtValue(g_buffers->springStiffness[i]);
+      }
 
-			//Heatmap of stiffness
-			//color = colorGradient->getColorAtValue(g_buffers->springStiffness[i]);
-			//pixels.push_back(color);
+			//DrawLine(Vec3(g_contact_positions[a]), Vec3(g_contact_positions[b]), color);
+      DrawPoint(Vec3(g_contact_positions[a]), color);
+      DrawPoint(Vec3(g_contact_positions[b]), color);
+    }
 
-			DrawLine(Vec3(g_buffers->positions[a]), Vec3(g_buffers->positions[b]), color);
-      //DrawPoint(Vec3(g_buffers->positions[a]), color);
-		}
-
-		EndLines();
-    //EndPoints();
+		//EndLines();
+    EndPoints();
 	}
-
 	// visualize contacts against the environment
   // all arrays are iterated in CPU
-	if (g_drawContacts && true)
+	if (g_drawContacts)
 	{
 		const int maxContactsPerParticle = 6;
 		NvFlexVector<Vec4> contactPlanes(g_flexLib, g_buffers->positions.size()*maxContactsPerParticle);
@@ -822,7 +588,7 @@ void RenderDebug()
 		contactIndices.map();
 		contactCounts.map();
 
-		// each active particle of simulation
+		// for each active particle of simulation
 		for (int i = 0; i < int(g_buffers->activeIndices.size()); ++i)
 		{
 			// each active particle can have up to 6 contact points on NVIDIA Flex 1.1.0
@@ -831,57 +597,26 @@ void RenderDebug()
       Vec3 filmPosition = Vec3(g_buffers->positions[filmIndex]);
 			const int contactIndex = contactIndices[filmIndex];
 			const unsigned int count = contactCounts[contactIndex];
-			const float scale = 0.1f;
+			//const float scale = 0.1f;
 
-      //has contacts
+      //if an active particle have entries in the contact counts array, this particle have contacts
       if (count)
       {
 			  //retrieve contact planes for each particle 
+        // in pratice, the contact plane shows better smoothed reverse texture mapping results
 			  for (unsigned int c = 0; c < count; ++c)
 			  {
 				  Vec4 filmContactPlane = contactPlanes[contactIndex*maxContactsPerParticle + c];
-          //BeginLines();
-          //DrawLine(filmContactVertex, filmContactVertex + Vec3(filmContactPlane)*scale, Vec4(1.0f, 0.5f, 0.0f, 0.0f));
-          //EndLines();
-
-          // for a better smooth efect it is better to use the film normals instead the filmContactPlane
-          /*
-          int filmOffsetIndex = filmIndex % 3;
-          int filmBaseIndex;
-          switch (filmOffsetIndex) {
-          case 0:
-            filmBaseIndex = filmIndex;
-            break;
-          case 1:
-            filmBaseIndex = filmIndex - 1;
-            break;
-          case 2:
-            filmBaseIndex = filmIndex - 2;
-            break;
-          }
-
-          Vec3 filmNormal0 = g_buffers->normals[filmBaseIndex + 0];
-          Vec3 filmNormal1 = g_buffers->normals[filmBaseIndex + 1];
-          Vec3 filmNormal2 = g_buffers->normals[filmBaseIndex + 2];
-
-          Vec3 filmNormal = (filmNormal0 + filmNormal1 + filmNormal2) / 3;
-          */
-          //-filmNormal
-          FindContacts(filmPosition, filmIndex, -Vec3(filmContactPlane), g_gpu_mesh, g_film_mesh, g_model, gridDimZ, gridDimX, g_contact_positions);
+          BuildContactUVs(filmPosition, filmIndex, -Vec3(filmContactPlane), g_gpu_rigid_mesh, g_model, g_contact_positions, g_contact_uvs);
 			  }
+
       }
-      else {
-        // draw normals
-        //if (-filmNormal.y < 0.9f)
-        //BeginLines();
-        //DrawLine(filmPosition, filmPosition + Vec3(-filmNormal)*scale, Vec4(1.0f, 0.5f, 0.0f, 0.0f));
-        //EndLines();
-      }
+
 		}
 
-    FixTextureSeams(g_film_mesh, g_contact_positions, g_contact_indexes);
-    
-	}
+    //FixTextureSeams(g_film_mesh, g_contact_positions, g_contact_uvs);
+	
+  }
 
   if (g_drawNeighbors)
   {
@@ -939,21 +674,10 @@ void RenderDebug()
     EndLines();
   }
 
-#ifdef TRACK_DISPLACEMENTS
-	if (g_drawDisplacements)
-  {
-    BeginPoints(2.0f);
-    Vec4 color = Vec4(0.0f, 1.0f, 0.0f, 0.8f);
-    for (int i = 0; i < g_displacement_buffers->positions.size(); i++)
-    {
-      DrawPoint(Vec3(g_displacement_buffers->positions[i]), color);
-    }
-    EndPoints();
-	}
-#endif
 	if (g_drawAxis)
 	{
-		BeginLines();
+    
+    BeginLines();
 
 		float size = 0.5f;
 
@@ -966,7 +690,13 @@ void RenderDebug()
 		DrawLine(Vec3(0.0f, 0.0f, 0.0f), Vec3(0.0f, 0.0f, size), Vec4(blue, 0.0f));
 
 		EndLines();
-	}
+
+    BeginPoints(3.0f);
+    DrawPoint(g_centroid, Vec4(red, 0.0f));
+    EndPoints();
+
+
+  }
 
 	if (g_drawNormals)
 	{
@@ -984,101 +714,6 @@ void RenderDebug()
 		EndLines();
 	}
 }
-/*
-void DrawShapes()
-{
-	for (int i = 0; i < g_buffers->shapeFlags.size(); ++i)
-	{
-		const int flags = g_buffers->shapeFlags[i];
-
-		// unpack flags
-		int type = int(flags&eNvFlexShapeFlagTypeMask);
-		//bool dynamic = int(flags&eNvFlexShapeFlagDynamic) > 0;
-
-		Vec3 color = Vec3(0.9f);
-
-		if (flags & eNvFlexShapeFlagTrigger)
-		{
-			color = Vec3(0.6f, 1.0, 0.6f);
-
-			SetFillMode(true);
-		}
-
-		// render with prev positions to match particle update order
-		// can also think of this as current/next
-		const Quat rotation = g_buffers->shapePrevRotations[i];
-		const Vec3 position = Vec3(g_buffers->shapePrevPositions[i]);
-
-		NvFlexCollisionGeometry geo = g_buffers->shapeGeometry[i];
-
-    if (type == eNvFlexShapeTriangleMesh)
-		{
-			if (g_meshes.find(geo.triMesh.mesh) != g_meshes.end())
-			{
-				GpuMesh* m = g_meshes[geo.triMesh.mesh];
-
-				if (m)
-				{
-					Matrix44 xform = TranslationMatrix(Point3(position))*RotationMatrix(Quat(rotation))*ScaleMatrix(geo.triMesh.scale);
-					DrawGpuMesh(m, xform, Vec3(color));
-				}
-			}
-		}
-		else if (type == eNvFlexShapeSDF)
-		{
-			if (g_fields.find(geo.sdf.field) != g_fields.end())
-			{
-				GpuMesh* m = g_fields[geo.sdf.field];
-
-				if (m)
-				{
-					Matrix44 xform = TranslationMatrix(Point3(position))*RotationMatrix(Quat(rotation))*ScaleMatrix(geo.sdf.scale);
-					DrawGpuMesh(m, xform, Vec3(color));
-				}
-			}
-		}
-	}
-
-	SetFillMode(g_wireframe);
-}
-*/
-/*
-void DrawShapesV2()
-{
-  for (int i = 0; i < g_buffers->shapeFlags.size(); ++i)
-  {
-    const int flags = g_buffers->shapeFlags[i];
-
-    // unpack flags
-    int type = int(flags&eNvFlexShapeFlagTypeMask);
-
-    Vec4 color = Vec4(0.9f, 0.9f, 0.9f, 1.0f);
-
-    // render with prev positions to match particle update order
-    // can also think of this as current/next
-    const Quat rotation = g_buffers->shapePrevRotations[i];
-    const Vec3 position = Vec3(g_buffers->shapePrevPositions[i]);
-
-    NvFlexCollisionGeometry geo = g_buffers->shapeGeometry[i];
-
-    if (type == eNvFlexShapeSDF)
-    {
-      if (g_fields.find(geo.sdf.field) != g_fields.end())
-      {
-        GpuMesh* m = g_fields[geo.sdf.field];
-        if (m)
-        {
-          Matrix44 xform = TranslationMatrix(Point3(position))*RotationMatrix(Quat(rotation))*ScaleMatrix(geo.sdf.scale);
-          DrawGpuMeshV2(g_gpu_mesh, xform);
-        }
-      }
-    }
-  }
-
-  SetFillMode(g_wireframe);
-}
-*/
-
 // returns the new scene if one is selected
 int DoUI()
 {
@@ -1088,7 +723,7 @@ int DoUI()
 	if (g_showHelp)
 	{
 		const int numParticles = NvFlexGetActiveCount(g_solver);
-		const int numDiffuse = g_buffers->diffuseCount[0];
+		// const int numDiffuse = g_buffers->diffuseCount[0];
 
 		int x = g_screenWidth - 200;
 		int y = g_screenHeight - 23;
@@ -1113,16 +748,21 @@ int DoUI()
 			if (!g_ffmpeg)
 			{
 				DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "FPS: %.2f", g_fps); y -= fontHeight * 2;
-				DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "AVG FPS: %.2f", g_avgFPS); y -= fontHeight * 2;
-        DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "AVG Update Time: %.2fms", g_avgUpdateTime*1000.0f); y -= fontHeight * 2;
-        DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "AVG Render Time: %.2fms", g_avgRenderTime*1000.0f); y -= fontHeight * 2;
-        DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "AVG Wait Time: %.2fms", g_avgWaitTime*1000.0f); y -= fontHeight * 2;
+        if (isTestingMode())
+        {
+          DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "AVG FPS: %.2f", g_avgFPS); y -= fontHeight * 2;
+          DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "AVG Update Time: %.2fms", g_avgUpdateTime*1000.0f); y -= fontHeight * 2;
+          DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "AVG Render Time: %.2fms", g_avgRenderTime*1000.0f); y -= fontHeight * 2;
+          DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "AVG Wait Time: %.2fms", g_avgWaitTime*1000.0f); y -= fontHeight * 2;
+        }
         DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "Frame Time: %.2fms", g_realdt*1000.0f); y -= fontHeight * 2;
 
 				// If detailed profiling is enabled, then these timers will contain the overhead of the detail timers, so we won't display them.
 				if (!g_profile)
 				{
-					DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "Sim Time (CPU): %.2fms", g_updateTime*1000.0f); y -= fontHeight;
+          DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "Update Time (CPU): %.2fms", g_updateTime*1000.0f); y -= fontHeight;
+          DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "Render Time (CPU): %.2fms", g_renderTime*1000.0f); y -= fontHeight;
+          DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "Wait Time (CPU): %.2fms", g_waitTime*1000.0f); y -= fontHeight;
 					DrawImguiString(x, y, Vec3(0.97f, 0.59f, 0.27f), IMGUI_ALIGN_RIGHT, "Sim Latency (GPU): %.2fms", g_simLatency); y -= fontHeight * 2;
 				}
 				else
@@ -1132,14 +772,18 @@ int DoUI()
 			}
 
 			DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "Particle Count: %d", numParticles); y -= fontHeight;
-			DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "Diffuse Count: %d", numDiffuse); y -= fontHeight;
+			//DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "Diffuse Count: %d", numDiffuse); y -= fontHeight;
 			//DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "Rigid Count: %d", g_buffers->rigidOffsets.size() > 0 ? g_buffers->rigidOffsets.size() - 1 : 0); y -= fontHeight;
 			DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "Spring Count: %d", g_buffers->springLengths.size()); y -= fontHeight;
 			DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "Num Substeps: %d", g_numSubsteps); y -= fontHeight;
 			DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "Num Iterations: %d", g_params.numIterations); y -= fontHeight * 2;
 
 			DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "Device: %s", g_deviceName); y -= fontHeight * 2;
-		}
+      DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "Camera Positon (X ,Y ,Z): (%.2f, %.2f, %.2f)", g_camPos[g_camIndex].x, g_camPos[g_camIndex].y, g_camPos[g_camIndex].z); y -= fontHeight * 2;
+      DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "Cam distance %.2f", g_camDistance); y -= fontHeight * 2;
+      DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "Cam real distance %.2f mm", g_camDistance / g_realDistanceFactor); y -= fontHeight * 2;
+      //DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "Real dipping %.2f mm/s", g_realDipping * g_camRealDistanceFactor); y -= fontHeight * 2;
+    }
 
 		if (g_profile)
 		{
@@ -1168,7 +812,7 @@ int DoUI()
 			DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "Calculate Anisotropy: %.2fms", g_timers.calculateAnisotropy); y -= fontHeight;
 			DrawImguiString(x, y, Vec3(1.0f), IMGUI_ALIGN_RIGHT, "Update Diffuse: %.2fms", g_timers.updateDiffuse); y -= fontHeight * 2;
 		}
-
+    
 		x -= 180;
 
 		int uiOffset = 250;
@@ -1185,6 +829,7 @@ int DoUI()
 		if (imguiButton("Reset Scene"))
 		{
 			g_resetScene = true;
+      g_resetSimParams = true;
 		}
 		imguiSeparatorLine();
 
@@ -1196,15 +841,15 @@ int DoUI()
 
     if (imguiCheck("Film test", g_filmStepTest)) {
       g_filmStepTest = !g_filmStepTest;
-      g_resetScene;
+      g_resetScene = true;
     }
     if (imguiCheck("Mesh test", g_meshStepTest)) {
       g_meshStepTest = !g_meshStepTest;
-      g_resetScene;
+      g_resetScene = true;
     }
     if (imguiCheck("Voxel test", g_voxelStepTest)) {
       g_voxelStepTest = !g_voxelStepTest;
-      g_resetScene;
+      g_resetScene = true;
     }
 
 		imguiSeparatorLine();
@@ -1257,16 +902,19 @@ int DoUI()
 
 			imguiSeparatorLine();
 
-			float n = float(g_numSubsteps);
-      if (imguiSlider("Num Substeps", &n, 1, 10, 1))
+      g_numSubstepsAux = float(g_numSubsteps);
+      if (imguiSlider("Num Substeps", &g_numSubstepsAux, 0.1f, 10.0f, 1.0f))
       {
-        g_numSubsteps = int(n);
-        g_resetSolver = true;
+        g_numSubsteps = int(g_numSubstepsAux);
+        g_resetScene = true;
+        g_resetSimParams = false;
       }
-			n = float(g_params.numIterations);
-      if (imguiSlider("Num Iterations", &n, 1, 20, 1))
+      g_numIterationsAux = float(g_params.numIterations);
+      if (imguiSlider("Num Iterations", &g_numIterationsAux, 0.1f, 20.0f, 1.0f))
       {
-				g_params.numIterations = int(n);
+				g_params.numIterations = int(g_numIterationsAux);
+        g_resetScene = true;
+        g_resetSimParams = false;
       }
 
 			imguiSeparatorLine();
@@ -1288,7 +936,18 @@ int DoUI()
 			imguiSlider("Collision Distance", &g_params.collisionDistance, 0.0f, 0.5f, 0.001f);
 			imguiSlider("Collision Margin", &g_params.shapeCollisionMargin, 0.0f, 5.0f, 0.01f);
 
-			// cloth params
+      imguiSlider("Cam fov", &g_fov, 0.001f, 5, 0.001f);
+      imguiSlider("Cam near", &g_camNear, 0.0f, 5.0f, 0.001f);
+      imguiSlider("Cam far", &g_camFar, 0.0f, 1500.0f, 0.001f);
+      imguiSlider("Cam aspect", &g_aspect, 0.001f, 5.0f, 0.0001f);
+      imguiSlider("Cam angle X", &g_camAngle[g_camIndex].x, 0.0f, 2 * M_PI, 0.0001f);
+      imguiSlider("Cam angle Y", &g_camAngle[g_camIndex].y, 0.0f, 2 * M_PI, 0.0001f);
+      imguiSlider("Cam angle Z", &g_camAngle[g_camIndex].z, 0.0f, 2 * M_PI, 0.0001f);
+      imguiSlider("Cam position X", &g_camPos[g_camIndex].x, -10.0f, 10.0f, 0.0001f);
+      imguiSlider("Cam position Y", &g_camPos[g_camIndex].y, -10.0f, 10.0f, 0.0001f);
+      imguiSlider("Cam position Z", &g_camPos[g_camIndex].z, -10.0f, 10.0f, 0.0001f);
+
+      // cloth params
 			imguiSeparatorLine();
 			imguiSlider("Drag", &g_params.drag, 0.0f, 1.0f, 0.01f);
 			imguiSlider("Lift", &g_params.lift, 0.0f, 1.0f, 0.01f);
@@ -1299,19 +958,6 @@ int DoUI()
 			imguiSlider("Buoyancy", &g_params.buoyancy, -1.0f, 1.0f, 0.01f);
 
 			imguiSeparatorLine();
-			//imguiSlider("Anisotropy Scale", &g_params.anisotropyScale, 0.0f, 30.0f, 0.01f);
-			//imguiSlider("Smoothing", &g_params.smoothing, 0.0f, 1.0f, 0.01f);
-
-			// diffuse params
-			//imguiSeparatorLine();
-			//imguiSlider("Diffuse Threshold", &g_params.diffuseThreshold, 0.0f, 1000.0f, 1.0f);
-			//imguiSlider("Diffuse Buoyancy", &g_params.diffuseBuoyancy, 0.0f, 2.0f, 0.01f);
-			//imguiSlider("Diffuse Drag", &g_params.diffuseDrag, 0.0f, 2.0f, 0.01f);
-			//imguiSlider("Diffuse Scale", &g_diffuseScale, 0.0f, 1.5f, 0.01f);
-			//imguiSlider("Diffuse Alpha", &g_diffuseColor.w, 0.0f, 3.0f, 0.01f);
-			//imguiSlider("Diffuse Inscatter", &g_diffuseInscatter, 0.0f, 2.0f, 0.01f);
-			//imguiSlider("Diffuse Outscatter", &g_diffuseOutscatter, 0.0f, 2.0f, 0.01f);
-			//imguiSlider("Diffuse Motion Blur", &g_diffuseMotionScale, 0.0f, 5.0f, 0.1f);
 
 			imguiEndScrollArea();
 		}
@@ -1336,6 +982,10 @@ void StoreReport(int type, int factor) {
   result.factor = factor;
   result.meshVertices = g_meshVertices;
   report.push_back(result);
+}
+
+bool isTestingMode() {
+  return g_filmStepTest || g_voxelStepTest || g_meshStepTest;
 }
 
 void ShowReport() {
@@ -1451,10 +1101,8 @@ void UpdateFrame(bool &quit)
 	double waitBeginTime = GetSeconds();
 
 	MapBuffers(g_buffers);
-#ifdef TRACK_DISPLACEMENTS
-  MapBuffers(g_displacement_buffers);
-#endif
-	double waitEndTime = GetSeconds();
+
+  double waitEndTime = GetSeconds();
 
 	// Getting timers causes CPU/GPU sync, so we do it after a map
 	float newSimLatency = NvFlexGetDeviceLatency(g_solver, &g_GpuTimers.computeBegin, &g_GpuTimers.computeEnd, &g_GpuTimers.computeFreq);
@@ -1463,16 +1111,29 @@ void UpdateFrame(bool &quit)
 
 	UpdateCamera();
 
-	if (!g_pause || g_step)
+	if (!(g_complete || g_pause || g_step))
 	{
 		UpdateScene();
-	}
+  }
+
+  if (g_generateContactsTexture && g_complete)
+  {
+    g_generateContactsTexture = false;    // run this block only once
+    // this block should execute before unmap command
+    // because of read buffer data from comming from gpu to cpu
+    BuildReverseTextureMapping();
+    BuildColorCompensation(&g_compens_colors[0], &g_buffers->positions[0], g_contact_positions, g_filmDimX, g_filmDimZ);
+    //PostProcessReverseTexture();
+    //g_drawReverseTexture = true;
+  }
+
+
 	//-------------------------------------------------------------------
 	// Render
 
 	double renderBeginTime = GetSeconds();
 
-	if (g_profile && (!g_pause || g_step)) 
+	if (g_profile && !(g_complete || g_pause || g_step)) 
   {
 		if (g_benchmark) 
     {
@@ -1486,174 +1147,17 @@ void UpdateFrame(bool &quit)
 	}
 
   // main scene render
-#ifdef RENDER_V2
 	StartFrameV2(Vec4(g_clearColor, 1.0f));
-  RenderSceneV2();
-#else
-  StartFrame(Vec4(g_clearColor, 1.0f));
+
   RenderScene();
+
+#ifdef DEBUG_SIM
+  RenderDebug(); // this should run beteen map / unmap command, because of reading buffer data incoming from gpu to cpu
 #endif
-  //render();
-  RenderDebug();
-  if (g_pause && g_drawContacts && g_generateContactsTexture && false)
-  {
-    // generate displacements 2d texture
 
-    g_generateContactsTexture = false; // avoid enter this loop again
-
-    // visualize contacts against the environment
-    // all arrays are iterated in CPU
-    const int maxContactsPerParticle = 6;
-    NvFlexVector<Vec4> contactPlanes(g_flexLib, g_buffers->positions.size()*maxContactsPerParticle);
-    NvFlexVector<Vec4> contactVelocities(g_flexLib, g_buffers->positions.size()*maxContactsPerParticle);
-    NvFlexVector<int> contactIndices(g_flexLib, g_buffers->positions.size());
-    NvFlexVector<unsigned int> contactCounts(g_flexLib, g_buffers->positions.size());
-
-    NvFlexGetContacts(g_solver, contactPlanes.buffer, contactVelocities.buffer, contactIndices.buffer, contactCounts.buffer);
-
-    // ensure transfers have finished
-    contactPlanes.map();
-    contactVelocities.map();
-    contactIndices.map();
-    contactCounts.map();
-
-    // each active particle of simulation
-    for (int i = 0; i < int(g_buffers->activeIndices.size()); ++i)
-    {
-      // each active particle can have up to 6 contact points on NVIDIA Flex 1.1.0
-      const int filmIndex = g_buffers->activeIndices[i];
-      Vec3 filmContactVertex = Vec3(g_buffers->positions[filmIndex]);
-      const int contactIndex = contactIndices[filmIndex];
-      const unsigned int count = contactCounts[contactIndex];
-      const float scale = 0.1f;
-
-      //retrieve contact planes for each particle 
-      for (unsigned int c = 0; c < count; ++c)
-      {
-        Vec3 filmContactPlane = Vec3(contactPlanes[contactIndex*maxContactsPerParticle + c]);
-        //BeginLines();
-        //DrawLine(filmContactVertex, filmContactVertex + Vec3(filmContactPlane)*scale, Vec4(1.0f, 0.5f, 0.0f, 0.0f));
-        //EndLines();
-
-        if (1) // enable find mesh contacts
-        {
-          //int filmOffsetIndex = filmIndex % 3;
-          //int filmBaseIndex;
-          //switch (filmOffsetIndex) {
-          //case 0:
-            //filmBaseIndex = filmIndex;
-            //break;
-          //case 1:
-            //filmBaseIndex = filmIndex - 1;
-            //break;
-          //case 2:
-            //filmBaseIndex = filmIndex - 2;
-            //break;
-          //}
-
-          //Vec3 filmNormal0 = g_buffers->normals[filmBaseIndex + 0];
-          //Vec3 filmNormal1 = g_buffers->normals[filmBaseIndex + 1];
-          //Vec3 filmNormal2 = g_buffers->normals[filmBaseIndex + 2];
-          //Vec3 filmNormal = (filmNormal0 + filmNormal1 + filmNormal2) / 3;//g_buffers->normals[filmIndex];
-          
-          FindContacts(filmContactVertex, filmIndex, -Normalize(filmContactPlane), g_gpu_mesh, g_film_mesh, g_model, gridDimZ, gridDimX, g_contact_positions);
-        }
-      }
-    }
-
-    //FixTextureSeams(g_film_mesh, g_contact_positions, g_contact_indexes);
-
-
-#ifdef NEARBY_TEXTURE_COORECTION
-    //nearby find for post-processing of texture seams
-    NvFlexVector<int> neighbors(g_flexLib, g_solverDesc.maxParticles * g_solverDesc.maxNeighborsPerParticle);
-    NvFlexVector<int> neighborCounts(g_flexLib, g_solverDesc.maxParticles);
-    NvFlexVector<int> apiToInternal(g_flexLib, g_solverDesc.maxParticles);
-    NvFlexVector<int> internalToApi(g_flexLib, g_solverDesc.maxParticles);
-
-    NvFlexGetNeighbors(g_solver, neighbors.buffer, neighborCounts.buffer, apiToInternal.buffer, internalToApi.buffer);
-    // neighbors are stored in a strided format so that the first neighbor
-    // of each particle is stored sequentially, then the second, and so on
-
-    neighbors.map();
-    neighborCounts.map();
-    apiToInternal.map();
-    internalToApi.map();
-
-    int stride = g_solverDesc.maxParticles;
-
-    //BeginLines();
-    //Vec4 redColor = Vec4(1.0f, 0.0f, 0.0f, 1.0f);
-    //Vec4 yellowColor = Vec4(1.0f, 1.0f, 0.0f, 1.0f);
-    //DrawLine(Vec3(0.0f), Vec3(0.0f) + Vec3(0.0f, 1.0f, 0.0f)* 0.1f ,yellowColor);
-
-
-    for (int particleIndex = 0; particleIndex < int(g_buffers->positions.size()); ++particleIndex)
-    //int i = 10800;
-    {
-      // find offset in the neighbors buffer
-      int offset = apiToInternal[particleIndex];
-      int count = neighborCounts[offset];
-
-      PostProcessNearbyTexture(g_film_mesh, particleIndex, count, offset, stride, &internalToApi[0], &neighbors[0]);
-
-      //for (int c = 0; c < count; ++c)
-      //{
-        //int neighborIndex = internalToApi[neighbors[c*stride + offset]];
-
-        //Vec3 particle = Vec3(g_buffers->positions[particleIndex]);
-        //Vec3 normal = Vec3(g_buffers->normals[i]);
-
-        //Vec3 particleNeighbor = Vec3(g_buffers->positions[neighborIndex]);
-        //Vec3 neighborNormal = Vec3(g_buffers->normals[neighbor]);
-
-        //DrawLine(particle, particleNeighbor, redColor);
-
-        //DrawLine(particleNeighbor, particleNeighbor + normal * 0.05f, yellowColor);
-
-        //printf("Particle %d's neighbor %d is particle %d\n", i, c, neighbor);
-
-     // }
-    }
-    neighbors.destroy();
-    neighborCounts.destroy();
-    apiToInternal.destroy();
-    internalToApi.destroy();
-
-#endif
-    //EndLines();
-
-
-    // setup dynamic texture
-    //SetupContactsTexture(g_film_mesh);
-
-    // swap film texture to gpu_mesh texture
-    // SetupFilmMesh(g_gpu_mesh, g_film_mesh);
-
-
-
-    //TgaImage img;
-    //img.m_width = g_screenWidth;
-    //img.m_height = g_screenHeight;
-    //img.m_data = new uint32_t[g_screenWidth*g_screenHeight];
-
-    //ReadDisplacements((int*)img.m_data, g_screenWidth, g_screenHeight);
-
-    //fwrite(img.m_data, sizeof(uint32_t)*g_screenWidth*g_screenHeight, 1, g_film);
-    //WriteDisplacements((int*)img.m_data, g_screenWidth, g_screenHeight);
-
-    //RenderDisplacements();
-    //delete[] img.m_data;
-  }
-#ifdef RENDER_V2
   EndFrameV2();
-#else
-	EndFrame();
-#endif
-
 
 	int newScene = DoUI();
-
 
 	// If user has disabled async compute, ensure that no compute can overlap 
 	// graphics by placing a sync between them	
@@ -1661,20 +1165,9 @@ void UpdateFrame(bool &quit)
 		NvFlexComputeWaitForGraphics(g_flexLib);
 
 	UnmapBuffers(g_buffers);
-#ifdef TRACK_DISPLACEMENTS
-  UnmapBuffers(g_displacement_buffers);
-#endif
-	// move mouse particle (must be done here as GetViewRay() uses the GL projection state)
-	/*
-  if (g_mouseParticle != -1)
-	{
-		Vec3 origin, dir;
-		GetViewRay(g_lastx, g_screenHeight - g_lasty, origin, dir);
 
-		g_mousePos = origin + dir*g_mouseT;
-	}
-  */
-	if (g_capture)
+  // Generate movie output
+  if (g_capture)
 	{
 		TgaImage img;
 		img.m_width = g_screenWidth;
@@ -1697,15 +1190,6 @@ void UpdateFrame(bool &quit)
 		g_resetScene = false;
 	}
 
-  // reset solver
-  //if (g_resetSolver)
-  //{
-    //Shutdown();
-    //NvFlexParams copy = g_params;
-
-    //g_solver = NvFlexCreateSolver(g_flexLib, &g_solverDesc);
-
-  //}
 	//-------------------------------------------------------------------
 	// Flex Update
 
@@ -1718,16 +1202,6 @@ void UpdateFrame(bool &quit)
 	NvFlexSetPhases(g_solver, g_buffers->phases.buffer, NULL);
 	NvFlexSetActive(g_solver, g_buffers->activeIndices.buffer, NULL);
 	NvFlexSetActiveCount(g_solver, g_buffers->activeIndices.size());
-
-#ifdef TRACK_DISPLACEMENTS
-  // displacements
-  NvFlexSetParticles(g_displacements_solver, g_displacement_buffers->positions.buffer, NULL);
-  NvFlexSetVelocities(g_displacements_solver, g_displacement_buffers->velocities.buffer, NULL);
-  NvFlexSetNormals(g_displacements_solver, g_buffers->normals.buffer, NULL);
-  NvFlexSetPhases(g_displacements_solver, g_displacement_buffers->phases.buffer, NULL);
-  NvFlexSetActive(g_displacements_solver, g_displacement_buffers->activeIndices.buffer, NULL);
-  NvFlexSetActiveCount(g_displacements_solver, g_displacement_buffers->activeIndices.size());
-#endif
 
 	// allow scene to update constraints etc
 	SyncScene();
@@ -1747,16 +1221,11 @@ void UpdateFrame(bool &quit)
 		g_shapesChanged = false;
 	}
 
-	if (!g_pause || g_step)
+	if (!(g_complete || g_pause || g_step))
 	{
 		// tick solver
 		NvFlexSetParams(g_solver, &g_params);
 		NvFlexUpdateSolver(g_solver, g_dt, g_numSubsteps, g_profile);
-
-#ifdef TRACK_DISPLACEMENTS
-    NvFlexSetParams(g_displacements_solver, &g_params);
-    NvFlexUpdateSolver(g_displacements_solver, g_dt, g_numSubsteps, g_profile);
-#endif
 
 		g_frame++;
 		g_step = false;
@@ -1775,12 +1244,6 @@ void UpdateFrame(bool &quit)
     NvFlexGetDynamicTriangles(g_solver, g_buffers->triangles.buffer, g_buffers->triangleNormals.buffer, g_buffers->triangles.size() / 3);
   }
 
-#ifdef TRACK_DISPLACEMENTS
-  NvFlexGetParticles(g_displacements_solver, g_displacement_buffers->positions.buffer, NULL);
-  NvFlexGetVelocities(g_displacements_solver, g_displacement_buffers->velocities.buffer, NULL);
-  NvFlexGetNormals(g_displacements_solver, g_buffers->normals.buffer, NULL);
-#endif
-  
 	double updateEndTime = GetSeconds();
 
 	//-------------------------------------------------------
@@ -1790,22 +1253,18 @@ void UpdateFrame(bool &quit)
 	float newRenderTime = float(renderEndTime - renderBeginTime);
 	float newWaitTime = float(waitEndTime - waitBeginTime);
   
-	//????
-  //float newFPS = float(1.0f / (updateEndTime - frameBeginTime));
-  //float newFPS = float(1.0f / (updateEndTime - renderBeginTime));
-  
 	// Exponential filter to make the display easier to read
-	const float timerSmoothing = 0.05f;
-
+  const float timerSmoothing = 1.0f;
 	g_updateTime = (g_updateTime == 0.0f) ? newUpdateTime : Lerp(g_updateTime, newUpdateTime, timerSmoothing);
 	g_renderTime = (g_renderTime == 0.0f) ? newRenderTime : Lerp(g_renderTime, newRenderTime, timerSmoothing);
 	g_waitTime = (g_waitTime == 0.0f) ? newWaitTime : Lerp(g_waitTime, newWaitTime, timerSmoothing);
 	g_simLatency = (g_simLatency == 0.0f) ? newSimLatency : Lerp(g_simLatency, newSimLatency, timerSmoothing);
-	
-	if (g_benchmark) newScene = BenchmarkUpdate();
+  
+  if (g_benchmark) newScene = BenchmarkUpdate();
 
 	// flush out the last frame before freeing up resources in the event of a scene change
 	// this is necessary for d3d12
+
   PresentFrame(g_vsync);
 
 	// if gui or benchmark requested a scene change process it now
@@ -1814,21 +1273,23 @@ void UpdateFrame(bool &quit)
 		g_scene = newScene;
 		Init(g_scene);
 	}
-  if (!g_pause) 
+
+  if (!(g_pause || g_complete)) 
 	{	
-    float duration = g_updateTime + g_renderTime + g_waitTime + g_simLatency;
-    if (g_realdt > 0.0f) {
-      g_fps = float(1.0 / g_realdt);
+    // get metrics
+    float duration = (g_updateTime + g_renderTime + g_waitTime);
+    if (duration  > 0.0f) {
+      g_fps = 1.0f/duration;
       frametimes.push_back(g_fps);
       update_times.push_back(g_updateTime);
       render_times.push_back(g_renderTime);
       wait_times.push_back(g_waitTime);      
       latency_times.push_back(g_simLatency);
-
     }
 
   }
-  else {
+  else if (g_complete && isTestingMode()) {
+    // generate a metrics report
     float totalFPS = 0.0f;
     float totalUpdateTime = 0.0f;
     float totalRenderTime = 0.0f;
@@ -1866,19 +1327,114 @@ void UpdateFrame(bool &quit)
     }
     if (g_voxelStepTest && g_voxelFactor <= g_meshFactorMax) {
       StoreReport(2, g_voxelFactor);
-      g_voxelFactor += g_voxelFactorStep;
+      g_voxelFactor = int(g_voxelFactor * g_voxelFactorStep); //multiplier factor
       g_resetScene = true;
     }
 
     if ((g_filmStepTest && g_filmFactor > g_filmFactorMax) || 
         (g_meshStepTest && g_meshFactor > g_meshFactorMax) || 
-        (g_voxelStepTest && g_voxelFactor > g_meshFactorMax)) {
+        (g_voxelStepTest && g_voxelFactor > g_voxelFactorMax)) {
       ShowReport();
       report.resize(0);
       quit = true; // EXIT for call other test in BATCH
     }
   }
 }
+
+void PostProcessReverseTexture()
+{
+  // look for every triangle in the film mesh
+  for (int i = 0; i < g_contact_indexes.size() / 3; ++i)
+  {   
+      int contactIndex = g_contact_indexes[i];
+      int countFilledTextCoords = 0;
+      int filledIndexes[3] = { -1, -1, -1 };
+      Vec4 filledTextureMean = Vec4(0.0f, 0.0f);
+      for (int j = 0; j < 3; ++j)
+      {
+        Vec4 filledTextureSum = Vec4(0.0f, 0.0f);
+        if (g_contact_uvs[contactIndex * 3 + j] != -1)
+        {
+          countFilledTextCoords++;
+          filledIndexes[j] = contactIndex * 3 + j;
+          filledTextureSum += g_contact_uvs[contactIndex * 3 + j];
+        }
+        filledTextureMean = filledTextureSum * 0.5f;
+
+
+      }
+      
+      if (countFilledTextCoords == 2)
+      {
+        for (int z = 0; z < 3; z++)
+        {
+          if (filledIndexes[z] == -1)
+          {
+            g_contact_uvs[filledIndexes[z]] = filledTextureMean;
+          }
+        }
+      }
+
+      if (countFilledTextCoords == 1)
+      {
+        filledTextureMean *= 2.0f;
+        for (int z = 0; z < 3; z++)
+        {
+          if (filledIndexes[z] == -1)
+          {
+            g_contact_uvs[filledIndexes[z]] = filledTextureMean;
+          }
+        }
+      }
+
+  }
+
+}
+
+
+void BuildReverseTextureMapping()
+{
+  // get contacts between rigid body and hydrographic film
+  const int maxContactsPerParticle = 6;
+  NvFlexVector<Vec4> contactPlanes(g_flexLib, g_buffers->positions.size()*maxContactsPerParticle);
+  NvFlexVector<Vec4> contactVelocities(g_flexLib, g_buffers->positions.size()*maxContactsPerParticle);
+  NvFlexVector<int> contactIndices(g_flexLib, g_buffers->positions.size());
+  NvFlexVector<unsigned int> contactCounts(g_flexLib, g_buffers->positions.size());
+
+  NvFlexGetContacts(g_solver, contactPlanes.buffer, contactVelocities.buffer, contactIndices.buffer, contactCounts.buffer);
+
+  // ensure transfers have finished
+  contactPlanes.map();
+  contactVelocities.map();
+  contactIndices.map();
+  contactCounts.map();
+
+  // for each active particle of simulation
+  for (int i = 0; i < int(g_buffers->activeIndices.size()); ++i)
+  {
+    // each active particle can have up to 6 contact points on NVIDIA Flex 1.1.0
+    const int filmIndex = g_buffers->activeIndices[i];
+    Vec3 filmNormal = g_buffers->normals[filmIndex];
+    Vec3 filmPosition = Vec3(g_buffers->positions[filmIndex]);
+    const int contactIndex = contactIndices[filmIndex];
+    const unsigned int count = contactCounts[contactIndex];
+    //const float scale = 0.1f;
+
+    //if an active particle have entries in the contact counts array, this particle have contacts
+    if (count)
+    {
+      //retrieve contact planes for each particle 
+      // in pratice, the contact plane shows better smoothed reverse texture mapping results
+      for (unsigned int c = 0; c < count; ++c)
+      {
+        Vec4 filmContactPlane = contactPlanes[contactIndex*maxContactsPerParticle + c];
+        BuildContactUVs(filmPosition, filmIndex, -Vec3(filmContactPlane), g_gpu_rigid_mesh, g_model, g_contact_positions, g_contact_uvs);
+      }
+    }
+  }
+
+}
+
 
 #if ENABLE_AFTERMATH_SUPPORT
 void DumpAftermathData()
@@ -1897,13 +1453,6 @@ void ReshapeWindow(int width, int height)
 		printf("Reshaping\n");
 
 	ReshapeRender(g_window);
-
-	//if (!g_fluidRenderer || (width != g_screenWidth || height != g_screenHeight))
-	//{
-		//if (g_fluidRenderer)
-			//DestroyFluidRenderer(g_fluidRenderer);
-		//g_fluidRenderer = CreateFluidRenderer(width, height);
-	//}
 
 	g_screenWidth = width;
 	g_screenHeight = height;
@@ -2027,7 +1576,7 @@ bool InputKeyboardDown(unsigned char key, int x, int y)
 		if (g_fullscreen)
 		{
 			SDL_SetWindowFullscreen(g_window, 0);
-			ReshapeWindow(1280, 720);
+			ReshapeWindowV2(1280, 720);
 			g_fullscreen = false;
 		}
 		else
@@ -2106,7 +1655,12 @@ bool InputKeyboardDown(unsigned char key, int x, int y)
 		g_pause = !g_pause;
 		break;
 	}
-	case 'h':
+  case 't':
+  {
+    g_createReverseTextureFile = !g_createReverseTextureFile;
+    break;
+  }
+  case 'h':
 	{
 		g_showHelp = !g_showHelp;
 		break;
@@ -2218,12 +1772,6 @@ void MouseFunc(int b, int state, int x, int y)
 #ifdef ANDROID
 		extern void setStateLeft(bool bLeftDown);
 		setStateLeft(false);
-#else
-		if ((SDL_GetModState() & KMOD_LSHIFT) && g_lastb == SDL_BUTTON_LEFT)
-		{
-			// record that we need to update the picked particle
-			g_mousePicked = true;
-		}
 #endif
 		break;
 	}
@@ -2277,9 +1825,6 @@ void ControllerButtonEvent(SDL_ControllerButtonEvent event)
 			g_lastx = g_screenWidth / 2;
 			g_lasty = g_screenHeight / 2;
 			g_lastb = 1;
-
-			// record that we need to update the picked particle
-			g_mousePicked = true;
 		}
 	}
 	else
@@ -2377,7 +1922,7 @@ void SDLMainLoop()
 				if (e.window.windowID == g_windowId)
 				{
 					if (e.window.event == SDL_WINDOWEVENT_SIZE_CHANGED)
-						ReshapeWindow(e.window.data1, e.window.data2);
+						ReshapeWindowV2(e.window.data1, e.window.data2);
 				}
 				break;
 
@@ -2412,8 +1957,10 @@ int main(int argc, char* argv[])
 	for (int i = 1; i < argc; ++i)
 	{
 		int d;
-		if (sscanf(argv[i], "-device=%d", &d))
-			g_device = d;
+    if (sscanf(argv[i], "-device=%d", &d))
+    {
+      g_device = d;
+    }
 
 		if (sscanf(argv[i], "-extensions=%d", &d))
 			g_extensions = d != 0;
@@ -2476,13 +2023,19 @@ int main(int argc, char* argv[])
 			g_fullscreen = false;
 		}
 
-		if (sscanf(argv[i], "-vsync=%d", &d))
-			g_vsync = d != 0;
-
+    if (sscanf(argv[i], "-vsync=%d", &d) == 1)
+      g_vsync = d == 1 ? true : false;
+ 
 		if (sscanf(argv[i], "-multiplier=%d", &d) == 1)
 		{
 			g_numExtraMultiplier = d;
 		}
+
+    float dippingArg = 0.0f;
+    if (sscanf(argv[i], "-dippingVelocity=%f", &dippingArg) == 1)
+    {
+      g_dippingVelocity = dippingArg;
+    }
 
 		if (strcmp(argv[i], "-disabletweak") == 0)
 		{
@@ -2506,28 +2059,28 @@ int main(int argc, char* argv[])
 		}
 
 
-    if (strcmp(argv[i], "-testFilm"))
+    if (strcmp(argv[i], "-testFilm") == 0)
     {
       g_filmStepTest = true;
       g_meshStepTest = false;
       g_voxelStepTest = false;
     }
 
-    if (strcmp(argv[i], "-testMesh"))
+    if (strcmp(argv[i], "-testMesh") == 0)
     {
       g_filmStepTest = false;
       g_meshStepTest = true;
       g_voxelStepTest = false;
     }
 
-    if (strcmp(argv[i], "-testVoxel"))
+    if (strcmp(argv[i], "-testVoxel") == 0)
     {
       g_filmStepTest = false;
       g_meshStepTest = false;
       g_voxelStepTest = true;
     }
 
-    if (sscanf(argv[i], "-selectedModel=%d", &d) == 1)
+    if (sscanf(argv[i], "-selectedModel=%d", &d) == 0)
     {
       g_selectedModel = d;
     }
@@ -2543,19 +2096,6 @@ int main(int argc, char* argv[])
 
 #ifndef ANDROID
 	DemoContext* demoContext = nullptr;
-#if FLEX_DX
-	// Flex DX demo will always create the renderer using the same DX api as the flex lib
-	if (g_d3d12)
-	{
-		// workaround for a driver issue with D3D12 with msaa, force it to off
-		// options.numMsaaSamples = 1;
-		g_graphics = 2;
-	}
-	else
-	{
-		g_graphics = 1;
-	}
-#else
 	switch (g_graphics)
 	{
 	case 0: break;
@@ -2568,19 +2108,12 @@ int main(int argc, char* argv[])
 		break;
 	default: assert(0);
 	}
-#endif
-	// Create the demo context
+
+  // Create the demo context
 	CreateDemoContext(g_graphics);
 
 	std::string str;
-#if FLEX_DX
-	if (g_d3d12)
-		str = "Flex Demo (Compute: DX12) ";
-	else
-		str = "Flex Demo (Compute: DX11) ";
-#else
-	str = "Hydrographics Simulator v4.0 ";
-#endif
+	str = "Hydrographics Simulator v4.2 ";
 	switch (g_graphics)
 	{
 	case 0:
@@ -2609,12 +2142,8 @@ int main(int argc, char* argv[])
   {
     SDL_SetWindowFullscreen(g_window, SDL_WINDOW_FULLSCREEN_DESKTOP);
   }
-#ifdef RENDER_V2
-	ReshapeWindowV2(g_screenWidth, g_screenHeight);
-#else
-  ReshapeWindow(g_screenWidth, g_screenHeight);
-#endif
 
+  ReshapeWindowV2(g_screenWidth, g_screenHeight);
 
 #endif // ifndef ANDROID
 
@@ -2644,48 +2173,10 @@ int main(int argc, char* argv[])
 	desc.computeContext = 0;
 	desc.computeType = eNvFlexCUDA;
 
-#if FLEX_DX
-	if (g_d3d12)
-		desc.computeType = eNvFlexD3D12;
-	else
-		desc.computeType = eNvFlexD3D11;
-
-	bool userSpecifiedGpuToUseForFlex = (g_device != -1);
-
-	if (userSpecifiedGpuToUseForFlex)
-	{
-		// Flex doesn't currently support interop between different D3DDevices.
-		// If the user specifies which physical device to use, then Flex always 
-		// creates its own D3DDevice, even if graphics is on the same physical device.
-		// So specified physical device always means no interop.
-		g_interop = false;
-	}
-	else
-	{
-		// Ask Flex to run on the same GPU as rendering
-		GetRenderDevice(&desc.renderDevice,
-			&desc.renderContext);
-	}
-
 	// Shared resources are unimplemented on D3D12,
 	// so disable it for now.
 	if (g_d3d12)
 		g_interop = false;
-
-	// Setting runOnRenderContext = true doesn't prevent async compute, it just 
-	// makes Flex send compute and graphics to the GPU on the same queue.
-	//
-	// So to allow the user to toggle async compute, we set runOnRenderContext = false
-	// and provide a toggleable sync between compute and graphics in the app.
-	//
-	// Search for g_useAsyncCompute for details
-	desc.runOnRenderContext = false;
-#else
-	// Shared resources are unimplemented on D3D12,
-	// so disable it for now.
-	if (g_d3d12)
-		g_interop = false;
-#endif
 
 	// Init Flex library, note that no CUDA methods should be called before this 
 	// point to ensure we get the device context we want
@@ -2704,17 +2195,12 @@ int main(int argc, char* argv[])
 	if (g_benchmark)
 		g_scene = BenchmarkInit();
 
-	// create shadow maps
-	g_shadowMap = ShadowCreate();
-
 	// init default scene
 	StartGpuWork();
 	Init(g_scene);
 	EndGpuWork();
 
 	SDLMainLoop();
-
-	ShadowDestroy(g_shadowMap);
 
 	Shutdown();
 	DestroyRender();

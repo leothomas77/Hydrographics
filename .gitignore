@@ -71,6 +71,7 @@ StyleCopReport.xml
 *.ilk
 *.meta
 *.obj
+!**/data/*.obj #Except for .obj files from 3D models
 *.iobj
 *.pch
 *.pdb

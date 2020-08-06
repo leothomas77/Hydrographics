@@ -304,11 +304,11 @@
     const char*  filename;
     GLenum       type;
     GLchar*      source;
-  }  tShader;
+  };
 
   static char* readShaderSource(const char* shaderFile);
 
-  GLuint InitShader(const char* vShaderFile, const char* fShaderFile);
+  GLuint InitShader(const Shader* shaders, const bool readFile = false);
 
   void _check_gl_error(const char *file, int line);
 

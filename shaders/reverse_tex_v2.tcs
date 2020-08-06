@@ -1,0 +1,59 @@
+#version 430 core
+layout (vertices = 3) out;
+
+uniform float uMaxDistanceUV; 
+uniform float uTesselationOuter;
+uniform float uTesselationInner;
+
+//inputs
+in VS_OUT
+{ 
+  vec3 vNormal; 
+  vec3 vPosW; 
+  vec2 vTexCoords;
+  int triangleIndexes[3];
+  int vertexID; 
+} tcs_in[]; 
+
+//outputs
+out TCS_OUT
+{ 
+  vec3 vNormal; 
+  vec3 vPosW; 
+  vec2 vTexCoords; 
+} tes_in[]; 
+
+float GetTesselationLevel(float maxDistanceUV, float tesselationLevel)
+{
+  float texDistance01 = length(tes_in[0].vTexCoords - tes_in[1].vTexCoords);
+  float texDistance02 = length(tes_in[0].vTexCoords - tes_in[2].vTexCoords);
+  float texDistance12 = length(tes_in[1].vTexCoords - tes_in[2].vTexCoords);
+
+  if (texDistance01 > maxDistanceUV || texDistance02 > maxDistanceUV || texDistance12 > maxDistanceUV)
+  {
+    return tesselationLevel;
+  }
+  else
+  {
+    return 1.0f; // without tesselation
+  }
+
+}
+
+
+void main ()
+{
+  // pass-through original vertices
+  tes_in[gl_InvocationID].vPosW = tcs_in[gl_InvocationID].vPosW;
+  tes_in[gl_InvocationID].vNormal = tcs_in[gl_InvocationID].vNormal;
+  tes_in[gl_InvocationID].vTexCoords = tcs_in[gl_InvocationID].vTexCoords;
+
+  float maxDistanceUV = uMaxDistanceUV;
+
+  gl_TessLevelInner[ 0 ] = GetTesselationLevel(maxDistanceUV, uTesselationInner);
+  
+  gl_TessLevelOuter[ 0 ] = GetTesselationLevel(maxDistanceUV, uTesselationOuter);
+  gl_TessLevelOuter[ 1 ] = GetTesselationLevel(maxDistanceUV, uTesselationOuter);
+  gl_TessLevelOuter[ 2 ] = GetTesselationLevel(maxDistanceUV, uTesselationOuter);
+
+}

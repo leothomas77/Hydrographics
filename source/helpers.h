@@ -32,6 +32,7 @@
 #include <iomanip>
 #include <algorithm>
 
+
 // disable some warnings
 #if _WIN32
 #pragma warning(disable: 4267)  // conversion from 'size_t' to 'int', possible loss of data
@@ -93,16 +94,6 @@ void CreateSpring(int i, int j, float stiffness, float give=0.0f)
 	g_buffers->springLengths.push_back((1.0f+give)*Length(Vec3(g_buffers->positions[i])-Vec3(g_buffers->positions[j])));
 	g_buffers->springStiffness.push_back(stiffness);	
 }
-
-#ifdef TRACK_DISPLACEMENTS
-void CreateDisplacementsSpring(int i, int j, float stiffness, float give = 0.0f)
-{
-  g_displacement_buffers->springIndices.push_back(i);
-  g_displacement_buffers->springIndices.push_back(j);
-  g_displacement_buffers->springLengths.push_back((1.0f + give)*Length(Vec3(g_displacement_buffers->positions[i]) - Vec3(g_displacement_buffers->positions[j])));
-  g_displacement_buffers->springStiffness.push_back(stiffness);
-}
-#endif;
 
 void AddSphere(float radius, Vec3 position, Quat rotation)
 {
@@ -251,7 +242,54 @@ NvFlexDistanceFieldId CreateSDF(const char* meshFile, int dim, float margin = 0.
 	return sdf;
 }
 */
-NvFlexDistanceFieldId CreateHydrographicSDF(Mesh* mesh, const char* meshFile, bool createSDFFile, int dim, Mat44 transformation, float margin = 0.1f, float expand = 0.0f)
+
+Vec3 GetCentroid(float *data,  int dim)
+{
+  float unityVolume = 1.0f;
+  float totalVolume = 0.0f;
+  Vec3 totalPositionVolume = Vec3(0.0f);
+  Vec3 centroid;
+
+  for (int i = 0; i < dim; i++)
+  {
+    for (int j = 0; j < dim; j++)
+    {
+      for (int k = 0; k < dim; k++)
+      {
+        int index = i + dim * (j + dim * k);
+        float sdfData = data[index];
+        if (sdfData < 0.0f)
+        {
+          totalPositionVolume += Vec3(float(i), float(j), float(k)) * unityVolume;
+          totalVolume += unityVolume;
+        }
+      }
+    }
+  }
+
+  centroid = totalPositionVolume / totalVolume;
+
+  return centroid;
+}
+
+float GetScaleFactor(float modelDim, float sdfDim = 1.0f, float sdfMargin = 0.1f)
+{
+  float kEpsilon = 1e-6;
+  if (modelDim <= kEpsilon) // avoid NaN outputs
+    modelDim = 70.0f;
+
+  return (1.0f - sdfMargin) / modelDim;
+}
+
+Mat44 GetSdfRotation(Vec3 rotationDeg)
+{
+  Mat44 mRotX = RotationMatrix(DegToRad(rotationDeg.x), Vec3(1.0f, 0.0f, 0.0f));
+  Mat44 mRotY = RotationMatrix(DegToRad(rotationDeg.y), Vec3(0.0f, 1.0f, 0.0f));
+  Mat44 mRotZ = RotationMatrix(DegToRad(rotationDeg.z), Vec3(0.0f, 0.0f, 1.0f));
+  return mRotZ * mRotY * mRotX;
+}
+
+NvFlexDistanceFieldId CreateRigidBodySDF(Mesh* mesh, const char* meshFile, bool createSDFFile, int dim, Mat44 transformation, Vec3 &centroid, float margin = 0.1f, float expand = 0.0f)
 {
 	if (!mesh)
 		throw std::runtime_error(std::string("Import mesh fail!"));
@@ -287,7 +325,7 @@ NvFlexDistanceFieldId CreateHydrographicSDF(Mesh* mesh, const char* meshFile, bo
 		printf("Cooking SDF: %s - dim: %d^3\n", sdfFile.c_str(), dim);
 
 		CreateSDF(mesh, dim, lower, upper, pfm.m_data);
-		// ...then save in pfm format, to use in the next program perform
+    // ...save in pfm format, to use in the next program execution
 		PfmSave(sdfFile.c_str(), pfm);
 	}
 
@@ -301,15 +339,31 @@ NvFlexDistanceFieldId CreateHydrographicSDF(Mesh* mesh, const char* meshFile, bo
 		pfm.m_data[i] += expand;
 
 	NvFlexVector<float> field(g_flexLib);
+  field.map();
 	field.assign(pfm.m_data, pfm.m_width*pfm.m_height*pfm.m_depth);
 	field.unmap();
 
 	// set up flex collision shape
-	NvFlexDistanceFieldId sdf = NvFlexCreateDistanceField(g_flexLib);
+  int sdfCount = 0;
+  NvFlexDistanceFieldId sdf = NULL;
+  NvFlexGetDistanceFields(g_flexLib, &sdf, sdfCount);
+  if (sdfCount != 0) 
+  {
+    printf("Destroying existing SDF");
+    NvFlexDestroyDistanceField(g_flexLib, sdf);
+  }
+  else
+  {
+    printf("Creating new SDF");
+    sdf = NvFlexCreateDistanceField(g_flexLib);
+  }
+
 	NvFlexUpdateDistanceField(g_flexLib, sdf, dim, dim, dim, field.buffer);
 
+  printf("Geting centroid");
+  centroid = GetCentroid(pfm.m_data, dim);
+  printf("Centroid found in voxel positions (%.2f, %.2f, %.2f)", centroid.x, centroid.y, centroid.z);
 
-	delete mesh;
 	delete[] pfm.m_data;
 
 	return sdf;
@@ -422,11 +476,18 @@ void CreateSpringGrid(Vec3 lower, int dx, int dy, int dz, float radius, int phas
 //hyperbolic clip
 // https://stackoverflow.com/questions/9323903/most-efficient-elegant-way-to-clip-a-number
 float clip(float x, float min, float max) {
-	return ((max - min) / 2)*((exp(x) - exp(-x)) / (exp(x) + exp(-x))) + max - (max - min) / 2;
+  if (x > max)
+    return max;
+
+  if (x < min)
+    return min;
+
+	return ((max - min) * 0.5f)*((exp(x) - exp(-x)) / (exp(x) + exp(-x))) + max - (max - min) * 0.5f;
+
 }
 
-float computeStiffness(float r, float rMax, float x, float x0, float z, float z0) {
-	int mode = 5;
+float computeStiffness(float r, float rMax, float x, float x0, float z, float z0, float originalStiffness) {
+	int mode = 99;
 	float a, b, c, f;
 	float factor = 0.02f;
 
@@ -439,7 +500,7 @@ float computeStiffness(float r, float rMax, float x, float x0, float z, float z0
 			break;
 		case 1:
 			//f(r) = a(r)^2 + b
-			a = -20.0f;
+			a = 10.0f;
 			b = 1.0f;
 			f = a * sqr(r) + b;
 			break;
@@ -458,11 +519,12 @@ float computeStiffness(float r, float rMax, float x, float x0, float z, float z0
 			f = sqr(x - x0) / a + sqr(z - z0) / b + c;
 			break;
 		default:
-			f = 0.4f;
+			f = 1.0f; //pass-through
 			break;
 	}
 
-	f = clip(f, 0.01f, 1.0f);
+
+  f = 1.0f - clip(f, 0.01f, 1.0f);
 
 	return f;
 }
@@ -487,38 +549,20 @@ void CreateHydrographicSpringGrid(Vec3 lower, Vec3 meshCenter, int dx, int dy, i
 			for (int x = 0; x < dx; ++x)
 			{
 				Vec3 position = lower + radius*Vec3(float(x), float(z), float(y));
-#ifdef TRACK_DISPLACEMENTS
-				displacements.push_back(0.0f);
-				g_displacement_buffers->originalPositions.push_back(Vec4(position.x, position.y, position.z, 1.0f));
-#endif
 				if (x == 0 || x == dx - 1) {
 					g_buffers->positions.push_back(Vec4(position.x, position.y, position.z, invMassV));// 0.08f aumenta o arrasto nas bordas
-#ifdef TRACK_DISPLACEMENTS
-          g_displacement_buffers->positions.push_back(Vec4(position.x, position.y, position.z, invMassV));
-#endif
         }
-				else if (y == 0 || y== dy - 1) {
+				else if (y == 0 || y == dy - 1) {
 					g_buffers->positions.push_back(Vec4(position.x, position.y, position.z, invMassH));// 0.08f aumenta o arrasto nas bordas
-#ifdef TRACK_DISPLACEMENTS
-          g_displacement_buffers->positions.push_back(Vec4(position.x, position.y, position.z, invMassH));
-#endif
         }
 				else {
 					g_buffers->positions.push_back(Vec4(position.x, position.y, position.z, invMass));
-#ifdef TRACK_DISPLACEMENTS
-          g_displacement_buffers->positions.push_back(Vec4(position.x, position.y, position.z, invMass));
-#endif
         }
         g_buffers->normals.push_back(Vec4(0.0f, 1.0f, 0.0f, 0.0f));
 				g_buffers->velocities.push_back(velocity);
 				g_buffers->phases.push_back(phase);
 
-#ifdef TRACK_DISPLACEMENTS
-        g_displacement_buffers->velocities.push_back(velocity);
-        g_displacement_buffers->phases.push_back(phase);
-#endif
-
-				// texture coordinates
+				// texture coordinates to checkboard pattern
 				float u = (float)x / (dx - 1);
 				float v = (float)y / (dy - 1);
 				g_buffers->uvs.push_back(Vec4(u, v, 0.0f, 0.0f));
@@ -543,13 +587,13 @@ void CreateHydrographicSpringGrid(Vec3 lower, Vec3 meshCenter, int dx, int dy, i
               v2 v4
             */
             // 1st triangle
-            g_buffers->triangles.push_back(baseIndex + GridIndex(x, y, dx));
-            g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y - 1, dx));
-            g_buffers->triangles.push_back(baseIndex + GridIndex(x, y - 1, dx));
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x, y, dx));        //v4
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y - 1, dx));//v1
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x, y - 1, dx));    //v3
             // 2nd triangle
-            g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y, dx));
-            g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y - 1, dx));
-            g_buffers->triangles.push_back(baseIndex + GridIndex(x, y, dx));
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y - 1, dx));//v1
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x, y, dx));        //v4
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y, dx));    //v2
           }
           else 
           {
@@ -560,13 +604,13 @@ void CreateHydrographicSpringGrid(Vec3 lower, Vec3 meshCenter, int dx, int dy, i
             v2 v4
             */
             // 1st triangle
-            g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y, dx));
-            g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y - 1, dx));
-            g_buffers->triangles.push_back(baseIndex + GridIndex(x, y - 1, dx));
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y, dx));    //v2
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y - 1, dx));//v1
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x, y - 1, dx));    //v3
             // 2nd triangle
-            g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y, dx));
-            g_buffers->triangles.push_back(baseIndex + GridIndex(x, y - 1, dx));
-            g_buffers->triangles.push_back(baseIndex + GridIndex(x, y, dx));
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x - 1, y, dx));    //v2
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x, y - 1, dx));    //v3
+            g_buffers->triangles.push_back(baseIndex + GridIndex(x, y, dx));        //v4
           }
 
           g_buffers->triangleNormals.push_back(Vec3(0.0f, 1.0f, 0.0f));
@@ -587,9 +631,9 @@ void CreateHydrographicSpringGrid(Vec3 lower, Vec3 meshCenter, int dx, int dy, i
 			if (x > 0)
 			{
 				int index1 = y*dx + x - 1;
-				//Vec4 mean = 0.5f * (g_buffers->positions[baseIndex + index0] + g_buffers->positions[baseIndex + index1]);
-				//float d = computeDistance(distortionCenter, Vec3(mean));
-				//CreateSpring(baseIndex + index0, baseIndex + index1, computeStiffness(d, min(dx * radius, dy * radius), mean.x, distortionCenter.x, mean.z, distortionCenter.z));
+				Vec4 mean = 0.5f * (g_buffers->positions[baseIndex + index0] + g_buffers->positions[baseIndex + index1]);
+				float d = computeDistance(distortionCenter, Vec3(mean));
+				//CreateSpring(baseIndex + index0, baseIndex + index1, computeStiffness(d, min(dx * radius, dy * radius), mean.x, distortionCenter.x, mean.z, distortionCenter.z, stretchStiffness));
         CreateSpring(baseIndex + index0, baseIndex + index1, stretchStiffness);
       }
 
@@ -624,9 +668,9 @@ void CreateHydrographicSpringGrid(Vec3 lower, Vec3 meshCenter, int dx, int dy, i
 			if (y > 0)
 			{
 				int index1 = (y - 1)*dx + x;
-				//Vec4 mean = 0.5f * (g_buffers->positions[baseIndex + index0] + g_buffers->positions[baseIndex + index1]);
-				//float d = computeDistance(distortionCenter, Vec3(mean));
-				//CreateSpring(baseIndex + index0, baseIndex + index1, computeStiffness(d, min(dx * radius, dy * radius), mean.x, distortionCenter.x, mean.z, distortionCenter.z));
+				Vec4 mean = 0.5f * (g_buffers->positions[baseIndex + index0] + g_buffers->positions[baseIndex + index1]);
+				float d = computeDistance(distortionCenter, Vec3(mean));
+				//CreateSpring(baseIndex + index0, baseIndex + index1, computeStiffness(d, min(dx * radius, dy * radius), mean.x, distortionCenter.x, mean.z, distortionCenter.z, stretchStiffness));
         CreateSpring(baseIndex + index0, baseIndex + index1, stretchStiffness);
       }
 
@@ -805,90 +849,6 @@ void CreateTetMesh(const char* filename, Vec3 lower, float scale, float stiffnes
 	}
 }
 
-
-// finds the closest particle to a view ray
-/*int PickParticle(Vec3 origin, Vec3 dir, Vec4* particles, int* phases, int n, float radius, float &outT)
-{
-	float maxDistSq = radius*radius;
-	float minT = FLT_MAX;
-	int minIndex = -1;
-
-	for (int i=0; i < n; ++i)
-	{
-		if (phases[i] & eNvFlexPhaseFluid)
-			continue;
-
-		Vec3 delta = Vec3(particles[i])-origin;
-		float t = Dot(delta, dir);
-
-		if (t > 0.0f)
-		{
-			Vec3 perp = delta - t*dir;
-
-			float dSq = LengthSq(perp);
-
-			if (dSq < maxDistSq && t < minT)
-			{
-				minT = t;
-				minIndex = i;
-			}
-		}
-	}
-
-	outT = minT;
-
-	return minIndex;
-}*/
-
-// calculates local space positions given a set of particles and rigid indices
-void CalculateRigidLocalPositions(const Vec4* restPositions, int numRestPositions, const int* offsets, const int* indices, int numRigids, Vec3* localPositions)
-{
-
-	// To improve the accuracy of the result, first transform the restPositions to relative coordinates (by finding the mean and subtracting that from all points)
-	// Note: If this is not done, one might see ghost forces if the mean of the restPositions is far from the origin.
-
-	// Calculate mean
-	Vec3 shapeOffset(0.0f);
-
-	for (int i = 0; i < numRestPositions; i++)
-	{
-		shapeOffset += Vec3(restPositions[i]);
-	}
-
-	shapeOffset /= float(numRestPositions);
-
-	int count = 0;
-
-	for (int r=0; r < numRigids; ++r)
-	{
-		const int startIndex = offsets[r];
-		const int endIndex = offsets[r+1];
-
-		const int n = endIndex-startIndex;
-
-		assert(n);
-
-		Vec3 com;
-	
-		for (int i=startIndex; i < endIndex; ++i)
-		{
-			const int r = indices[i];
-
-			// By substracting meshOffset the calculation is done in relative coordinates
-			com += Vec3(restPositions[r]) - shapeOffset;
-		}
-
-		com /= float(n);
-
-		for (int i=startIndex; i < endIndex; ++i)
-		{
-			const int r = indices[i];
-
-			// By substracting meshOffset the calculation is done in relative coordinates
-			localPositions[count++] = (Vec3(restPositions[r]) - shapeOffset) - com;
-		}
-	}
-}
 
 void DrawImguiString(int x, int y, Vec3 color, int align, const char* s, ...)
 {
@@ -1164,130 +1124,6 @@ void CreateSkinning(const Vec3* vertices, int numVertices, const Vec3* clusters,
 }
 
 
-void SampleMesh(Mesh* mesh, Vec3 lower, Vec3 scale, float rotation, float radius, float volumeSampling, float surfaceSampling, std::vector<Vec3>& outPositions)
-{
-	if (!mesh)
-		return;
-
-	mesh->Transform(RotationMatrix(rotation, Vec3(0.0f, 1.0f, 0.0f)));
-
-	Vec3 meshLower, meshUpper;
-	mesh->GetBounds(meshLower, meshUpper);
-
-	Vec3 edges = meshUpper - meshLower;
-	float maxEdge = max(max(edges.x, edges.y), edges.z);
-
-	// put mesh at the origin and scale to specified size
-	Matrix44 xform = ScaleMatrix(scale / maxEdge)*TranslationMatrix(Point3(-meshLower));
-
-	mesh->Transform(xform);
-	mesh->GetBounds(meshLower, meshUpper);
-
-	std::vector<Vec3> samples;
-
-	if (volumeSampling > 0.0f)
-	{
-		// recompute expanded edges
-		edges = meshUpper - meshLower;
-		maxEdge = max(max(edges.x, edges.y), edges.z);
-
-		// use a higher resolution voxelization as a basis for the particle decomposition
-		float spacing = radius / volumeSampling;
-
-		// tweak spacing to avoid edge cases for particles laying on the boundary
-		// just covers the case where an edge is a whole multiple of the spacing.
-		float spacingEps = spacing*(1.0f - 1e-4f);
-
-		// make sure to have at least one particle in each dimension
-		int dx, dy, dz;
-		dx = spacing > edges.x ? 1 : int(edges.x / spacingEps);
-		dy = spacing > edges.y ? 1 : int(edges.y / spacingEps);
-		dz = spacing > edges.z ? 1 : int(edges.z / spacingEps);
-
-		int maxDim = max(max(dx, dy), dz);
-
-		// expand border by two voxels to ensure adequate sampling at edges
-		meshLower -= 2.0f*Vec3(spacing);
-		meshUpper += 2.0f*Vec3(spacing);
-		maxDim += 4;
-
-		vector<uint32_t> voxels(maxDim*maxDim*maxDim);
-
-		// we shift the voxelization bounds so that the voxel centers
-		// lie symmetrically to the center of the object. this reduces the 
-		// chance of missing features, and also better aligns the particles
-		// with the mesh
-		Vec3 meshOffset;
-		meshOffset.x = 0.5f * (spacing - (edges.x - (dx - 1)*spacing));
-		meshOffset.y = 0.5f * (spacing - (edges.y - (dy - 1)*spacing));
-		meshOffset.z = 0.5f * (spacing - (edges.z - (dz - 1)*spacing));
-		meshLower -= meshOffset;
-
-		//Voxelize(*mesh, dx, dy, dz, &voxels[0], meshLower - Vec3(spacing*0.05f) , meshLower + Vec3(maxDim*spacing) + Vec3(spacing*0.05f));
-		Voxelize((const Vec3*)&mesh->m_positions[0], mesh->m_positions.size(), (const int*)&mesh->m_indices[0], mesh->m_indices.size(), maxDim, maxDim, maxDim, &voxels[0], meshLower, meshLower + Vec3(maxDim*spacing));
-
-		// sample interior
-		for (int x = 0; x < maxDim; ++x)
-		{
-			for (int y = 0; y < maxDim; ++y)
-			{
-				for (int z = 0; z < maxDim; ++z)
-				{
-					const int index = z*maxDim*maxDim + y*maxDim + x;
-
-					// if voxel is marked as occupied the add a particle
-					if (voxels[index])
-					{
-						Vec3 position = lower + meshLower + spacing*Vec3(float(x) + 0.5f, float(y) + 0.5f, float(z) + 0.5f);
-
-						// normalize the sdf value and transform to world scale
-						samples.push_back(position);
-					}
-				}
-			}
-		}
-	}
-
-	// move back
-	mesh->Transform(ScaleMatrix(1.0f)*TranslationMatrix(Point3(-0.5f*(meshUpper + meshLower))));
-	mesh->Transform(TranslationMatrix(Point3(lower + 0.5f*(meshUpper + meshLower))));
-
-	if (surfaceSampling > 0.0f)
-	{
-		// sample vertices
-		for (int i = 0; i < int(mesh->m_positions.size()); ++i)
-			samples.push_back(Vec3(mesh->m_positions[i]));
-
-		// random surface sampling
-		if (1)
-		{
-			for (int i = 0; i < 50000; ++i)
-			{
-				int t = Rand() % mesh->GetNumFaces();
-				float u = Randf();
-				float v = Randf()*(1.0f - u);
-				float w = 1.0f - u - v;
-
-				int a = mesh->m_indices[t * 3 + 0];
-				int b = mesh->m_indices[t * 3 + 1];
-				int c = mesh->m_indices[t * 3 + 2];
-				
-				Point3 pt = mesh->m_positions[a] * u + mesh->m_positions[b] * v + mesh->m_positions[c] * w;
-				Vec3 p(pt.x,pt.y,pt.z);
-
-				samples.push_back(p);
-			}
-		}
-	}
-
-	std::vector<int> clusterIndices;
-	std::vector<int> clusterOffsets;
-	std::vector<Vec3> clusterPositions;
-	std::vector<float> priority(samples.size());
-
-	CreateClusters(&samples[0], &priority[0], samples.size(), clusterOffsets, clusterIndices, outPositions, radius);
-
-}
 
 void ClearShapes()
 {

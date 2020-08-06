@@ -25,6 +25,7 @@
 //
 // Copyright (c) 20132017 NVIDIA Corporation. All rights reserved.
 #include "../source/shaders.h"
+#include "../source/ColorGradient.h"
 
 #include "../core/mesh.h"
 #include "../core/tga.h"	
@@ -35,6 +36,7 @@
 #include "../external/glad/src/glad.c"
 #include <glm/gtc/matrix_transform.hpp> 
 #include "shader.h"
+
 
 #define STB_IMAGE_STATIC
 #ifndef STB_IMAGE_IMPLEMENTATION
@@ -49,19 +51,15 @@
 #include "imguiRenderGL.h"
 #include "utilsGL.h"
 
-GLuint texHydrographicId;
-GLuint texModelId;
-int texWidth, texHeight, components;
-GLuint VAO = -1;
-GLuint VBO = -1;
-GLuint EBO = -1;
-GLuint s_diffuseProgram = GLuint(-1);
-GLuint s_shadowProgram = GLuint(-1);
-GLuint s_hydrographicProgram = GLuint(-1);
-GLuint s_hydrographicProgramV2 = GLuint(-1);
-GLuint s_displacementProgram = GLuint(-1);
-GLuint s_diffuseProgramV2 = GLuint(-1);
+GLuint g_chessboard_texture_id;
+GLuint g_rigid_model_texture_id;
+GLuint g_heatmap_texture_id;
+
+GLuint s_reverseTexProgram = GLuint(-1);
+GLuint s_rigidBodyProgram = GLuint(-1);
 GLuint s_filmProgram = GLuint(-1);
+
+bool g_enable_paches = false;
 
 #ifdef ANDROID
 #include "android/Log.h"
@@ -72,123 +70,11 @@ GLuint s_filmProgram = GLuint(-1);
 
 #define CudaCheck(x) { cudaError_t err = x; if (err != cudaSuccess) { printf("Cuda error: %d in %s at %s:%d\n", err, #x, __FILE__, __LINE__); assert(0); } }
 
-typedef unsigned int VertexBuffer;
-typedef unsigned int IndexBuffer;
-typedef unsigned int Texture;
-
-struct FluidRenderBuffersGL
-{
-	FluidRenderBuffersGL(int numParticles = 0):
-		mPositionVBO(0),
-		mDensityVBO(0),
-		mIndices(0),
-		mPositionBuf(nullptr),
-		mDensitiesBuf(nullptr),
-		mIndicesBuf(nullptr)
-	{
-		mNumParticles = numParticles;
-		for (int i = 0; i < 3; i++)
-		{ 
-			mAnisotropyVBO[i] = 0;
-			mAnisotropyBuf[i] = nullptr;
-		}
-	}
-	~FluidRenderBuffersGL()
-	{
-		glDeleteBuffers(1, &mPositionVBO);
-		glDeleteBuffers(3, mAnisotropyVBO);
-		glDeleteBuffers(1, &mDensityVBO);
-		glDeleteBuffers(1, &mIndices);
-
-		NvFlexUnregisterOGLBuffer(mPositionBuf);
-		NvFlexUnregisterOGLBuffer(mDensitiesBuf);
-		NvFlexUnregisterOGLBuffer(mIndicesBuf);
-
-		NvFlexUnregisterOGLBuffer(mAnisotropyBuf[0]);
-		NvFlexUnregisterOGLBuffer(mAnisotropyBuf[1]);
-		NvFlexUnregisterOGLBuffer(mAnisotropyBuf[2]);
-	}
-
-	int mNumParticles;
-	VertexBuffer mPositionVBO;
-	VertexBuffer mDensityVBO;
-	VertexBuffer mAnisotropyVBO[3];
-	IndexBuffer mIndices;
-
-	// wrapper buffers that allow Flex to write directly to VBOs
-	NvFlexBuffer* mPositionBuf;
-	NvFlexBuffer* mDensitiesBuf;
-	NvFlexBuffer* mAnisotropyBuf[3];
-	NvFlexBuffer* mIndicesBuf;
-};
-
-// vertex buffers for diffuse particles
-struct DiffuseRenderBuffersGL
-{
-	DiffuseRenderBuffersGL(int numParticles = 0):
-		mDiffusePositionVBO(0),
-		mDiffuseVelocityVBO(0),
-		mDiffuseIndicesIBO(0),
-		mDiffuseIndicesBuf(nullptr),
-		mDiffusePositionsBuf(nullptr),
-		mDiffuseVelocitiesBuf(nullptr)
-	{
-		mNumParticles = numParticles;
-	}
-	~DiffuseRenderBuffersGL()
-	{
-		if (mNumParticles > 0)
-		{
-			glDeleteBuffers(1, &mDiffusePositionVBO);
-			glDeleteBuffers(1, &mDiffuseVelocityVBO);
-			glDeleteBuffers(1, &mDiffuseIndicesIBO);
-
-			NvFlexUnregisterOGLBuffer(mDiffuseIndicesBuf);
-			NvFlexUnregisterOGLBuffer(mDiffusePositionsBuf);
-			NvFlexUnregisterOGLBuffer(mDiffuseVelocitiesBuf);
-		}
-	}
-
-	int mNumParticles;
-	VertexBuffer mDiffusePositionVBO;
-	VertexBuffer mDiffuseVelocityVBO;
-	IndexBuffer mDiffuseIndicesIBO;
-
-	NvFlexBuffer* mDiffuseIndicesBuf;
-	NvFlexBuffer* mDiffusePositionsBuf;
-	NvFlexBuffer* mDiffuseVelocitiesBuf;
-};
-
-struct FluidRenderer
-{
-	GLuint mDepthFbo;
-	GLuint mDepthTex;
-	GLuint mDepthSmoothTex;
-	GLuint mSceneFbo;
-	GLuint mSceneTex;
-	GLuint mReflectTex;
-
-	GLuint mThicknessFbo;
-	GLuint mThicknessTex;
-
-	GLuint mPointThicknessProgram;
-	//GLuint mPointDepthProgram;
-
-	GLuint mEllipsoidThicknessProgram;
-	GLuint mEllipsoidDepthProgram;
-
-	GLuint mCompositeProgram;
-	GLuint mDepthBlurProgram;
-
-	int mSceneWidth;
-	int mSceneHeight;
-};
-
-struct ShadowMap
-{
-  GLuint texture;
-  GLuint framebuffer;
-};
+// not implemented structs - legacy from Flex structure
+struct DiffuseRenderBuffers;
+struct FluidRenderer;
+struct FluidRenderBuffers;
+struct Texture;
 
 struct GpuMesh
 {
@@ -202,6 +88,7 @@ struct GpuMesh
   GLuint mNumVertices;
   GLuint mNumFaces;
   GLuint mNumIndices;
+  //GLuint mSeamIndexes;
   std::vector<Vec3> positions;
   std::vector<Vec3> normals;
   std::vector<Vec4> colors;
@@ -210,6 +97,7 @@ struct GpuMesh
   std::vector<Triangle> triangles;
   std::vector<TriangleIndexes> triangleIndexes;
   std::vector<int> triangleIntIndexes;
+  //std::vector<int> seamIndexes;
   Matrix44 modelTransform;
   Vec3 center;
 
@@ -221,16 +109,15 @@ const aiScene* scene = NULL;
 GLuint scene_list = 0;
 aiVector3D scene_min, scene_max, scene_center;
 
-// texture pool
-#include "../core/png.h"
+PngImage g_chessboard_texture_image;
+PngImage g_rigid_model_texture_image;
+PngImage g_dynamic_texture_image;
 
-PngImage g_dynamic_texture;
-GLuint g_dynamic_texture_ID = 0;
 
-GLuint LoadTexture(const char* filename)
+GLuint LoadTexture(const char* filename, PngImage& image)
 {
-    PngImage img;
-    if (PngLoad(filename, img))
+    //PngImage img;
+    if (PngLoad(filename, image))
     {
         GLuint tex;
 
@@ -240,7 +127,7 @@ GLuint LoadTexture(const char* filename)
 
         if (1)
         {
-          glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img.m_width, img.m_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, img.m_data);
+          glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, image.m_width, image.m_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image.m_data);
           //glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
           //glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
@@ -257,8 +144,8 @@ GLuint LoadTexture(const char* filename)
           //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 7); // pick mipmap level 7 or lower
         }
         else {
-          glTexStorage2D(GL_TEXTURE_2D, 7 /* mip map levels */, GL_RGB8, img.m_width, img.m_height);
-          glTexSubImage2D(GL_TEXTURE_2D, 0 /* mip map level */, 0 /* xoffset */, 0 /* yoffset */, img.m_width, img.m_height, GL_RGBA, GL_UNSIGNED_BYTE, img.m_data);
+          glTexStorage2D(GL_TEXTURE_2D, 7 /* mip map levels */, GL_RGB8, image.m_width, image.m_height);
+          glTexSubImage2D(GL_TEXTURE_2D, 0 /* mip map level */, 0 /* xoffset */, 0 /* yoffset */, image.m_width, image.m_height, GL_RGBA, GL_UNSIGNED_BYTE, image.m_data);
           glGenerateMipmap(GL_TEXTURE_2D);
 
           glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_LINEAR));
@@ -271,9 +158,16 @@ GLuint LoadTexture(const char* filename)
           //glVerify(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img.m_width, img.m_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, img.m_data));
         }
 
-        PngFree(img);
+        // copy texture data before free memory
+        //width = img.m_width;
+        //height = img.m_height;
+        //pixels = new GLuint[width * height * 4];
+        //memcpy(pixels, img.m_data, width * height * 4);
+
+        //PngFree(img);
 
         return tex;
+    
     }
     else
     {
@@ -281,79 +175,35 @@ GLuint LoadTexture(const char* filename)
     }
 }
 
-GLuint LoadTexture_Original(const char* filename)
+
+GLuint Load1DTexture(const std::vector<Vec4> textureData)
 {
-  PngImage img;
-  if (PngLoad(filename, img))
+  GLuint tex;
+
+  glVerify(glGenTextures(1, &tex));
+  glVerify(glActiveTexture(GL_TEXTURE1));
+  glVerify(glBindTexture(GL_TEXTURE_1D, tex));
+
+  glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
+  float data[] =
   {
-    GLuint tex;
+    0.0f, 0.0f, 1.0f, 1.0f, //blue
+    0.0f, 1.0f, 1.0f, 1.0f, 
+    0.0f, 1.0f, 0.0f, 1.0f, //green
+    1.0f, 1.0f, 0.0f, 1.0f,
+    1.0f, 0.0f, 0.0f, 1.0f //red
+  };
 
-    glVerify(glGenTextures(1, &tex));
-    glVerify(glActiveTexture(GL_TEXTURE0));
-    glVerify(glBindTexture(GL_TEXTURE_2D, tex));
+  int textureSize = sizeof(data) / sizeof(Vec4(1.0f));
 
-    glTexStorage2D(GL_TEXTURE_2D, 2 /* mip map levels */, GL_RGB8, img.m_width, img.m_height);
-    glTexSubImage2D(GL_TEXTURE_2D, 0 /* mip map level */, 0 /* xoffset */, 0 /* yoffset */, img.m_width, img.m_height, GL_RGBA, GL_UNSIGNED_BYTE, img.m_data);
-    glGenerateMipmap(GL_TEXTURE_2D);
+  glTexImage1D(GL_TEXTURE_1D, 0, GL_RGBA32F, textureSize, 0, GL_RGBA, GL_FLOAT, data);
+  glVerify(glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_WRAP_S, GL_CLAMP));
+  glVerify(glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_WRAP_T, GL_CLAMP));
+  glVerify(glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MAG_FILTER, GL_LINEAR));
+  glVerify(glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MIN_FILTER, GL_LINEAR));
 
-
-    glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR));
-    glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR));
-    glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
-    glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
-    //glVerify(glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, GL_TRUE));
-    //glVerify(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img.m_width, img.m_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, img.m_data));
-
-    PngFree(img);
-
-    return tex;
-  }
-  else
-  {
-    return NULL;
-  }
-}
-
-GLuint CreateDynamicTexture(PngImage &img, GLuint &textID)
-{
-  img.m_height = 256;
-  img.m_width = 256;
-
-  //if (img.m_height <= 0 || img.m_width <= 0) 
-    //return NULL;
-
-  img.m_data = new uint32_t[img.m_height * img.m_width];
-
-  //initialize pixel color for dynamic texture 
-  for (int col = 0; col < img.m_width; col++)
-  {
-    for (int row = 0; row < img.m_height; row++)
-    {
-      glm::ivec4 color = glm::ivec4(255, 255, 255, 255);
-      uint32_t pixel = (BYTE(color.a) << 24) + (BYTE(color.b) << 16) + (BYTE(color.g) << 8) + BYTE(color.r);
-
-      int index = img.m_height * col + row;
-      img.m_data[index] = pixel;
-    }
-  }
-
-  glGenTextures(1, &textID);
-  glBindTexture(GL_TEXTURE_2D, textID);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img.m_width, img.m_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, (GLvoid*)NULL);
-  glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
-  glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
-
-  return textID;
-}
-
-GLuint LoadDynamicTexture(PngImage img, GLuint &textID)
-{
-  glBindTexture(GL_TEXTURE_2D, textID);
-  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, img.m_width, img.m_height, GL_RGBA, GL_UNSIGNED_BYTE, img.m_data);
-
-  return textID;
+  return tex;
 }
 
 
@@ -391,10 +241,1119 @@ float g_shadowBias = 0.05f;
 
 extern NvFlexLibrary* g_flexLib;
 extern Colour g_colors[];
+extern bool g_vsync;
 
-extern Mesh* g_mesh;
-extern GpuMesh* g_gpu_mesh;
-//void DrawShapes();
+// shader source codes
+GLchar *FILM_VERTEX_SHADER = "#version 430\n" STRINGIFY(
+
+layout(location = 0) in vec4 aPosition;
+layout(location = 1) in vec4 aNormal;
+layout(location = 2) in vec4 aTexCoords;
+layout(location = 3) in vec4 aColors;
+uniform mat4 proj;
+uniform mat4 view;
+uniform mat4 model;
+uniform mat4 normalMat;
+uniform bool showTexture;
+out vec3 vNormal;
+out vec3 vPosW;
+out vec2 vTexCoords;
+out vec4 vColor;
+
+void main()
+{
+  vNormal = (normalize(normalMat * vec4(aNormal.xyz, 1.0))).xyz;
+  vPosW = (model * vec4(aPosition.xyz, 1.0)).xyz;
+  vTexCoords = showTexture ? vTexCoords = aTexCoords.xy : vec2(0.0);
+  vColor = aColors;
+  gl_Position = proj * view * model * vec4(aPosition.xyz, 1.0);
+}
+);
+
+GLchar *FILM_FRAGMENT_SHADER = "#version 430\n" STRINGIFY(
+  in vec3 vNormal;
+  in vec3 vPosW;
+  in vec2 vTexCoords;
+  in vec4 vColor;
+  uniform vec3 uLPos;
+  uniform vec4 uLColor;
+  uniform vec4 uColor;
+  uniform vec3 uCamPos;
+  uniform vec4 uAmbient;
+  uniform vec4 uSpecular;
+  uniform uint uSpecularExpoent;
+  uniform bool showTexture;
+  uniform bool showPhong;
+  uniform sampler2D tex;
+  out vec4 outFragColor;
+  void main(void) {
+    vec4 diffuse = vec4(0.0);
+    vec4 specular = vec4(0.0);
+    //vec4 textureBorderColor = vec4(0.0, 0.0, 0.0, 0.0);
+    vec4 textureBorderColor = vec4(0.0, 0.0, 0.0, 0.0);
+    // always show front facing (avoid black color showing)
+    vec3 normal = gl_FrontFacing ? normalize(-vNormal) : normalize(vNormal);
+    vec4 lColor = uLColor;
+    // material properties
+    vec4 matAmb = uAmbient;
+
+    vec4 matDif;
+
+    matDif = showTexture ? texture(tex, vTexCoords) : vColor;
+
+    if (showPhong)
+    {
+      vec4 matSpec = uSpecular;
+      //ambient
+      vec4 ambient = matAmb;
+      //diffuse
+      vec3 pos = normalize(vPosW);
+      vec3 vL = normalize(uLPos - pos);
+      float NdotL = dot(normal, vL);
+      if (NdotL > 0)
+      {
+        diffuse = matDif * NdotL;
+      }
+      //specular
+      vec3 vV = normalize(uCamPos - pos);
+      vec3 vR = normalize(reflect(-vL, normal));
+      float RdotV = dot(vV, vR);
+      if (RdotV > 0)
+      {
+        specular = matSpec * pow(RdotV, uSpecularExpoent);
+      }
+      
+      outFragColor = clamp((ambient + diffuse + specular) * lColor, 0.0, 1.0);
+
+    }
+    else
+    {
+      outFragColor = matDif;
+    }
+  }
+);
+
+GLchar *RIGID_VERTEX_SHADER = "#version 430\n" STRINGIFY(
+  layout(location = 0) in vec3 aPosition;
+  layout(location = 1) in vec3 aNormal;
+  layout(location = 2) in vec2 aTexCoords;
+  uniform mat4 proj;
+  uniform mat4 view;
+  uniform mat4 model;
+  uniform mat4 normalMat;
+  uniform bool showTexture;
+  out vec3 vNormal;
+  out vec3 vPosW;
+  out vec2 vTexCoords;
+  void main()
+  {
+    vNormal.xyz = (normalize(normalMat * vec4(aNormal, 1.0))).xyz;
+    vPosW.xyz = (model * vec4(aPosition, 1.0)).xyz;
+    vTexCoords = showTexture ? vTexCoords = aTexCoords : vec2(0.0);
+    gl_Position = proj * view * model * vec4(aPosition, 1.0);
+  }
+);
+
+GLchar *RIGID_FRAGMENT_SHADER = "#version 430\n" STRINGIFY(
+    in vec3 vNormal;
+  in vec3 vPosW;
+  in vec2 vTexCoords;
+  uniform vec3 uLPos;
+  uniform vec4 uLColor;
+  uniform vec4 uColor;
+  uniform vec3 uCamPos;
+  uniform vec4 uAmbient;
+  uniform vec4 uSpecular;
+  uniform uint uSpecularExpoent;
+  uniform bool showTexture;
+  uniform bool showPhong;
+  uniform sampler2D tex;
+  out vec4 outFragColor;
+  void main(void) {
+    vec4 lColor = uLColor;
+    //material properties
+    vec4 matAmb = uAmbient;
+    vec4 matDif = showTexture ? texture(tex, vTexCoords) : uColor;
+    vec4 matSpec = uSpecular;
+    vec4 ambient = matAmb;
+    vec3 vL = normalize(uLPos - vPosW);
+    vec3 normal = gl_FrontFacing ? normalize(vNormal) : normalize(-vNormal);
+    float NdotL = dot(vL, normal);
+    //diffuse	
+    float cTheta = max(NdotL, 0.0);
+    vec4 diffuse = matDif * cTheta;
+    //specular
+    vec3 vV = normalize(uCamPos - vPosW);
+    vec3 vR = normalize(reflect(-vL, normal));
+    float cOmega = max(dot(vV, vR), 0.0);
+    vec4 specular = matSpec * pow(cOmega, uSpecularExpoent);
+    //trick to avoid hilights when angle greater than 90
+    if (NdotL < 0)
+    {
+      specular = vec4(0);
+    }
+
+    if (showPhong && false)
+    {
+
+      outFragColor = clamp((ambient + diffuse + specular) * lColor, 0.0, 1.0);
+      //outFragColor = clamp((diffuse + specular) * lColor, 0.0, 1.0);
+    }
+    else
+    {
+      outFragColor = matDif * cTheta;
+    }
+  }
+);
+
+GLchar *REVERSE_TEX_VERTEX_SHADER = "#version 430\n" STRINGIFY(
+  layout(location = 0) in vec4 aPosition;
+layout(location = 1) in vec4 aNormal;
+layout(location = 2) in vec4 aTexCoords;
+layout(location = 3) in vec4 aColor;
+
+uniform mat4 proj;
+uniform mat4 view;
+uniform mat4 model;
+uniform mat4 normalMat;
+uniform bool showTexture;
+
+out VS_OUT
+{
+  vec3 vNormal;
+vec3 vPosW;
+vec2 vTexCoords;
+vec4 vColor;
+vec2 uv0;
+vec2 uv1;
+} vs_out;
+
+void main()
+{
+  vs_out.vNormal = (normalize(normalMat * vec4(aNormal.xyz, 1.0))).xyz;
+  vs_out.vPosW = (model * vec4(aPosition.xyz, 1.0)).xyz;
+  vs_out.vTexCoords = showTexture ? vs_out.vTexCoords = aTexCoords.xy : vec2(0.0);
+  vs_out.vColor = aColor;
+  vs_out.uv0 = fract(vs_out.vTexCoords.xy);
+  vs_out.uv1 = fract(vs_out.vTexCoords.xy + vec2(0.5, 0.5)) - vec2(0.5, 0.5);
+
+  //int indexOffset = gl_VertexID % 3;
+  //int indexV0; int indexV1; int indexV2;
+  //indexV0 = gl_VertexID - indexOffset + 0; 
+  //indexV1 = gl_VertexID - indexOffset + 1; 
+  //indexV2 = gl_VertexID - indexOffset + 2;  
+
+  //vs_out.vertexID = gl_VertexID;
+
+  //vs_out.triangleIndexes[0] = indexV0;
+  //vs_out.triangleIndexes[1] = indexV1;
+  //vs_out.triangleIndexes[2] = indexV2;
+
+  gl_Position = proj * view * model * vec4(aPosition.xyz, 1.0);
+}
+//
+);
+
+GLchar *REVERSE_TEX_TESSELATION_CONTROL_SHADER = "#version 430\n" STRINGIFY(
+  layout(vertices = 3) out;
+
+//uniforms
+uniform vec3 seamVertex[];
+uniform uint seamVertexCount;
+
+//inputs
+in vec3 WorldPos_CS_in[];
+in vec2 TexCoord_CS_in[];
+in vec3 Normal_CS_in[];
+
+//outputs
+out vec3 WorldPos_ES_in[];
+out vec2 TexCoord_ES_in[];
+out vec3 Normal_ES_in[];
+
+void main()
+{
+  // pass-through original vertices
+  TexCoord_ES_in[gl_InvocationID] = TexCoord_CS_in[gl_InvocationID];
+  Normal_ES_in[gl_InvocationID] = Normal_CS_in[gl_InvocationID];
+  WorldPos_ES_in[gl_InvocationID] = WorldPos_CS_in[gl_InvocationID];
+
+  // primitive setup once
+  if (gl_InvocationID == 0)
+  {
+    gl_TessLevelInner[0] = 3;
+
+    gl_TessLevelOuter[0] = 3;
+    gl_TessLevelOuter[1] = 3;
+    gl_TessLevelOuter[2] = 3;
+  }
+
+}
+);
+
+GLchar *REVERSE_TEX_TESSELATION_EVALUATION_SHADER = "#version 430\n" STRINGIFY(
+  layout(triangles, equal_spacing, ccw) in;
+
+//uniforms
+uniform mat4 proj;
+uniform mat4 view;
+uniform mat4 model;
+
+//inputs
+in vec3 WorldPos_ES_in[];
+in vec2 TexCoord_ES_in[];
+in vec3 Normal_ES_in[];
+
+//outputs
+out vec3 WorldPos_FS_in;
+out vec2 TexCoord_FS_in;
+out vec3 Normal_FS_in;
+
+vec2 interpolate2D(vec2 v0, vec2 v1, vec2 v2)
+{
+  return vec2(gl_TessCoord.x) * v0 + vec2(gl_TessCoord.y) * v1 + vec2(gl_TessCoord.z) * v2;
+}
+
+vec3 interpolate3D(vec3 v0, vec3 v1, vec3 v2)
+{
+  return vec3(gl_TessCoord.x) * v0 + vec3(gl_TessCoord.y) * v1 + vec3(gl_TessCoord.z) * v2;
+}
+
+void main()
+{
+  // build values using barycentric coordinates
+  TexCoord_FS_in = interpolate2D(TexCoord_ES_in[0], TexCoord_ES_in[1], TexCoord_ES_in[2]);
+  Normal_FS_in = interpolate3D(Normal_ES_in[0], Normal_ES_in[1], Normal_ES_in[2]);
+  Normal_FS_in = normalize(Normal_FS_in);
+  WorldPos_FS_in = interpolate3D(WorldPos_ES_in[0], WorldPos_ES_in[1], WorldPos_ES_in[2]);
+
+  gl_Position = proj * view * model * vec4(WorldPos_FS_in, 1.0);
+}
+);
+
+GLchar *REVERSE_TEX_FRAGMENT_SHADER = "#version 430\n" STRINGIFY(
+  uniform vec3 uLPos;
+uniform vec4 uLColor;
+uniform vec4 uColor;
+uniform vec3 uCamPos;
+uniform vec4 uAmbient;
+uniform vec4 uSpecular;
+uniform uint uSpecularExpoent;
+uniform bool showTexture;
+uniform sampler2D tex;
+//inputs from geometry shader
+in GS_OUT
+{
+  vec3 vNormal;
+vec3 vPosW;
+vec2 vTexCoords;
+vec4 vColor;
+vec2 uv0;
+vec2 uv1;
+
+} fs_in;
+
+out vec4 outFragColor;
+
+void main(void) {
+  vec4 diffuse = vec4(0.0);
+  vec4 specular = vec4(0.0);
+  vec4 textureBorderColor = vec4(0.0, 0.0, 0.0, 0.0);
+  // always show front facing (avoid black color showing)
+  vec3 normal = gl_FrontFacing ? normalize(-fs_in.vNormal) : normalize(fs_in.vNormal);
+  vec4 lColor = uLColor;
+  // material properties
+  vec4 matAmb = uAmbient;
+
+  vec4 matDif;
+
+  //vec2 uvT; //Tarini 
+  //uvT.x = ( fwidth( fs_in.uv0.x ) < fwidth( fs_in.uv1.x )-0.001 )? fs_in.uv0.x : fs_in.uv1.x;
+  //uvT.y = ( fwidth( fs_in.uv0.y ) < fwidth( fs_in.uv1.y )-0.001 )? fs_in.uv0.y : fs_in.uv1.y;
+
+  //uvT.x = ( fwidth( fs_in.uv0.x ) < fwidth( fs_in.uv0.x +0.001) )? fs_in.uv0.x : fs_in.uv0.x +000.1;
+  //uvT.y = ( fwidth( fs_in.uv0.y ) < fwidth( fs_in.uv0.y +0.001) )? fs_in.uv0.y : fs_in.uv0.y +000.1;
+
+  matDif = showTexture ? texture(tex, fs_in.vTexCoords) : fs_in.vColor;
+  //matDif  = showTexture ? texture(tex, uvT) : uColor;
+
+
+  vec4 matSpec = uSpecular;
+  //ambient
+  vec4 ambient = matAmb;
+  //diffuse
+  vec3 pos = normalize(fs_in.vPosW);
+  vec3 vL = normalize(uLPos - pos);
+  float NdotL = dot(normal, vL);
+  if (NdotL > 0)
+  {
+    diffuse = matDif * NdotL;
+  }
+  //specular
+  vec3 vV = normalize(uCamPos - pos);
+  vec3 vR = normalize(reflect(-vL, normal));
+  float RdotV = dot(vV, vR);
+  if (RdotV > 0)
+  {
+    specular = matSpec * pow(RdotV, uSpecularExpoent);
+  }
+  // should use other components to apply phong
+  outFragColor = matDif;
+}
+//
+);
+
+GLchar *REVERSE_TEX_GEOMETRY_SHADER = "#version 430\n" STRINGIFY(
+  layout(triangles) in;
+  layout(triangle_strip, max_vertices = 36) out;
+
+  uniform float uMaxDistanceUV;
+
+  in VS_OUT
+  {
+    vec3 vNormal;
+  vec3 vPosW;
+  vec2 vTexCoords;
+  } gs_in[];
+
+  out GS_OUT
+  {
+    vec3 vNormal;
+  vec3 vPosW;
+  vec2 vTexCoords;
+  } gs_out;
+
+  void EmitTextureVertex(int index)
+  {
+    gl_Position = gl_in[index].gl_Position;
+    gs_out.vNormal = gs_in[index].vNormal;
+    gs_out.vTexCoords = gs_in[index].vTexCoords;
+    gs_out.vPosW = gs_in[index].vPosW;
+    EmitVertex();
+  }
+
+  void EmitWeightedTexVertex(int index1, int index2, float weight1, float weight2)
+  {
+    gl_Position = 0.5f * (gl_in[index1].gl_Position + gl_in[index2].gl_Position);
+    gs_out.vNormal = gs_in[index1].vNormal; // the mesh is always a plane assumes always the same normal
+    gs_out.vTexCoords = (weight1 * gs_in[index1].vTexCoords + weight2 * gs_in[index2].vTexCoords); // vertex with greater texture weight
+    gs_out.vPosW = 0.5 * (gs_in[index1].vPosW + gs_in[index2].vPosW);
+    EmitVertex();
+  }
+
+  bool isSeam(float maxDistanceUV, bool cross01, bool cross02, bool cross12, bool crossAll)
+  {
+    return (cross01 || cross02 || cross12 || crossAll);
+  }
+
+  bool v0_CrossTheSeam(bool cross01, bool cross02)
+  {
+    return (cross01 && cross02);
+  }
+
+  bool v1_CrossTheSeam(bool cross01, bool cross12)
+  {
+    return (cross01 && cross12);
+  }
+
+  bool v2_CrossTheSeam(bool cross02, bool cross12)
+  {
+    return (cross02 && cross12);
+  }
+
+  bool all_CrossTheSeam(float maxDistanceUV, float distance01, float distance02, float distance12)
+  {
+    float crossAllMaxDistanceUV = 0.33f * maxDistanceUV;
+
+    return (distance01 > crossAllMaxDistanceUV && distance02 > crossAllMaxDistanceUV && distance12 > crossAllMaxDistanceUV);
+  }
+
+  void ComputeTexDistance(vec2 texV0, vec2 texV1, vec2 texV2, inout float distance01, inout float distance02, inout float distance12)
+  {
+    distance01 = length(texV0 - texV1);
+    distance02 = length(texV0 - texV2);
+    distance12 = length(texV1 - texV2);
+  }
+
+  void ComputeCrossSeam(float maxDistanceUV, float distance01, float distance02, float distance12, inout bool cross01, inout bool cross02, inout bool cross12)
+  {
+    cross01 = distance01 > maxDistanceUV;
+    cross02 = distance02 > maxDistanceUV;
+    cross12 = distance12 > maxDistanceUV;
+  }
+
+  void ComputeHalfTextures(vec2 texV0, vec2 texV1, vec2 texV2, inout vec2 halfTex01, inout vec2 halfTex02, inout vec2 halfTex12)
+  {
+    halfTex01 = 0.5f * (texV0 + texV1);
+    halfTex02 = 0.5f * (texV0 + texV2);
+    halfTex12 = 0.5f * (texV1 + texV2);
+  }
+
+  void ComputeHalfDistances(vec4 v0, vec4 v1, vec4 v2, inout vec4 half01, inout vec4 half02, inout vec4 half12)
+  {
+    half01 = 0.5f * (v0 + v1);
+    half02 = 0.5f * (v0 + v2);
+    half12 = 0.5f * (v1 + v2);
+  }
+
+
+  void main(void) {
+
+    float maxDistanceUV = uMaxDistanceUV;
+    int edgeSubdivisions = 2;
+
+    float texDistance01, texDistance02, texDistance12;
+    bool cross01, cross02, cross12;
+
+    vec2 halfTex01, halfTex02, halfTex12;
+    vec4 half01, half02, half12;
+
+
+    ComputeHalfTextures(gs_in[0].vTexCoords, gs_in[1].vTexCoords, gs_in[2].vTexCoords, halfTex01, halfTex02, halfTex12);
+    ComputeHalfDistances(gl_in[0].gl_Position, gl_in[1].gl_Position, gl_in[2].gl_Position, half01, half02, half12);
+
+    ComputeTexDistance(gs_in[0].vTexCoords, gs_in[1].vTexCoords, gs_in[2].vTexCoords, texDistance01, texDistance02, texDistance12);
+
+    ComputeCrossSeam(maxDistanceUV, texDistance01, texDistance02, texDistance12, cross01, cross02, cross12);
+
+    bool crossAll = all_CrossTheSeam(maxDistanceUV, texDistance01, texDistance02, texDistance12);
+    if (isSeam(maxDistanceUV, cross01, cross02, cross12, crossAll))
+    {
+      if (crossAll)
+      {
+        // all cross the stream
+        // strip 1
+        EmitTextureVertex(2);
+        EmitWeightedTexVertex(0, 2, 0.5f, 0.5f);
+        EmitWeightedTexVertex(1, 2, 0.5f, 0.5f);
+
+        EndPrimitive();
+
+        // strip 2
+        EmitWeightedTexVertex(1, 2, 0.5f, 0.5f);
+        EmitWeightedTexVertex(0, 1, 0.5f, 0.5f);
+        EmitTextureVertex(1);
+
+        EndPrimitive();
+
+        // strip 3
+        EmitWeightedTexVertex(0, 2, 0.5f, 0.5f);
+        EmitTextureVertex(0);
+        EmitWeightedTexVertex(0, 1, 0.5f, 0.5f);
+
+        EndPrimitive();
+
+        // strip 4 center  
+        EmitWeightedTexVertex(1, 2, 0.5f, 0.5f);
+        EmitWeightedTexVertex(0, 2, 0.5f, 0.5f);
+        EmitWeightedTexVertex(0, 1, 0.5f, 0.5f);
+
+        EndPrimitive();
+
+      }
+      else if (v0_CrossTheSeam(cross01, cross02))
+      {
+        // v0 cross the seam
+        // strip 1
+        EmitTextureVertex(1);
+        EmitWeightedTexVertex(0, 1, 0.0f, 1.0f);
+        EmitWeightedTexVertex(1, 2, 0.5f, 0.5f);
+        EmitWeightedTexVertex(0, 2, 0.0f, 1.0f);
+        EmitTextureVertex(2);
+
+        EndPrimitive();
+
+        // strip 2
+        EmitWeightedTexVertex(0, 1, 1.0f, .0f);
+        EmitTextureVertex(0);
+        EmitWeightedTexVertex(0, 2, 1.0f, .0f);
+
+        EndPrimitive();
+
+      }
+      else if (v1_CrossTheSeam(cross01, cross12))
+      {
+        //v1 cross the seam
+        // strip 1
+        EmitTextureVertex(2);
+        EmitWeightedTexVertex(1, 2, 0.0f, 1.0f);
+        EmitWeightedTexVertex(0, 2, 0.5f, 0.5f);
+        EmitWeightedTexVertex(0, 1, 1.0f, 0.0f);
+        EmitTextureVertex(0);
+
+        EndPrimitive();
+
+        // strip 2
+        EmitWeightedTexVertex(1, 2, 1.0f, 0.0f);
+        EmitTextureVertex(1);
+        EmitWeightedTexVertex(0, 1, 0.0f, 1.0f);
+
+        EndPrimitive();
+
+      }
+      else if (v2_CrossTheSeam(cross02, cross12))
+      {
+        //v2 cross the seam
+        // strip 1
+        EmitTextureVertex(0);
+        EmitWeightedTexVertex(0, 2, 1.0f, 0.0f);
+        EmitWeightedTexVertex(0, 1, 0.5f, 0.5f);
+        EmitWeightedTexVertex(1, 2, 1.0f, 0.0f);
+        EmitTextureVertex(1);
+
+        EndPrimitive();
+
+        // strip 2
+        EmitWeightedTexVertex(1, 2, 0.0f, 1.0f);
+        EmitTextureVertex(2);
+        EmitWeightedTexVertex(0, 1, 0.0f, 1.0f);
+
+        EndPrimitive();
+
+      }
+
+    }
+    else
+    {
+      // pass-through original vertices
+      EmitTextureVertex(0);
+      EmitTextureVertex(1);
+      EmitTextureVertex(2);
+
+      EndPrimitive();
+
+    }
+  }
+);
+
+
+GLchar *REVERSE_TEX_GEOMETRY_SHADER_V2 = "#version 430\n" STRINGIFY(
+  layout(triangles) in;
+layout(triangle_strip, max_vertices = 36) out;
+uniform float uMaxDistanceUV;
+uniform float uNearDistanceUV;
+uniform float uWeight1;
+uniform float uWeight2;
+uniform sampler2D tex;
+
+in VS_OUT
+{
+  vec3 vNormal;
+vec3 vPosW;
+vec2 vTexCoords;
+vec4 vColor;
+vec2 uv0;
+vec2 uv1;
+} gs_in[];
+
+out GS_OUT
+{
+  vec3 vNormal;
+vec3 vPosW;
+vec2 vTexCoords;
+vec2 uv0;
+vec2 uv1;
+} gs_out;
+
+void EmitTextureVertex(int index)
+{
+  gl_Position = gl_in[index].gl_Position;
+  gs_out.vNormal = gs_in[index].vNormal;
+  gs_out.vTexCoords = gs_in[index].vTexCoords;
+  gs_out.uv0 = gs_in[index].uv0;
+  gs_out.uv1 = gs_in[index].uv1;
+  gs_out.vPosW = gs_in[index].vPosW;
+  EmitVertex();
+}
+
+void EmitWeightedTexVertex(int index1, int index2, float weight1, float weight2)
+{
+  gl_Position = 0.5f * (gl_in[index1].gl_Position + gl_in[index2].gl_Position);
+  gs_out.vNormal = gs_in[index1].vNormal; // the mesh is always a plane assumes always the same normal
+  gs_out.vTexCoords = (weight1 * gs_in[index1].vTexCoords + weight2 * gs_in[index2].vTexCoords); // vertex with greater texture weight
+  gs_out.vPosW = 0.5 * (gs_in[index1].vPosW + gs_in[index2].vPosW);
+  EmitVertex();
+}
+
+void EmitDirectionTexVertex(int indexFrom, int indexTo, vec2 texCoordFrom, vec2 texCoordTo, float epsilon)
+{
+  gl_Position = 0.5f * (gl_in[indexFrom].gl_Position + gl_in[indexTo].gl_Position);
+  gs_out.vNormal = gs_in[indexFrom].vNormal; // the mesh is always a plane assumes always the same normal
+
+  vec2 textDirection = normalize(texCoordTo - texCoordFrom);
+  gs_out.vTexCoords = texCoordFrom + textDirection * epsilon;
+  gs_out.vPosW = 0.5 * (gs_in[indexFrom].vPosW + gs_in[indexTo].vPosW);
+  EmitVertex();
+}
+
+void EmitStrips(int farVertexIndex, int nearVertex1, int nearVertex2, float w1, float w2)
+{
+  // v0 cross the seam
+  // strip 1
+  EmitTextureVertex(nearVertex1);
+  EmitWeightedTexVertex(farVertexIndex, nearVertex1, .01f, .99f);
+  EmitWeightedTexVertex(nearVertex1, nearVertex2, .5f, .5f);
+  EmitWeightedTexVertex(farVertexIndex, nearVertex2, .01f, .99f);
+  EmitTextureVertex(nearVertex2);
+  EndPrimitive();
+
+  // strip 2
+  EmitWeightedTexVertex(nearVertex1, farVertexIndex, .01f, .99f);
+  EmitTextureVertex(farVertexIndex);
+  EmitWeightedTexVertex(nearVertex2, farVertexIndex, .01f, .99f);
+  EndPrimitive();
+}
+
+void EmitStrips(int farVertexIndex, int nearVertex1, int nearVertex2, float epsilon)
+{
+  vec2 texFar = gs_in[farVertexIndex].vTexCoords;
+  vec2 texNear1 = gs_in[nearVertex1].vTexCoords;
+  vec2 texNear2 = gs_in[nearVertex2].vTexCoords;
+
+  // v0 cross the seam
+  // strip 1
+  EmitTextureVertex(nearVertex1);
+  EmitDirectionTexVertex(farVertexIndex, nearVertex1, texNear1, texFar, epsilon);
+  EmitWeightedTexVertex(nearVertex1, nearVertex2, .5f, .5f);
+  EmitDirectionTexVertex(farVertexIndex, nearVertex2, texNear2, texFar, epsilon);
+  EmitTextureVertex(nearVertex2);
+  EndPrimitive();
+
+  // strip 2
+  EmitDirectionTexVertex(nearVertex1, farVertexIndex, texFar, texNear1, epsilon);
+  EmitTextureVertex(farVertexIndex);
+  EmitDirectionTexVertex(nearVertex2, farVertexIndex, texFar, texNear2, epsilon);
+  EndPrimitive();
+}
+
+bool isSeam(float maxDistanceUV, bool cross01, bool cross02, bool cross12, bool crossAll)
+{
+  return (cross01 || cross02 || cross12 || crossAll);
+}
+
+bool v0_CrossTheSeam(bool cross01, bool cross02)
+{
+  return (cross01 && cross02);
+}
+
+bool v1_CrossTheSeam(bool cross01, bool cross12)
+{
+  return (cross01 && cross12);
+}
+
+bool v2_CrossTheSeam(bool cross02, bool cross12)
+{
+  return (cross02 && cross12);
+}
+
+bool all_CrossTheSeam(float maxDistanceUV, float distance01, float distance02, float distance12)
+{
+  float crossAllMaxDistanceUV = 0.33f * maxDistanceUV;
+
+  return (distance01 > crossAllMaxDistanceUV && distance02 > crossAllMaxDistanceUV && distance12 > crossAllMaxDistanceUV);
+}
+
+void ComputeTexDistance(vec2 texV0, vec2 texV1, vec2 texV2, inout float distance01, inout float distance02, inout float distance12)
+{
+  distance01 = length(texV0 - texV1);
+  distance02 = length(texV0 - texV2);
+  distance12 = length(texV1 - texV2);
+}
+
+void ComputeCrossSeam(float maxDistanceUV, float distance01, float distance02, float distance12, inout bool cross01, inout bool cross02, inout bool cross12)
+{
+  cross01 = distance01 > maxDistanceUV;
+  cross02 = distance02 > maxDistanceUV;
+  cross12 = distance12 > maxDistanceUV;
+}
+
+void ComputeHalfTextures(vec2 texV0, vec2 texV1, vec2 texV2, inout vec2 halfTex01, inout vec2 halfTex02, inout vec2 halfTex12)
+{
+  halfTex01 = 0.5f * (texV0 + texV1);
+  halfTex02 = 0.5f * (texV0 + texV2);
+  halfTex12 = 0.5f * (texV1 + texV2);
+}
+
+/*
+
+Seam fix scheme
+near1    near2 (near vertex in the texture)
+_ * _
+*       *
+| / |  /
+_ * _ * _ _ _ seam
+|  /
+*
+far (vertex far then the 2 others)
+
+*/
+
+void main(void) {
+
+  float maxDistanceUV = uMaxDistanceUV;
+  float epsilon = uNearDistanceUV;
+  float w1 = uWeight1;
+  float w2 = uWeight2;
+
+  float w3 = uWeight1;
+  float w4 = uWeight2;
+
+  float texDistance01, texDistance02, texDistance12;
+  bool cross01, cross02, cross12;
+  vec2 halfTex01, halfTex02, halfTex12;
+
+  ComputeHalfTextures(gs_in[0].vTexCoords, gs_in[1].vTexCoords, gs_in[2].vTexCoords, halfTex01, halfTex02, halfTex12);
+  ComputeTexDistance(gs_in[0].vTexCoords, gs_in[1].vTexCoords, gs_in[2].vTexCoords, texDistance01, texDistance02, texDistance12);
+  ComputeCrossSeam(maxDistanceUV, texDistance01, texDistance02, texDistance12, cross01, cross02, cross12);
+
+  bool crossAll = all_CrossTheSeam(maxDistanceUV, texDistance01, texDistance02, texDistance12);
+
+  if (isSeam(maxDistanceUV, cross01, cross02, cross12, crossAll))
+  {
+    if (crossAll)
+    {
+      // all cross the stream
+      // strip 1
+      EmitTextureVertex(1);
+      EmitDirectionTexVertex(1, 0, gs_in[1].vTexCoords, gs_in[0].vTexCoords, epsilon);
+      EmitDirectionTexVertex(1, 2, gs_in[1].vTexCoords, gs_in[2].vTexCoords, epsilon);
+      EndPrimitive();
+
+      // strip 2
+      EmitDirectionTexVertex(2, 1, gs_in[2].vTexCoords, gs_in[1].vTexCoords, epsilon);
+      EmitDirectionTexVertex(2, 0, gs_in[2].vTexCoords, gs_in[0].vTexCoords, epsilon);
+      EmitTextureVertex(2);
+      EndPrimitive();
+
+      // strip 3
+      EmitDirectionTexVertex(0, 1, gs_in[0].vTexCoords, gs_in[1].vTexCoords, epsilon);
+      EmitTextureVertex(0);
+      EmitDirectionTexVertex(0, 2, gs_in[0].vTexCoords, gs_in[2].vTexCoords, epsilon);
+      EndPrimitive();
+
+      // strip 4 center  
+      vec2 texCenter = 0.33f * (gs_in[0].vTexCoords + gs_in[1].vTexCoords + gs_in[2].vTexCoords);
+      EmitDirectionTexVertex(0, 1, texCenter, halfTex01, epsilon);
+      EmitDirectionTexVertex(1, 2, texCenter, halfTex12, epsilon);
+      EmitDirectionTexVertex(0, 2, texCenter, halfTex02, epsilon);
+      EndPrimitive();
+
+    }
+    else if (v0_CrossTheSeam(cross01, cross02))
+    {
+
+      int farVertexIndex = 0;
+      int nearVertex1 = 1;
+      int nearVertex2 = 2;
+
+      EmitStrips(farVertexIndex, nearVertex1, nearVertex2, epsilon);
+
+    }
+    else if (v1_CrossTheSeam(cross01, cross12))
+    {
+
+      int farVertexIndex = 1;
+      int nearVertex1 = 2;
+      int nearVertex2 = 0;
+
+      EmitStrips(farVertexIndex, nearVertex1, nearVertex2, epsilon);
+
+    }
+    else if (v2_CrossTheSeam(cross02, cross12))
+    {
+
+      int farVertexIndex = 2;
+      int nearVertex1 = 0;
+      int nearVertex2 = 1;
+
+      EmitStrips(farVertexIndex, nearVertex1, nearVertex2, epsilon);
+
+    }
+  }
+  else
+  {
+    // pass-through original vertices
+    EmitTextureVertex(0);
+    EmitTextureVertex(1);
+    EmitTextureVertex(2);
+    EndPrimitive();
+  }
+}
+//
+);
+
+GLchar *REVERSE_TEX_GEOMETRY_SHADER_V3 = "#version 430\n" STRINGIFY(
+  layout(triangles) in; \n
+  layout(triangle_strip, max_vertices = 36) out; \n
+  uniform float uMaxDistanceUV; \n
+  uniform float uNearDistanceUV; \n
+  uniform float uWeight1; \n
+  uniform float uWeight2; \n
+  uniform sampler2D tex; \n
+  uniform sampler2D heatmap; \n
+  \n
+  in VS_OUT\n
+{ \n
+vec3 vNormal; \n
+vec3 vPosW; \n
+vec2 vTexCoords; \n
+} gs_in[]; \n
+\n
+out GS_OUT\n
+{ \n
+vec3 vNormal; \n
+vec3 vPosW; \n
+vec2 vTexCoords; \n
+} gs_out; \n
+\n
+void EmitTextureVertex(int index)\n
+{ \n
+gl_Position = gl_in[index].gl_Position; \n
+gs_out.vNormal = gs_in[index].vNormal; \n
+gs_out.vTexCoords = gs_in[index].vTexCoords; \n
+gs_out.vPosW = gs_in[index].vPosW; \n
+EmitVertex(); \n
+}\n
+\n
+void EmitWeightedTexVertex(int index1, int index2, float weight1, float weight2)\n
+{ \n
+gl_Position = 0.5f * (gl_in[index1].gl_Position + gl_in[index2].gl_Position); \n
+gs_out.vNormal = gs_in[index1].vNormal; // the mesh is always a plane assumes always the same normal\n
+gs_out.vTexCoords = (weight1 * gs_in[index1].vTexCoords + weight2 * gs_in[index2].vTexCoords); // vertex with greater texture weight\n
+gs_out.vPosW = 0.5 * (gs_in[index1].vPosW + gs_in[index2].vPosW); \n
+EmitVertex(); \n
+}\n
+\n
+void EmitWeightedTexVertexCenter(int index1, int index2, vec2 texCoord1, vec2 texCoord2, vec2 texCoord3, float epsilon)\n
+{ \n
+gl_Position = 0.5f * (gl_in[index1].gl_Position + gl_in[index2].gl_Position); \n
+gs_out.vNormal = gs_in[index1].vNormal; // the mesh is always a plane assumes always the same normal\n
+\n
+vec2 centerTexCoord = 0.33f * (texCoord1 + texCoord2 + texCoord3); \n
+vec2 centerTexDirection = normalize(centerTexCoord - texCoord1); \n
+\n
+gs_out.vTexCoords = texCoord1 + centerTexDirection * epsilon; \n
+gs_out.vPosW = 0.5 * (gs_in[index1].vPosW + gs_in[index2].vPosW); \n
+EmitVertex(); \n
+}\n
+\n
+void EmitTexVertexByNearColor(int index1, int index2, vec2 texCoords)\n
+{ \n
+gl_Position = 0.5f * (gl_in[index1].gl_Position + gl_in[index2].gl_Position); \n
+gs_out.vNormal = gs_in[index1].vNormal; // the mesh is always a plane assumes always the same normal\n
+gs_out.vTexCoords = texCoords; \n
+gs_out.vPosW = 0.5 * (gs_in[index1].vPosW + gs_in[index2].vPosW); \n
+EmitVertex(); \n
+}\n
+\n
+void EmitStrips(vec3 farVertexIndex, vec3 nearVertex1, vec3 nearVertex2, vec2 texFarVertex, vec2 texNearVertex1, vec2 texNearVertex2, float w1, float w2, int level)\n
+{ \n
+// v0 cross the seam\n
+// strip 1\n
+level++;
+
+EmitTextureVertex(nearVertex1); \n
+EmitWeightedTexVertex(farVertexIndex, nearVertex1, w1, w2); \n
+EmitWeightedTexVertex(nearVertex1, nearVertex2, 0.5f, 0.5f); \n
+EmitWeightedTexVertex(farVertexIndex, nearVertex2, w1, w2); \n
+EmitTextureVertex(nearVertex2); \n
+\n
+EndPrimitive(); \n
+\n
+// strip 2\n
+EmitWeightedTexVertex(nearVertex1, farVertexIndex, w1, w2); \n
+EmitTextureVertex(farVertexIndex); \n
+EmitWeightedTexVertex(nearVertex2, farVertexIndex, w1, w2); \n
+\n
+EndPrimitive(); \n
+\n
+
+}\n
+\n
+bool isSeam(float maxDistanceUV, bool cross01, bool cross02, bool cross12, bool crossAll)\n
+{ \n
+return (cross01 || cross02 || cross12 || crossAll); \n
+}\n
+\n
+bool v0_CrossTheSeam(bool cross01, bool cross02)\n
+{ \n
+return (cross01 && cross02); \n
+}\n
+
+bool v1_CrossTheSeam(bool cross01, bool cross12)\n
+{ \n
+return (cross01 && cross12); \n
+}\n
+\n
+bool v2_CrossTheSeam(bool cross02, bool cross12)\n
+{ \n
+return (cross02 && cross12); \n
+}\n
+\n
+bool all_CrossTheSeam(float maxDistanceUV, float distance01, float distance02, float distance12)\n
+{ \n
+float crossAllMaxDistanceUV = 0.33f * maxDistanceUV; \n
+\n
+return (distance01 > crossAllMaxDistanceUV && distance02 > crossAllMaxDistanceUV && distance12 > crossAllMaxDistanceUV);
+}\n
+\n
+void ComputeTexDistance(vec2 texV0, vec2 texV1, vec2 texV2, inout float distance01, inout float distance02, inout float distance12)
+{
+  distance01 = length(texV0 - texV1);
+  distance02 = length(texV0 - texV2);
+  distance12 = length(texV1 - texV2);
+}
+
+void ComputeCrossSeam(float maxDistanceUV, float distance01, float distance02, float distance12, inout bool cross01, inout bool cross02, inout bool cross12)
+{
+  cross01 = distance01 > maxDistanceUV;
+  cross02 = distance02 > maxDistanceUV;
+  cross12 = distance12 > maxDistanceUV;
+}
+
+void ComputeHalfTextures(vec2 texV0, vec2 texV1, vec2 texV2, inout vec2 halfTex01, inout vec2 halfTex02, inout vec2 halfTex12)
+{
+  halfTex01 = 0.5f * (texV0 + texV1);
+  halfTex02 = 0.5f * (texV0 + texV2);
+  halfTex12 = 0.5f * (texV1 + texV2);
+}
+
+void ComputeHalfDistances(vec4 v0, vec4 v1, vec4 v2, inout vec4 half01, inout vec4 half02, inout vec4 half12)
+{
+  half01 = 0.5f * (v0 + v1);
+  half02 = 0.5f * (v0 + v2);
+  half12 = 0.5f * (v1 + v2);
+}
+
+vec2 GetTexCoordsByNearColor(vec2 texCoords, float epsilon)
+{
+  vec4 texColor = texture(tex, texCoords);
+
+  float distances[8];
+  vec2 nearTexCoords[8];
+
+  distances[0] = length(texColor - texture(tex, texCoords + vec2(0.0f, epsilon)));
+  distances[1] = length(texColor - texture(tex, texCoords + vec2(0.0f, -epsilon)));
+  distances[2] = length(texColor - texture(tex, texCoords + vec2(-epsilon, 0.0f)));
+  distances[3] = length(texColor - texture(tex, texCoords + vec2(epsilon, 0.0f)));
+  distances[4] = length(texColor - texture(tex, texCoords + vec2(epsilon, epsilon)));
+  distances[5] = length(texColor - texture(tex, texCoords + vec2(epsilon, -epsilon)));
+  distances[6] = length(texColor - texture(tex, texCoords + vec2(-epsilon, epsilon)));
+  distances[7] = length(texColor - texture(tex, texCoords + vec2(-epsilon, -epsilon)));
+
+
+  nearTexCoords[0] = texCoords + vec2(0.0f, epsilon);
+  nearTexCoords[1] = texCoords + vec2(0.0f, -epsilon);
+  nearTexCoords[2] = texCoords + vec2(-epsilon, 0.0f);
+  nearTexCoords[3] = texCoords + vec2(epsilon, 0.0f);
+  nearTexCoords[4] = texCoords + vec2(epsilon, epsilon);
+  nearTexCoords[5] = texCoords + vec2(epsilon, -epsilon);
+  nearTexCoords[6] = texCoords + vec2(-epsilon, epsilon);
+  nearTexCoords[7] = texCoords + vec2(-epsilon, -epsilon);
+
+  int nearColorIndex = 0;
+  for (int i; i < 8; i++)
+  {
+    if (distances[i] < distances[nearColorIndex])
+    {
+      nearColorIndex = i;
+    }
+  }
+  return nearTexCoords[nearColorIndex];
+}
+
+void main(void) {
+
+  float maxDistanceUV = uMaxDistanceUV;
+  float epsilon = uNearDistanceUV;
+  float w1 = uWeight1;
+  float w2 = uWeight2;
+
+  int farVertexIndex; int nearVertex1; int nearVertex2;
+  float texDistance01; float texDistance02; float texDistance12;
+  bool cross01; bool cross02; bool cross12; \n
+    int level = 0; \n
+
+    vec2 halfTex01; vec2 halfTex02; vec2 halfTex12;
+  vec4 half01; vec4 half02; vec4 half12;
+
+  ComputeHalfTextures(gs_in[0].vTexCoords, gs_in[1].vTexCoords, gs_in[2].vTexCoords, halfTex01, halfTex02, halfTex12);
+  ComputeHalfDistances(gl_in[0].gl_Position, gl_in[1].gl_Position, gl_in[2].gl_Position, half01, half02, half12);
+
+  ComputeTexDistance(gs_in[0].vTexCoords, gs_in[1].vTexCoords, gs_in[2].vTexCoords, texDistance01, texDistance02, texDistance12);
+
+  ComputeCrossSeam(maxDistanceUV, texDistance01, texDistance02, texDistance12, cross01, cross02, cross12);
+
+  bool crossAll = all_CrossTheSeam(maxDistanceUV, texDistance01, texDistance02, texDistance12);
+  if (isSeam(maxDistanceUV, cross01, cross02, cross12, crossAll))
+  {
+    if (crossAll)
+    {
+      // all cross the stream
+      // strip 1
+      EmitTextureVertex(1);
+      EmitWeightedTexVertex(1, 0, .9f, .1f);
+      EmitWeightedTexVertex(1, 2, .9f, .1f);
+
+      EndPrimitive();
+
+      // strip 2
+      EmitWeightedTexVertex(2, 1, .9f, .1f);
+      EmitWeightedTexVertex(2, 0, .9f, .1f);
+      EmitTextureVertex(2);
+
+      EndPrimitive();
+
+      // strip 3
+      EmitWeightedTexVertex(0, 1, .9f, .1f);
+      EmitTextureVertex(0);
+      EmitWeightedTexVertex(0, 2, .9f, .1f);
+
+      EndPrimitive();
+
+      // strip 4 center  
+      EmitWeightedTexVertex(0, 1, .5f, .5f);
+      EmitWeightedTexVertex(0, 2, .5f, .5f);
+      EmitWeightedTexVertex(1, 2, .5f, .5f);
+
+      EndPrimitive();
+
+    }
+    else if (v0_CrossTheSeam(cross01, cross02))
+    {
+      farVertexIndex = 0; nearVertex1 = 1; nearVertex2 = 2;
+
+      EmitStrips(farVertexIndex, nearVertex1, nearVertex2, w1, w2, level);
+
+    }
+    else if (v1_CrossTheSeam(cross01, cross12))
+    {
+      farVertexIndex = 1; nearVertex1 = 2; nearVertex2 = 0;
+
+      EmitStrips(farVertexIndex, nearVertex1, nearVertex2, w1, w2, level);
+
+    }
+    else if (v2_CrossTheSeam(cross02, cross12))
+    {
+      farVertexIndex = 2; nearVertex1 = 0; nearVertex2 = 1;
+
+      EmitStrips(farVertexIndex, nearVertex1, nearVertex2, w1, w2, level);
+
+    }
+  }
+  else
+  {
+    // pass-through original vertices
+    EmitTextureVertex(0);
+    EmitTextureVertex(1);
+    EmitTextureVertex(2);
+
+    EndPrimitive();
+
+  }
+}
+);
+
 
 namespace OGL_Renderer
 {
@@ -417,7 +1376,7 @@ namespace OGL_Renderer
 	  SDL_GL_CreateContext(window);
 
 	  // This makes our buffer swap syncronized with the monitor's vertical refresh
-	  SDL_GL_SetSwapInterval(1);
+	  SDL_GL_SetSwapInterval(g_vsync);
 
 	  if (!gladLoadGLLoader(SDL_GL_GetProcAddress))
 	  {
@@ -427,32 +1386,80 @@ namespace OGL_Renderer
 	  imguiRenderGLInit(GetFilePathByPlatform("../../data/DroidSans.ttf").c_str());
 
 
-    if (s_diffuseProgramV2 == GLuint(-1))
+    if (s_rigidBodyProgram == GLuint(-1))
     {
-      s_diffuseProgramV2 = InitShader("../../shaders/rigid.vs", "../../shaders/rigid.fs");
+      Shader rigidBodyShaders[5] = {
+        { "RIGID_VERTEX_SHADER", GL_VERTEX_SHADER, RIGID_VERTEX_SHADER },
+        { "RIGID_FRAGMENT_SHADER", GL_FRAGMENT_SHADER, RIGID_FRAGMENT_SHADER },
+        { NULL, GL_TESS_CONTROL_SHADER, NULL },
+        { NULL, GL_TESS_EVALUATION_SHADER, NULL },
+        { NULL, GL_GEOMETRY_SHADER, NULL }
+      };
+
+      s_rigidBodyProgram = InitShader(rigidBodyShaders);
     }
 
-    if (s_displacementProgram == GLuint(-1))
+    if (s_filmProgram == GLuint(-1))
     {
-      s_displacementProgram = InitShader("../../shaders/displacements.vs", "../../shaders/displacements.fs");
+      Shader filmShaders[5] = {
+        { "FILM_VERTEX_SHADER", GL_VERTEX_SHADER, FILM_VERTEX_SHADER },
+        { "FILM_FRAGMENT_SHADER", GL_FRAGMENT_SHADER, RIGID_FRAGMENT_SHADER },
+        { NULL, GL_TESS_CONTROL_SHADER, NULL },
+        { NULL, GL_TESS_EVALUATION_SHADER, NULL },
+        { NULL, GL_GEOMETRY_SHADER, NULL }
+      };
+      s_filmProgram = InitShader(filmShaders);
     }
 
-	  //Load texture - begin
-	  //EPRek.png xadrez7x11.png malha_rgb.jpg
-	  //8k_earth_daymap.jpg
-	  //malha_rgb.jpg
+    if (s_reverseTexProgram == GLuint(-1))
+    {
+      Shader reverseTextureShaders[5] = {
+        { "../../shaders/reverse_tex.vs", GL_VERTEX_SHADER, NULL },
+        { "../../shaders/reverse_tex.fs", GL_FRAGMENT_SHADER, NULL },
+        { "../../shaders/reverse_tex_v2.tcs", GL_TESS_CONTROL_SHADER, NULL },
+        { "../../shaders/reverse_tex_v2.tes", GL_TESS_EVALUATION_SHADER, NULL },
+        { "../../shaders/reverse_tex_v2.gs", GL_GEOMETRY_SHADER, NULL }
+      };
 
-    texHydrographicId = LoadTexture(GetFilePathByPlatform("../../textures/malha_rgb.jpg").c_str());
+      //disable tesselation shaders
+      if (1) {
+        reverseTextureShaders[2].filename = NULL;
+        reverseTextureShaders[2].source= NULL;
+        reverseTextureShaders[3].filename = NULL;
+        reverseTextureShaders[3].source = NULL;
+      }
+      else {
+        reverseTextureShaders[4].filename = "../../shaders/pass_through.gs";
+        reverseTextureShaders[4].source = NULL;
+        //
+        GLint MaxPatchVertices = 0;
+        glGetIntegerv(GL_MAX_PATCH_VERTICES, &MaxPatchVertices);
+        printf("Tesselation Shader - Max supported patch vertices %d\n", MaxPatchVertices);
+        glPatchParameteri(GL_PATCH_VERTICES, 3);
+      }
 
-    CreateDynamicTexture(g_dynamic_texture, g_dynamic_texture_ID);
-    
+      g_enable_paches = reverseTextureShaders[2].filename != NULL;
+      s_reverseTexProgram = InitShader(reverseTextureShaders, true);
+    }
+
+    g_chessboard_texture_id = LoadTexture(GetFilePathByPlatform("../../textures/malha_rgb.jpg").c_str(), g_chessboard_texture_image);
+
+    std::vector<Vec4> heatmapColors;
+    heatmapColors.push_back(Vec4(0.0f, 0.0f, 1.0f, 1.0f));
+    heatmapColors.push_back(Vec4(0.0f, 1.0f, 1.0f, 1.0f));
+    heatmapColors.push_back(Vec4(0.0f, 1.0f, 0.0f, 1.0f));
+    heatmapColors.push_back(Vec4(1.0f, 1.0f, 0.0f, 1.0f));
+    heatmapColors.push_back(Vec4(1.0f, 0.0f, 0.0f, 1.0f));
+
+    g_heatmap_texture_id = Load1DTexture(heatmapColors);
+
 	  g_msaaSamples = msaaSamples;
 	  g_window = window;
   }
 
   void DestroyRender()
   {
-    delete[] g_dynamic_texture.m_data;
+
   }
 
   void StartFrame(Vec4 clearColor)
@@ -659,23 +1666,6 @@ void PresentFrame(bool fullsync)
 #endif
 }
 
-RenderTexture* CreateRenderTexture(const char* filename)
-{
-	GLuint tex = LoadTexture(filename);
-
-	if (tex)
-	{
-		RenderTexture* t = new RenderTexture();
-		t->colorTex = tex;
-
-		return t;
-	}
-	else
-	{
-		return NULL;
-	}
-}
-
 RenderTexture* CreateRenderTarget(int width, int height, bool depth)
 {
 	return NULL;
@@ -707,558 +1697,8 @@ void DestroyRenderTexture(RenderTexture* t)
   // fixes some banding artifacts with repeated blending during thickness and diffuse rendering
 #define USE_HDR_DIFFUSE_BLEND 0
 
-  // vertex shader
-  const char *vertexPointShader = "#version 130\n" STRINGIFY(
 
-    uniform float pointRadius;  // point size in world space
-  uniform float pointScale;   // scale to calculate size in pixels
 
-  uniform mat4 lightTransform;
-  uniform vec3 lightDir;
-  uniform vec3 lightDirView;
-
-  uniform vec4 colors[8];
-
-  uniform vec4 transmission;
-  uniform int mode;
-
-  //in int density;
-  in float density;
-  in int phase;
-  in vec4 velocity;
-
-  void main()
-  {
-    // calculate window-space point size
-    vec4 viewPos = gl_ModelViewMatrix*vec4(gl_Vertex.xyz, 1.0);
-
-    gl_Position = gl_ModelViewProjectionMatrix * vec4(gl_Vertex.xyz, 1.0);
-    gl_PointSize = -pointScale * (pointRadius / viewPos.z);
-
-    gl_TexCoord[0] = gl_MultiTexCoord0;
-    gl_TexCoord[1] = lightTransform*vec4(gl_Vertex.xyz - lightDir*pointRadius*2.0, 1.0);
-    gl_TexCoord[2] = gl_ModelViewMatrix*vec4(lightDir, 0.0);
-
-    if (mode == 1)
-    {
-      // density visualization
-      if (density < 0.0f)
-        gl_TexCoord[3].xyz = mix(vec3(0.1, 0.1, 1.0), vec3(0.1, 1.0, 1.0), -density);
-      else
-        gl_TexCoord[3].xyz = mix(vec3(1.0, 1.0, 1.0), vec3(0.1, 0.2, 1.0), density);
-    }
-    else if (mode == 2)
-    {
-      gl_PointSize *= clamp(gl_Vertex.w*0.25, 0.0f, 1.0);
-
-      gl_TexCoord[3].xyzw = vec4(clamp(gl_Vertex.w*0.05, 0.0f, 1.0));
-    }
-    else
-    {
-      gl_TexCoord[3].xyz = mix(colors[phase % 8].xyz*2.0, vec3(1.0), 0.1);
-    }
-
-    gl_TexCoord[4].xyz = gl_Vertex.xyz;
-    gl_TexCoord[5].xyz = viewPos.xyz;
-  }
-  );
-
-  // pixel shader for rendering points as shaded spheres
-  const char *fragmentPointShader = STRINGIFY(
-
-    uniform vec3 lightDir;
-  uniform vec3 lightPos;
-  uniform float spotMin;
-  uniform float spotMax;
-  uniform int mode;
-
-  uniform sampler2DShadow shadowTex;
-  uniform vec2 shadowTaps[12];
-  uniform float pointRadius;  // point size in world space
-
-                              // sample shadow map
-  float shadowSample()
-  {
-    vec3 pos = vec3(gl_TexCoord[1].xyz / gl_TexCoord[1].w);
-    vec3 uvw = (pos.xyz*0.5) + vec3(0.5);
-
-    // user clip
-    if (uvw.x  < 0.0 || uvw.x > 1.0)
-      return 1.0;
-    if (uvw.y < 0.0 || uvw.y > 1.0)
-      return 1.0;
-
-    float s = 0.0;
-    float radius = 0.002;
-
-    for (int i = 0; i < 8; i++)
-    {
-      s += shadow2D(shadowTex, vec3(uvw.xy + shadowTaps[i] * radius, uvw.z)).r;
-    }
-
-    s /= 8.0;
-    return s;
-  }
-
-  float sqr(float x) { return x*x; }
-
-  void main()
-  {
-    // calculate normal from texture coordinates
-    vec3 normal;
-    normal.xy = gl_TexCoord[0].xy*vec2(2.0, -2.0) + vec2(-1.0, 1.0);
-    float mag = dot(normal.xy, normal.xy);
-    if (mag > 1.0) discard;   // kill pixels outside circle
-    normal.z = sqrt(1.0 - mag);
-
-    if (mode == 2)
-    {
-      float alpha = normal.z*gl_TexCoord[3].w;
-      gl_FragColor.xyz = gl_TexCoord[3].xyz*alpha;
-      gl_FragColor.w = alpha;
-      return;
-    }
-
-    // calculate lighting
-    float shadow = shadowSample();
-
-    vec3 lVec = normalize(gl_TexCoord[4].xyz - (lightPos));
-    vec3 lPos = vec3(gl_TexCoord[1].xyz / gl_TexCoord[1].w);
-    float attenuation = max(smoothstep(spotMax, spotMin, dot(lPos.xy, lPos.xy)), 0.05);
-
-    vec3 diffuse = vec3(0.9, 0.9, 0.9);
-    vec3 reflectance = gl_TexCoord[3].xyz;
-
-    vec3 Lo = diffuse*reflectance*max(0.0, sqr(-dot(gl_TexCoord[2].xyz, normal)*0.5 + 0.5))*max(0.2, shadow)*attenuation;
-
-    gl_FragColor = vec4(pow(Lo, vec3(1.0 / 2.2)), 1.0);
-
-    vec3 eyePos = gl_TexCoord[5].xyz + normal*pointRadius;//*2.0;
-    vec4 ndcPos = gl_ProjectionMatrix * vec4(eyePos, 1.0);
-    ndcPos.z /= ndcPos.w;
-    gl_FragDepth = ndcPos.z*0.5 + 0.5;
-  }
-  );
-
-  // vertex shader
-  const char *vertexShader = "#version 130\n" STRINGIFY(
-
-    uniform mat4 lightTransform;
-  uniform vec3 lightDir;
-  uniform float bias;
-  uniform vec4 clipPlane;
-  uniform float expand;
-
-  uniform mat4 objectTransform;
-
-  void main()
-  {
-    vec3 n = normalize((objectTransform*vec4(gl_Normal, 0.0)).xyz);
-    vec3 p = (objectTransform*vec4(gl_Vertex.xyz, 1.0)).xyz;
-
-    // calculate window-space point size
-    gl_Position = gl_ModelViewProjectionMatrix * vec4(p + expand*n, 1.0);
-
-    gl_TexCoord[0].xyz = n;
-    gl_TexCoord[1] = lightTransform*vec4(p + n*bias, 1.0);
-    gl_TexCoord[2] = gl_ModelViewMatrix*vec4(lightDir, 0.0);
-    gl_TexCoord[3].xyz = p;
-    gl_TexCoord[4] = gl_Color;
-    gl_TexCoord[5] = gl_MultiTexCoord0;
-    gl_TexCoord[6] = gl_SecondaryColor;
-    gl_TexCoord[7] = gl_ModelViewMatrix*vec4(gl_Vertex.xyz, 1.0);
-
-    gl_ClipDistance[0] = dot(clipPlane, vec4(gl_Vertex.xyz, 1.0));
-  }
-  );
-
-  const char *passThroughShader = STRINGIFY(
-
-    void main()
-  {
-    gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
-
-  }
-  );
-
-  // pixel shader for rendering points as shaded spheres
-  const char *fragmentShader = STRINGIFY(
-
-    uniform vec3 lightDir;
-  uniform vec3 lightPos;
-  uniform float spotMin;
-  uniform float spotMax;
-  uniform vec3 color;
-  uniform vec4 fogColor;
-
-  uniform sampler2DShadow shadowTex;
-  uniform vec2 shadowTaps[12];
-
-  uniform sampler2D tex;
-  uniform bool sky;
-
-  uniform bool grid;
-  uniform bool texture;
-
-  float sqr(float x) { return x*x; }
-
-  // sample shadow map
-  float shadowSample()
-  {
-    vec3 pos = vec3(gl_TexCoord[1].xyz / gl_TexCoord[1].w);
-    vec3 uvw = (pos.xyz*0.5) + vec3(0.5);
-
-    // user clip
-    if (uvw.x  < 0.0 || uvw.x > 1.0)
-      return 1.0;
-    if (uvw.y < 0.0 || uvw.y > 1.0)
-      return 1.0;
-
-    float s = 0.0;
-    float radius = 0.002;
-
-    const int numTaps = 12;
-
-    for (int i = 0; i < numTaps; i++)
-    {
-      s += shadow2D(shadowTex, vec3(uvw.xy + shadowTaps[i] * radius, uvw.z)).r;
-    }
-
-    s /= numTaps;
-    return s;
-  }
-
-  float filterwidth(vec2 v)
-  {
-    vec2 fw = max(abs(dFdx(v)), abs(dFdy(v)));
-    return max(fw.x, fw.y);
-  }
-
-  vec2 bump(vec2 x)
-  {
-    return (floor((x) / 2) + 2.f * max(((x) / 2) - floor((x) / 2) - .5f, 0.f));
-  }
-
-  float checker(vec2 uv)
-  {
-    float width = filterwidth(uv);
-    vec2 p0 = uv - 0.5 * width;
-    vec2 p1 = uv + 0.5 * width;
-
-    vec2 i = (bump(p1) - bump(p0)) / width;
-    return i.x * i.y + (1 - i.x) * (1 - i.y);
-  }
-
-  void main()
-  {
-    // calculate lighting
-    float shadow = max(shadowSample(), 0.5);
-
-    vec3 lVec = normalize(gl_TexCoord[3].xyz - (lightPos));
-    vec3 lPos = vec3(gl_TexCoord[1].xyz / gl_TexCoord[1].w);
-    float attenuation = max(smoothstep(spotMax, spotMin, dot(lPos.xy, lPos.xy)), 0.05);
-
-    vec3 n = gl_TexCoord[0].xyz;
-    vec3 color = gl_TexCoord[4].xyz;
-
-    if (!gl_FrontFacing)
-    {
-      color = gl_TexCoord[6].xyz;
-      n *= -1.0f;
-    }
-
-    if (grid && (n.y >0.995))
-    {
-      color *= 1.0 - 0.25 * checker(vec2(gl_TexCoord[3].x, gl_TexCoord[3].z));
-    }
-    else if (grid && abs(n.z) > 0.995)
-    {
-      color *= 1.0 - 0.25 * checker(vec2(gl_TexCoord[3].y, gl_TexCoord[3].x));
-    }
-
-    if (texture)
-    {
-      color = texture2D(tex, gl_TexCoord[5].xy).xyz;
-    }
-
-    // direct light term
-    float wrap = 0.0;
-    vec3 diffuse = color*vec3(1.0, 1.0, 1.0)*max(0.0, (-dot(lightDir, n) + wrap) / (1.0 + wrap)*shadow)*attenuation;
-
-    // wrap ambient term aligned with light dir
-    vec3 light = vec3(0.03, 0.025, 0.025)*1.5;
-    vec3 dark = vec3(0.025, 0.025, 0.03);
-    vec3 ambient = 4.0*color*mix(dark, light, -dot(lightDir, n)*0.5 + 0.5)*attenuation;
-
-    vec3 fog = mix(vec3(fogColor), diffuse + ambient, exp(gl_TexCoord[7].z*fogColor.w));
-
-    gl_FragColor = vec4(pow(fog, vec3(1.0 / 2.2)), 1.0);
-  }
-  );
-
-  const char *vertexHydrographicShader = "#version 130\n" STRINGIFY(
-
-    uniform mat4 lightTransform;
-  uniform vec3 lightDir;
-  uniform float bias;
-  uniform vec4 clipPlane;
-  uniform float expand;
-
-  uniform mat4 objectTransform;
-
-  void main()
-  {
-    vec3 n = normalize((objectTransform*vec4(gl_Normal, 0.0)).xyz);
-    vec3 p = (objectTransform*vec4(gl_Vertex.xyz, 1.0)).xyz;
-
-    // calculate window-space point size
-    gl_Position = gl_ModelViewProjectionMatrix * vec4(p + expand*n, 1.0);
-
-    gl_TexCoord[0].xyz = n;
-    gl_TexCoord[1] = lightTransform*vec4(p + n*bias, 1.0);
-    gl_TexCoord[2] = gl_ModelViewMatrix*vec4(lightDir, 0.0);
-    gl_TexCoord[3].xyz = p;
-    gl_TexCoord[4] = gl_Color;
-    gl_TexCoord[5] = gl_MultiTexCoord1; //gl_MultiTexCoord0 used for shadow pass
-    gl_TexCoord[6] = gl_SecondaryColor;
-    gl_TexCoord[7] = gl_ModelViewMatrix*vec4(gl_Vertex.xyz, 1.0);
-
-    gl_ClipDistance[0] = dot(clipPlane, vec4(gl_Vertex.xyz, 1.0));
-  }
-
-  );
-
-  const char *fragmentHydrographicShader = STRINGIFY(
-
-    uniform vec3 lightDir;
-  uniform vec3 lightPos;
-  uniform float spotMin;
-  uniform float spotMax;
-  uniform vec3 color;
-  uniform vec4 fogColor;
-
-  uniform sampler2DShadow shadowTex;
-  uniform vec2 shadowTaps[12];
-
-  uniform sampler2D tex;
-
-  uniform bool sky;
-
-  uniform bool grid;
-  uniform bool showTexture;
-
-  float sqr(float x) { return x*x; }
-
-  // sample shadow map
-  float shadowSample()
-  {
-    vec3 pos = vec3(gl_TexCoord[1].xyz / gl_TexCoord[1].w);
-    vec3 uvw = (pos.xyz*0.5) + vec3(0.5);
-
-    // user clip
-    if (uvw.x  < 0.0 || uvw.x > 1.0)
-      return 1.0;
-    if (uvw.y < 0.0 || uvw.y > 1.0)
-      return 1.0;
-
-    float s = 0.0;
-    float radius = 0.002;
-
-    const int numTaps = 12;
-
-    for (int i = 0; i < numTaps; i++)
-    {
-      s += shadow2D(shadowTex, vec3(uvw.xy + shadowTaps[i] * radius, uvw.z)).r;
-    }
-
-    s /= numTaps;
-    return s;
-  }
-
-  float filterwidth(vec2 v)
-  {
-    vec2 fw = max(abs(dFdx(v)), abs(dFdy(v)));
-    return max(fw.x, fw.y);
-  }
-
-  vec2 bump(vec2 x)
-  {
-    return (floor((x) / 2) + 2.f * max(((x) / 2) - floor((x) / 2) - .5f, 0.f));
-  }
-
-  float checker(vec2 uv)
-  {
-    float width = filterwidth(uv);
-    vec2 p0 = uv - 0.5 * width;
-    vec2 p1 = uv + 0.5 * width;
-
-    vec2 i = (bump(p1) - bump(p0)) / width;
-    return i.x * i.y + (1 - i.x) * (1 - i.y);
-  }
-
-  void main()
-  {
-    // calculate lighting
-    float shadow = max(shadowSample(), 0.5);
-
-    vec3 lVec = normalize(gl_TexCoord[3].xyz - (lightPos));
-    vec3 lPos = vec3(gl_TexCoord[1].xyz / gl_TexCoord[1].w);
-    float attenuation = max(smoothstep(spotMax, spotMin, dot(lPos.xy, lPos.xy)), 0.05);
-
-    vec3 n = gl_TexCoord[0].xyz;
-    vec3 color = gl_TexCoord[4].xyz;
-
-    if (!gl_FrontFacing)
-    {
-      color = gl_TexCoord[6].xyz;
-      n *= -1.0f;
-    }
-
-    if (grid && (n.y > 0.995))
-    {
-      color *= 1.0 - 0.25 * checker(vec2(gl_TexCoord[3].x, gl_TexCoord[3].z));
-    }
-    else if (grid && abs(n.z) > 0.995)
-    {
-      color *= 1.0 - 0.25 * checker(vec2(gl_TexCoord[3].y, gl_TexCoord[3].x));
-    }
-
-    if (showTexture)
-    {
-      color = texture2D(tex, gl_TexCoord[5].xy).xyz;
-    }
-
-    // direct light term
-    float wrap = 0.0;
-    vec3 diffuse = color*vec3(1.0, 1.0, 1.0)*max(0.0, (-dot(lightDir, n) + wrap) / (1.0 + wrap)*shadow)*attenuation;
-
-    // wrap ambient term aligned with light dir
-    vec3 light = vec3(0.03, 0.025, 0.025)*1.5;
-    vec3 dark = vec3(0.025, 0.025, 0.03);
-    vec3 ambient = 4.0*color*mix(dark, light, -dot(lightDir, n)*0.5 + 0.5)*attenuation;
-
-    vec3 fog = mix(vec3(fogColor), diffuse + ambient, exp(gl_TexCoord[7].z*fogColor.w));
-
-    gl_FragColor = vec4(pow(fog, vec3(1.0 / 2.2)), 1.0);
-  }
-
-  );
-
-
- void ShadowApply(GLint sprogram, Vec3 lightPos, Vec3 lightTarget, Matrix44 lightTransform, GLuint shadowTex)
-{
-	GLint uLightTransform = glGetUniformLocation(sprogram, "lightTransform");
-	glUniformMatrix4fv(uLightTransform, 1, false, lightTransform);
-
-	GLint uLightPos = glGetUniformLocation(sprogram, "lightPos");
-	glUniform3fv(uLightPos, 1, lightPos);
-
-	GLint uLightDir = glGetUniformLocation(sprogram, "lightDir");
-	glUniform3fv(uLightDir, 1, Normalize(lightTarget - lightPos));
-
-	GLint uBias = glGetUniformLocation(sprogram, "bias");
-	glUniform1f(uBias, g_shadowBias);
-
-	const Vec2 taps[] =
-	{
-		Vec2(-0.326212f,-0.40581f),Vec2(-0.840144f,-0.07358f),
-		Vec2(-0.695914f,0.457137f),Vec2(-0.203345f,0.620716f),
-		Vec2(0.96234f,-0.194983f),Vec2(0.473434f,-0.480026f),
-		Vec2(0.519456f,0.767022f),Vec2(0.185461f,-0.893124f),
-		Vec2(0.507431f,0.064425f),Vec2(0.89642f,0.412458f),
-		Vec2(-0.32194f,-0.932615f),Vec2(-0.791559f,-0.59771f)
-	};
-
-	GLint uShadowTaps = glGetUniformLocation(sprogram, "shadowTaps");
-	glUniform2fv(uShadowTaps, 12, &taps[0].x);
-
-	glEnable(GL_TEXTURE_2D);
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, shadowTex);
-
-  }
-
-  void DrawPoints(FluidRenderBuffers* buffersIn, int n, int offset, float radius, float screenWidth, float screenAspect, float fov, Vec3 lightPos, Vec3 lightTarget, Matrix44 lightTransform, ShadowMap* shadowMap, bool showDensity)
-  {
-    FluidRenderBuffersGL* buffers = reinterpret_cast<FluidRenderBuffersGL*>(buffersIn);
-    GLuint positions = buffers->mPositionVBO;
-    GLuint colors = buffers->mDensityVBO;
-    GLuint indices = buffers->mIndices;
-
-    static int sprogram = -1;
-    if (sprogram == -1)
-    {
-      sprogram = CompileProgram(vertexPointShader, fragmentPointShader);
-    }
-
-    if (sprogram)
-    {
-      glEnable(GL_POINT_SPRITE);
-      glTexEnvi(GL_POINT_SPRITE, GL_COORD_REPLACE, GL_TRUE);
-      glEnable(GL_VERTEX_PROGRAM_POINT_SIZE);
-      //glDepthMask(GL_TRUE);
-      glEnable(GL_DEPTH_TEST);
-
-      int mode = 0;
-      if (showDensity)
-        mode = 1;
-      if (shadowMap == NULL)
-        mode = 2;
-
-      glVerify(glUseProgram(sprogram));
-      glVerify(glUniform1f(glGetUniformLocation(sprogram, "pointRadius"), radius));
-      glVerify(glUniform1f(glGetUniformLocation(sprogram, "pointScale"), screenWidth / screenAspect * (1.0f / (tanf(fov*0.5f)))));
-      glVerify(glUniform1f(glGetUniformLocation(sprogram, "spotMin"), g_spotMin));
-      glVerify(glUniform1f(glGetUniformLocation(sprogram, "spotMax"), g_spotMax));
-      glVerify(glUniform1i(glGetUniformLocation(sprogram, "mode"), mode));
-      glVerify(glUniform4fv(glGetUniformLocation(sprogram, "colors"), 8, (float*)&g_colors[0].r));
-
-      // set shadow parameters
-      ShadowApply(sprogram, lightPos, lightTarget, lightTransform, shadowMap->texture);
-
-      glEnableClientState(GL_VERTEX_ARRAY);
-      glBindBuffer(GL_ARRAY_BUFFER, positions);
-      glVertexPointer(4, GL_FLOAT, 0, 0);
-
-      int d = glGetAttribLocation(sprogram, "density");
-      int p = glGetAttribLocation(sprogram, "phase");
-
-      if (d != -1)
-      {
-        glVerify(glEnableVertexAttribArray(d));
-        glVerify(glBindBuffer(GL_ARRAY_BUFFER, colors));
-        glVerify(glVertexAttribPointer(d, 1, GL_FLOAT, GL_FALSE, 0, 0));	// densities
-      }
-
-      if (p != -1)
-      {
-        glVerify(glEnableVertexAttribArray(p));
-        glVerify(glBindBuffer(GL_ARRAY_BUFFER, colors));
-        glVerify(glVertexAttribIPointer(p, 1, GL_INT, 0, 0));			// phases
-      }
-
-      glVerify(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indices));
-
-      glVerify(glDrawElements(GL_POINTS, n, GL_UNSIGNED_INT, (const void*)(offset * sizeof(int))));
-
-      glVerify(glUseProgram(0));
-      glVerify(glBindBuffer(GL_ARRAY_BUFFER, 0));
-      glVerify(glDisableClientState(GL_VERTEX_ARRAY));
-
-      if (d != -1)
-        glVerify(glDisableVertexAttribArray(d));
-      if (p != -1)
-        glVerify(glDisableVertexAttribArray(p));
-
-      glDisable(GL_POINT_SPRITE);
-      glDisable(GL_VERTEX_PROGRAM_POINT_SIZE);
-    }
-  }
-
-  //void DrawPlane(const Vec4& p);
-
-  static GLuint s_diffuseProgram = GLuint(-1);
-  static GLuint s_shadowProgram = GLuint(-1);
 
 #ifdef ANDROID
   void ResetProgramId()
@@ -1268,1277 +1708,6 @@ void DestroyRenderTexture(RenderTexture* t)
   }
 #endif
 
-  static const int kShadowResolution = 2048;
-
-  ShadowMap* ShadowCreate()
-  {
-    GLuint texture;
-    GLuint framebuffer;
-
-    glVerify(glGenFramebuffers(1, &framebuffer));
-    glVerify(glGenTextures(1, &texture));
-    glVerify(glBindTexture(GL_TEXTURE_2D, texture));
-
-    glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR));
-    glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR));
-
-    // This is to allow usage of shadow2DProj function in the shader 
-    glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_R_TO_TEXTURE));
-    glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL));
-    glVerify(glTexParameteri(GL_TEXTURE_2D, GL_DEPTH_TEXTURE_MODE, GL_INTENSITY));
-
-    glVerify(glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, kShadowResolution, kShadowResolution, 0, GL_DEPTH_COMPONENT, GL_UNSIGNED_BYTE, NULL));
-
-    glVerify(glBindFramebuffer(GL_FRAMEBUFFER, framebuffer));
-
-    glVerify(glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, texture, 0));
-
-    ShadowMap* map = new ShadowMap();
-    map->texture = texture;
-    map->framebuffer = framebuffer;
-
-    return map;
-
-  }
-
-  void ShadowDestroy(ShadowMap* map)
-  {
-    glVerify(glDeleteTextures(1, &map->texture));
-    glVerify(glDeleteFramebuffers(1, &map->framebuffer));
-
-    delete map;
-  }
-
-  void ShadowBegin(ShadowMap* map)
-  {
-    glEnable(GL_POLYGON_OFFSET_FILL);
-    glPolygonOffset(8.f, 8.f);
-
-    glVerify(glBindFramebuffer(GL_FRAMEBUFFER, map->framebuffer));
-
-    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-    glClear(GL_DEPTH_BUFFER_BIT);
-    glViewport(0, 0, kShadowResolution, kShadowResolution);
-
-    // draw back faces (for teapot)
-    glDisable(GL_CULL_FACE);
-
-    // bind shadow shader
-    if (s_shadowProgram == GLuint(-1))
-      s_shadowProgram = CompileProgram(vertexShader, passThroughShader);
-
-    glUseProgram(s_shadowProgram);
-    glVerify(glUniformMatrix4fv(glGetUniformLocation(s_shadowProgram, "objectTransform"), 1, false, Matrix44::kIdentity));
-  }
-
-  void ShadowEnd()
-  {
-    glDisable(GL_POLYGON_OFFSET_FILL);
-
-    glVerify(glBindFramebuffer(GL_FRAMEBUFFER, g_msaaFbo));
-
-    glEnable(GL_CULL_FACE);
-    glUseProgram(0);
-  }
-
-  void BindSolidShader(Vec3 lightPos, Vec3 lightTarget, Matrix44 lightTransform, ShadowMap* shadowMap, float bias, Vec4 fogColor)
-  {
-  	glVerify(glViewport(0, 0, g_screenWidth, g_screenHeight));
-  
-  	if (s_diffuseProgram == GLuint(-1))
-  		s_diffuseProgram = CompileProgram(vertexShader, fragmentShader);
-  
-  	if (s_diffuseProgram)
-  	{
-  		glDepthMask(GL_TRUE);
-  		glEnable(GL_DEPTH_TEST);
-  
-  		glVerify(glUseProgram(s_diffuseProgram));
-  		glVerify(glUniform1i(glGetUniformLocation(s_diffuseProgram, "grid"), 0));
-  		glVerify(glUniform1f( glGetUniformLocation(s_diffuseProgram, "spotMin"), g_spotMin));
-  		glVerify(glUniform1f( glGetUniformLocation(s_diffuseProgram, "spotMax"), g_spotMax));
-  		glVerify(glUniform4fv(glGetUniformLocation(s_diffuseProgram, "fogColor"), 1, fogColor));
-  
-  		glVerify(glUniformMatrix4fv(glGetUniformLocation(s_diffuseProgram, "objectTransform"), 1, false, Matrix44::kIdentity));
-  
-  		// set shadow parameters
-  		ShadowApply(s_diffuseProgram, lightPos, lightTarget, lightTransform, shadowMap->texture);
-  	}
-  }
-
-  void UnbindSolidShader()
-  {
-    glActiveTexture(GL_TEXTURE1);
-    glDisable(GL_TEXTURE_2D);
-    glActiveTexture(GL_TEXTURE0);
-
-    glUseProgram(0);
-  }
-
-
-  void SetMaterial(const Matrix44& xform, const RenderMaterial& mat)
-  {
-    GLint program;
-    glGetIntegerv(GL_CURRENT_PROGRAM, &program);
-
-    if (program)
-    {
-      glUniformMatrix4fv(glGetUniformLocation(program, "objectTransform"), 1, false, xform);
-
-      const float maxSpecularPower = 2048.0f;
-
-      glVerify(glUniform1f(glGetUniformLocation(program, "specularPower"), powf(maxSpecularPower, 1.0f - mat.roughness)));
-      glVerify(glUniform3fv(glGetUniformLocation(program, "specularColor"), 1, Lerp(Vec3(mat.specular*0.08f), mat.frontColor, mat.metallic)));
-      glVerify(glUniform1f(glGetUniformLocation(program, "roughness"), mat.roughness));
-      glVerify(glUniform1f(glGetUniformLocation(program, "metallic"), mat.metallic));
-
-      // set material properties
-      if (mat.colorTex)
-      {
-        GLuint tex = mat.colorTex->colorTex;
-
-        glActiveTexture(GL_TEXTURE1);
-        glEnable(GL_TEXTURE_2D);
-        glBindTexture(GL_TEXTURE_2D, tex);
-
-        glVerify(glUniform1i(glGetUniformLocation(program, "tex"), 1));		// use slot one
-        glVerify(glUniform1i(glGetUniformLocation(program, "texture"), 1)); // enable tex sampling
-      }
-      else
-      {
-        glVerify(glUniform1i(glGetUniformLocation(program, "tex"), 1));		// use slot one
-        glVerify(glUniform1i(glGetUniformLocation(program, "texture"), 0)); // disable tex sampling}
-      }
-    }
-
-    glVerify(glColor3fv(mat.frontColor));
-    glVerify(glSecondaryColor3fv(mat.backColor));
-  }
-
-
-  void DrawPlanes(Vec4* planes, int n, float bias)
-  {
-    // diffuse 		
-    glColor3f(0.9f, 0.9f, 0.9f);
-
-    GLint uBias = glGetUniformLocation(s_diffuseProgram, "bias");
-    glVerify(glUniform1f(uBias, 0.0f));
-    GLint uGrid = glGetUniformLocation(s_diffuseProgram, "grid");
-    glVerify(glUniform1i(uGrid, 1));
-    GLint uExpand = glGetUniformLocation(s_diffuseProgram, "expand");
-    glVerify(glUniform1f(uExpand, 0.0f));
-
-    for (int i = 0; i < n; ++i)
-    {
-      Vec4 p = planes[i];
-      p.w -= bias;
-
-      DrawPlane(p, false);
-    }
-
-    glVerify(glUniform1i(uGrid, 0));
-    glVerify(glUniform1f(uBias, g_shadowBias));
-  }
-
-  void DrawMesh(const Mesh* m, Vec3 color)
-  {
-    if (m)
-    {
-      glVerify(glColor3fv(color));
-      glVerify(glSecondaryColor3fv(color));
-
-      glVerify(glBindBuffer(GL_ARRAY_BUFFER, 0));
-      glVerify(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0));
-
-      glVerify(glEnableClientState(GL_NORMAL_ARRAY));
-      glVerify(glEnableClientState(GL_VERTEX_ARRAY));
-
-      glVerify(glNormalPointer(GL_FLOAT, sizeof(float) * 3, &m->m_normals[0]));
-      glVerify(glVertexPointer(3, GL_FLOAT, sizeof(float) * 3, &m->m_positions[0]));
-
-      if (m->m_colours.size())
-      {
-        glVerify(glEnableClientState(GL_COLOR_ARRAY));
-        glVerify(glColorPointer(4, GL_FLOAT, 0, &m->m_colours[0]));
-      }
-
-      glVerify(glDrawElements(GL_TRIANGLES, m->GetNumFaces() * 3, GL_UNSIGNED_INT, &m->m_indices[0]));
-
-      glVerify(glDisableClientState(GL_VERTEX_ARRAY));
-      glVerify(glDisableClientState(GL_NORMAL_ARRAY));
-
-      if (m->m_colours.size())
-        glVerify(glDisableClientState(GL_COLOR_ARRAY));
-    }
-  }
-
-  void DrawCloth(const Vec4* positions, const Vec4* normals, const float* uvs, const int* indices, int numTris, int numPositions, int colorIndex, float expand, bool twosided, bool smooth)
-  {
-    if (!numTris)
-      return;
-
-    if (twosided)
-      glDisable(GL_CULL_FACE);
-
-#if 1
-    GLint program;
-    glGetIntegerv(GL_CURRENT_PROGRAM, &program);
-
-    if (program == GLint(s_diffuseProgram))
-    {
-      GLint uBias = glGetUniformLocation(s_diffuseProgram, "bias");
-      glUniform1f(uBias, 0.0f);
-
-      GLint uExpand = glGetUniformLocation(s_diffuseProgram, "expand");
-      glUniform1f(uExpand, expand);
-    }
-#endif
-
-    glColor3fv(g_colors[colorIndex + 1] * 1.5f);
-    glSecondaryColor3fv(g_colors[colorIndex] * 1.5f);
-
-    glVerify(glBindBuffer(GL_ARRAY_BUFFER, 0));
-    glVerify(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0));
-
-    glVerify(glEnableClientState(GL_VERTEX_ARRAY));
-    glVerify(glEnableClientState(GL_NORMAL_ARRAY));
-
-    glVerify(glVertexPointer(3, GL_FLOAT, sizeof(float) * 4, positions));
-    glVerify(glNormalPointer(GL_FLOAT, sizeof(float) * 4, normals));
-
-    glVerify(glDrawElements(GL_TRIANGLES, numTris * 3, GL_UNSIGNED_INT, indices));
-
-    glVerify(glDisableClientState(GL_VERTEX_ARRAY));
-    glVerify(glDisableClientState(GL_NORMAL_ARRAY));
-
-    if (twosided)
-      glEnable(GL_CULL_FACE);
-
-#if 1
-    if (program == GLint(s_diffuseProgram))
-    {
-      GLint uBias = glGetUniformLocation(s_diffuseProgram, "bias");
-      glUniform1f(uBias, g_shadowBias);
-
-      GLint uExpand = glGetUniformLocation(s_diffuseProgram, "expand");
-      glUniform1f(uExpand, 0.0f);
-    }
-#endif
-  }
-
-  void DrawRope(Vec4* positions, int* indices, int numIndices, float radius, int color)
-  {
-    if (numIndices < 2)
-      return;
-
-    std::vector<Vec3> vertices;
-    std::vector<Vec3> normals;
-    std::vector<int> triangles;
-
-    // flatten curve
-    std::vector<Vec3> curve(numIndices);
-    for (int i = 0; i < numIndices; ++i)
-      curve[i] = Vec3(positions[indices[i]]);
-
-    const int resolution = 8;
-    const int smoothing = 3;
-
-    vertices.reserve(resolution*numIndices*smoothing);
-    normals.reserve(resolution*numIndices*smoothing);
-    triangles.reserve(numIndices*resolution * 6 * smoothing);
-
-    Extrude(&curve[0], int(curve.size()), vertices, normals, triangles, radius, resolution, smoothing);
-
-    glVerify(glDisable(GL_CULL_FACE));
-    glVerify(glColor3fv(g_colors[color % 8] * 1.5f));
-    glVerify(glSecondaryColor3fv(g_colors[color % 8] * 1.5f));
-
-    glVerify(glBindBuffer(GL_ARRAY_BUFFER, 0));
-
-    glVerify(glEnableClientState(GL_VERTEX_ARRAY));
-    glVerify(glEnableClientState(GL_NORMAL_ARRAY));
-
-    glVerify(glVertexPointer(3, GL_FLOAT, sizeof(float) * 3, &vertices[0]));
-    glVerify(glNormalPointer(GL_FLOAT, sizeof(float) * 3, &normals[0]));
-
-    glVerify(glDrawElements(GL_TRIANGLES, GLsizei(triangles.size()), GL_UNSIGNED_INT, &triangles[0]));
-
-    glVerify(glDisableClientState(GL_VERTEX_ARRAY));
-    glVerify(glDisableClientState(GL_NORMAL_ARRAY));
-    glVerify(glEnable(GL_CULL_FACE));
-
-  }
-
-
-  struct ReflectMap
-  {
-    GLuint texture;
-
-    int width;
-    int height;
-  };
-
-  ReflectMap* ReflectCreate(int width, int height)
-  {
-    GLuint texture;
-
-    // copy frame buffer to texture
-    glVerify(glActiveTexture(GL_TEXTURE0));
-    glVerify(glEnable(GL_TEXTURE_2D));
-
-    glVerify(glGenTextures(1, &texture));
-    glVerify(glBindTexture(GL_TEXTURE_2D, texture));
-
-    glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
-    glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR));
-    glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
-    glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
-
-    glVerify(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL));
-
-    ReflectMap* map = new ReflectMap();
-    map->texture = texture;
-    map->width = width;
-    map->height = height;
-
-    return map;
-  }
-
-  void ReflectDestroy(ReflectMap* map)
-  {
-    glVerify(glDeleteTextures(1, &map->texture));
-
-    delete map;
-  }
-
-  void ReflectBegin(ReflectMap* map, Vec4 plane, int width, int height)
-  {
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glViewport(0, 0, width, height);
-
-    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-    Matrix44 scale = Matrix44::kIdentity;
-    scale.columns[0][0] *= -2.0f;
-    scale.columns[1][1] *= -2.0f;
-    scale.columns[2][2] *= -2.0f;
-    scale.columns[3][3] *= -2.0f;
-
-    Matrix44 reflect = (scale*Outer(Vec4(plane.x, plane.y, plane.z, 0.0f), plane));
-    reflect.columns[0][0] += 1.0f;
-    reflect.columns[1][1] += 1.0f;
-    reflect.columns[2][2] += 1.0f;
-    reflect.columns[3][3] += 1.0f;
-
-    glMatrixMode(GL_MODELVIEW);
-    glPushMatrix();
-    glMultMatrixf(reflect);
-
-    glVerify(glFrontFace(GL_CW));
-    glVerify(glEnable(GL_CLIP_PLANE0));
-
-    glVerify(glUniform4fv(glGetUniformLocation(s_diffuseProgram, "clipPlane"), 1, plane));
-  }
-
-  void ReflectEnd(ReflectMap* map, int width, int height)
-  {
-    // copy frame buffer to texture
-    glVerify(glActiveTexture(GL_TEXTURE0));
-    glVerify(glEnable(GL_TEXTURE_2D));
-    glVerify(glBindTexture(GL_TEXTURE_2D, map->texture));
-
-    glVerify(glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, width, height));
-
-    glMatrixMode(GL_MODELVIEW);
-    glPopMatrix();
-
-    glVerify(glDisable(GL_CLIP_PLANE0));
-    glVerify(glFrontFace(GL_CCW));
-
-    glBindFramebuffer(GL_FRAMEBUFFER, g_msaaFbo);
-
-    glViewport(0, 0, g_screenWidth, g_screenHeight);
-  }
-
-
-  //-----------------------------------------------------------------------------------------------------
-  // vertex shader
-
-  const char *vertexPointDepthShader = STRINGIFY(
-
-    uniform float pointRadius;  // point size in world space
-  uniform float pointScale;   // scale to calculate size in pixels
-
-  void main()
-  {
-    // calculate window-space point size
-    gl_Position = gl_ModelViewProjectionMatrix * vec4(gl_Vertex.xyz, 1.0);
-    gl_PointSize = pointScale * (pointRadius / gl_Position.w);
-
-    gl_TexCoord[0] = gl_MultiTexCoord0;
-    gl_TexCoord[1] = gl_ModelViewMatrix * vec4(gl_Vertex.xyz, 1.0);
-  }
-  );
-
-  // pixel shader for rendering points as shaded spheres
-  const char *fragmentPointDepthShader = STRINGIFY(
-
-    uniform float pointRadius;  // point size in world space
-
-  void main()
-  {
-    // calculate normal from texture coordinates
-    vec3 normal;
-    normal.xy = gl_TexCoord[0].xy*vec2(2.0, -2.0) + vec2(-1.0, 1.0);
-    float mag = dot(normal.xy, normal.xy);
-    if (mag > 1.0) discard;   // kill pixels outside circle
-    normal.z = sqrt(1.0 - mag);
-
-    vec3 eyePos = gl_TexCoord[1].xyz + normal*pointRadius*2.0;
-    vec4 ndcPos = gl_ProjectionMatrix * vec4(eyePos, 1.0);
-    ndcPos.z /= ndcPos.w;
-
-    gl_FragColor = vec4(eyePos.z, 1.0, 1.0, 1.0);
-    gl_FragDepth = ndcPos.z*0.5 + 0.5;
-  }
-  );
-
-
-  // pixel shader for rendering points density
-  const char *fragmentPointThicknessShader = STRINGIFY(
-
-    void main()
-  {
-    // calculate normal from texture coordinates
-    vec3 normal;
-    normal.xy = gl_TexCoord[0].xy*vec2(2.0, -2.0) + vec2(-1.0, 1.0);
-    float mag = dot(normal.xy, normal.xy);
-    if (mag > 1.0) discard;   // kill pixels outside circle
-    normal.z = sqrt(1.0 - mag);
-
-    gl_FragColor = vec4(normal.z*0.005);
-  }
-  );
-
-  //--------------------------------------------------------
-  // Ellipsoid shaders
-  //
-  const char *vertexEllipsoidDepthShader = "#version 120\n" STRINGIFY(
-
-    // rotation matrix in xyz, scale in w
-    attribute vec4 q1;
-  attribute vec4 q2;
-  attribute vec4 q3;
-
-  // returns 1.0 for x==0.0 (unlike glsl)
-  float Sign(float x) { return x < 0.0 ? -1.0 : 1.0; }
-
-  bool solveQuadratic(float a, float b, float c, out float minT, out float maxT)
-  {
-    if (a == 0.0 && b == 0.0)
-    {
-      minT = maxT = 0.0;
-      return false;
-    }
-
-    float discriminant = b*b - 4.0*a*c;
-
-    if (discriminant < 0.0)
-    {
-      return false;
-    }
-
-    float t = -0.5*(b + Sign(b)*sqrt(discriminant));
-    minT = t / a;
-    maxT = c / t;
-
-    if (minT > maxT)
-    {
-      float tmp = minT;
-      minT = maxT;
-      maxT = tmp;
-    }
-
-    return true;
-  }
-
-  float DotInvW(vec4 a, vec4 b) { return a.x*b.x + a.y*b.y + a.z*b.z - a.w*b.w; }
-
-  void main()
-  {
-    vec3 worldPos = gl_Vertex.xyz;// - vec3(0.0, 0.1*0.25, 0.0);	// hack move towards ground to account for anisotropy
-
-                                  // construct quadric matrix
-    mat4 q;
-    q[0] = vec4(q1.xyz*q1.w, 0.0);
-    q[1] = vec4(q2.xyz*q2.w, 0.0);
-    q[2] = vec4(q3.xyz*q3.w, 0.0);
-    q[3] = vec4(worldPos, 1.0);
-
-    // transforms a normal to parameter space (inverse transpose of (q*modelview)^-T)
-    mat4 invClip = transpose(gl_ModelViewProjectionMatrix*q);
-
-    // solve for the right hand bounds in homogenous clip space
-    float a1 = DotInvW(invClip[3], invClip[3]);
-    float b1 = -2.0f*DotInvW(invClip[0], invClip[3]);
-    float c1 = DotInvW(invClip[0], invClip[0]);
-
-    float xmin;
-    float xmax;
-    solveQuadratic(a1, b1, c1, xmin, xmax);
-
-    // solve for the right hand bounds in homogenous clip space
-    float a2 = DotInvW(invClip[3], invClip[3]);
-    float b2 = -2.0f*DotInvW(invClip[1], invClip[3]);
-    float c2 = DotInvW(invClip[1], invClip[1]);
-
-    float ymin;
-    float ymax;
-    solveQuadratic(a2, b2, c2, ymin, ymax);
-
-    gl_Position = vec4(worldPos.xyz, 1.0);
-    gl_TexCoord[0] = vec4(xmin, xmax, ymin, ymax);
-
-    // construct inverse quadric matrix (used for ray-casting in parameter space)
-    mat4 invq;
-    invq[0] = vec4(q1.xyz / q1.w, 0.0);
-    invq[1] = vec4(q2.xyz / q2.w, 0.0);
-    invq[2] = vec4(q3.xyz / q3.w, 0.0);
-    invq[3] = vec4(0.0, 0.0, 0.0, 1.0);
-
-    invq = transpose(invq);
-    invq[3] = -(invq*gl_Position);
-
-    // transform a point from view space to parameter space
-    invq = invq*gl_ModelViewMatrixInverse;
-
-    // pass down
-    gl_TexCoord[1] = invq[0];
-    gl_TexCoord[2] = invq[1];
-    gl_TexCoord[3] = invq[2];
-    gl_TexCoord[4] = invq[3];
-
-    // compute ndc pos for frustrum culling in GS
-    vec4 ndcPos = gl_ModelViewProjectionMatrix * vec4(worldPos.xyz, 1.0);
-    gl_TexCoord[5] = ndcPos / ndcPos.w;
-  }
-  );
-
-  const char* geometryEllipsoidDepthShader =
-    "#version 120\n"
-    "#extension GL_EXT_geometry_shader4 : enable\n"
-    STRINGIFY(
-      void main()
-  {
-    vec3 pos = gl_PositionIn[0].xyz;
-    vec4 bounds = gl_TexCoordIn[0][0];
-    vec4 ndcPos = gl_TexCoordIn[0][5];
-
-    // frustrum culling
-    const float ndcBound = 1.0;
-    if (ndcPos.x < -ndcBound) return;
-    if (ndcPos.x > ndcBound) return;
-    if (ndcPos.y < -ndcBound) return;
-    if (ndcPos.y > ndcBound) return;
-
-    float xmin = bounds.x;
-    float xmax = bounds.y;
-    float ymin = bounds.z;
-    float ymax = bounds.w;
-
-    // inv quadric transform
-    gl_TexCoord[0] = gl_TexCoordIn[0][1];
-    gl_TexCoord[1] = gl_TexCoordIn[0][2];
-    gl_TexCoord[2] = gl_TexCoordIn[0][3];
-    gl_TexCoord[3] = gl_TexCoordIn[0][4];
-
-    gl_Position = vec4(xmin, ymax, 0.0, 1.0);
-    EmitVertex();
-
-    gl_Position = vec4(xmin, ymin, 0.0, 1.0);
-    EmitVertex();
-
-    gl_Position = vec4(xmax, ymax, 0.0, 1.0);
-    EmitVertex();
-
-    gl_Position = vec4(xmax, ymin, 0.0, 1.0);
-    EmitVertex();
-  }
-  );
-
-  // pixel shader for rendering points as shaded spheres
-  const char *fragmentEllipsoidDepthShader = "#version 120\n" STRINGIFY(
-
-    uniform vec3 invViewport;
-  uniform vec3 invProjection;
-
-  float Sign(float x) { return x < 0.0 ? -1.0 : 1.0; }
-
-  bool solveQuadratic(float a, float b, float c, out float minT, out float maxT)
-  {
-    if (a == 0.0 && b == 0.0)
-    {
-      minT = maxT = 0.0;
-      return true;
-    }
-
-    float discriminant = b*b - 4.0*a*c;
-
-    if (discriminant < 0.0)
-    {
-      return false;
-    }
-
-    float t = -0.5*(b + Sign(b)*sqrt(discriminant));
-    minT = t / a;
-    maxT = c / t;
-
-    if (minT > maxT)
-    {
-      float tmp = minT;
-      minT = maxT;
-      maxT = tmp;
-    }
-
-    return true;
-  }
-
-  float sqr(float x) { return x*x; }
-
-  void main()
-  {
-    // transform from view space to parameter space
-    mat4 invQuadric;
-    invQuadric[0] = gl_TexCoord[0];
-    invQuadric[1] = gl_TexCoord[1];
-    invQuadric[2] = gl_TexCoord[2];
-    invQuadric[3] = gl_TexCoord[3];
-
-    vec4 ndcPos = vec4(gl_FragCoord.xy*invViewport.xy*vec2(2.0, 2.0) - vec2(1.0, 1.0), -1.0, 1.0);
-    vec4 viewDir = gl_ProjectionMatrixInverse*ndcPos;
-
-    // ray to parameter space
-    vec4 dir = invQuadric*vec4(viewDir.xyz, 0.0);
-    vec4 origin = invQuadric[3];
-
-    // set up quadratric equation
-    float a = sqr(dir.x) + sqr(dir.y) + sqr(dir.z);// - sqr(dir.w);
-    float b = dir.x*origin.x + dir.y*origin.y + dir.z*origin.z - dir.w*origin.w;
-    float c = sqr(origin.x) + sqr(origin.y) + sqr(origin.z) - sqr(origin.w);
-
-    float minT;
-    float maxT;
-
-    if (solveQuadratic(a, 2.0*b, c, minT, maxT))
-    {
-      vec3 eyePos = viewDir.xyz*minT;
-      vec4 ndcPos = gl_ProjectionMatrix * vec4(eyePos, 1.0);
-      ndcPos.z /= ndcPos.w;
-
-      gl_FragColor = vec4(eyePos.z, 1.0, 1.0, 1.0);
-      gl_FragDepth = ndcPos.z*0.5 + 0.5;
-
-      return;
-    }
-    else
-      discard;
-
-    gl_FragColor = vec4(0.5, 0.0, 0.0, 1.0);
-  }
-  );
-
-  //--------------------------------------------------------------------------------
-  // Composite shaders
-
-  const char* vertexPassThroughShader = STRINGIFY(
-
-    void main()
-  {
-    gl_Position = vec4(gl_Vertex.xyz, 1.0);
-    gl_TexCoord[0] = gl_MultiTexCoord0;
-  }
-  );
-
-  const char* fragmentBlurDepthShader =
-    "#extension GL_ARB_texture_rectangle : enable\n"
-    STRINGIFY(
-
-      uniform sampler2DRect depthTex;
-  uniform sampler2D thicknessTex;
-  uniform float blurRadiusWorld;
-  uniform float blurScale;
-  uniform float blurFalloff;
-  uniform vec2 invTexScale;
-
-  uniform bool debug;
-
-  float sqr(float x) { return x*x; }
-
-  void main()
-  {
-    // eye-space depth of center sample
-    float depth = texture2DRect(depthTex, gl_FragCoord.xy).x;
-    float thickness = texture2D(thicknessTex, gl_TexCoord[0].xy).x;
-
-    // hack: ENABLE_SIMPLE_FLUID
-    //thickness = 0.0f;
-
-    if (debug)
-    {
-      // do not blur
-      gl_FragColor.x = depth;
-      return;
-    }
-
-    // threshold on thickness to create nice smooth silhouettes
-    if (depth == 0.0)//|| thickness < 0.02f)
-    {
-      gl_FragColor.x = 0.0;
-      return;
-    }
-
-    /*
-    float dzdx = dFdx(depth);
-    float dzdy = dFdy(depth);
-
-    // handle edge case
-    if (max(abs(dzdx), abs(dzdy)) > 0.05)
-    {
-    dzdx = 0.0;
-    dzdy = 0.0;
-
-    gl_FragColor.x = depth;
-    return;
-    }
-    */
-
-    float blurDepthFalloff = 5.5;//blurFalloff*mix(4.0, 1.0, thickness)/blurRadiusWorld*0.0375;	// these constants are just a re-scaling from some known good values
-
-    float maxBlurRadius = 5.0;
-    //float taps = min(maxBlurRadius, blurScale * (blurRadiusWorld / -depth));
-    //vec2 blurRadius = min(mix(0.25, 2.0/blurFalloff, thickness) * blurScale * (blurRadiusWorld / -depth) / taps, 0.15)*invTexScale;
-
-    //discontinuities between different tap counts are visible. to avoid this we 
-    //use fractional contributions between #taps = ceil(radius) and floor(radius) 
-    float radius = min(maxBlurRadius, blurScale * (blurRadiusWorld / -depth));
-    float radiusInv = 1.0 / radius;
-    float taps = ceil(radius);
-    float frac = taps - radius;
-
-    float sum = 0.0;
-    float wsum = 0.0;
-    float count = 0.0;
-
-    for (float y = -taps; y <= taps; y += 1.0)
-    {
-      for (float x = -taps; x <= taps; x += 1.0)
-      {
-        vec2 offset = vec2(x, y);
-
-        float sample = texture2DRect(depthTex, gl_FragCoord.xy + offset).x;
-
-        if (sample < -10000.0*0.5)
-          continue;
-
-        // spatial domain
-        float r1 = length(vec2(x, y))*radiusInv;
-        float w = exp(-(r1*r1));
-
-        //float expectedDepth = depth + dot(vec2(dzdx, dzdy), offset);
-
-        // range domain (based on depth difference)
-        float r2 = (sample - depth) * blurDepthFalloff;
-        float g = exp(-(r2*r2));
-
-        //fractional radius contributions
-        float wBoundary = step(radius, max(abs(x), abs(y)));
-        float wFrac = 1.0 - wBoundary*frac;
-
-        sum += sample * w * g * wFrac;
-        wsum += w * g * wFrac;
-        count += g * wFrac;
-      }
-    }
-
-    if (wsum > 0.0) {
-      sum /= wsum;
-    }
-
-    float blend = count / sqr(2.0*radius + 1.0);
-    gl_FragColor.x = mix(depth, sum, blend);
-  }
-  );
-
-  const char* fragmentCompositeShader = STRINGIFY(
-
-    uniform sampler2D tex;
-  uniform vec2 invTexScale;
-  uniform vec3 lightPos;
-  uniform vec3 lightDir;
-  uniform float spotMin;
-  uniform float spotMax;
-  uniform vec4 color;
-  uniform float ior;
-
-  uniform vec2 clipPosToEye;
-
-  uniform sampler2D reflectTex;
-  uniform sampler2DShadow shadowTex;
-  uniform vec2 shadowTaps[12];
-  uniform mat4 lightTransform;
-
-  uniform sampler2D thicknessTex;
-  uniform sampler2D sceneTex;
-
-  uniform bool debug;
-
-  // sample shadow map
-  float shadowSample(vec3 worldPos, out float attenuation)
-  {
-    // hack: ENABLE_SIMPLE_FLUID
-    //attenuation = 0.0f;
-    //return 0.5;
-
-    vec4 pos = lightTransform*vec4(worldPos + lightDir*0.15, 1.0);
-    pos /= pos.w;
-    vec3 uvw = (pos.xyz*0.5) + vec3(0.5);
-
-    attenuation = max(smoothstep(spotMax, spotMin, dot(pos.xy, pos.xy)), 0.05);
-
-    // user clip
-    if (uvw.x  < 0.0 || uvw.x > 1.0)
-      return 1.0;
-    if (uvw.y < 0.0 || uvw.y > 1.0)
-      return 1.0;
-
-    float s = 0.0;
-    float radius = 0.002;
-
-    for (int i = 0; i < 8; i++)
-    {
-      s += shadow2D(shadowTex, vec3(uvw.xy + shadowTaps[i] * radius, uvw.z)).r;
-    }
-
-    s /= 8.0;
-    return s;
-  }
-
-  vec3 viewportToEyeSpace(vec2 coord, float eyeZ)
-  {
-    // find position at z=1 plane
-    vec2 uv = (coord*2.0 - vec2(1.0))*clipPosToEye;
-
-    return vec3(-uv*eyeZ, eyeZ);
-  }
-
-  vec3 srgbToLinear(vec3 c) { return pow(c, vec3(2.2)); }
-  vec3 linearToSrgb(vec3 c) { return pow(c, vec3(1.0 / 2.2)); }
-
-  float sqr(float x) { return x*x; }
-  float cube(float x) { return x*x*x; }
-
-  void main()
-  {
-    float eyeZ = texture2D(tex, gl_TexCoord[0].xy).x;
-
-    if (eyeZ == 0.0)
-      discard;
-
-    // reconstruct eye space pos from depth
-    vec3 eyePos = viewportToEyeSpace(gl_TexCoord[0].xy, eyeZ);
-
-    // finite difference approx for normals, can't take dFdx because
-    // the one-sided difference is incorrect at shape boundaries
-    vec3 zl = eyePos - viewportToEyeSpace(gl_TexCoord[0].xy - vec2(invTexScale.x, 0.0), texture2D(tex, gl_TexCoord[0].xy - vec2(invTexScale.x, 0.0)).x);
-    vec3 zr = viewportToEyeSpace(gl_TexCoord[0].xy + vec2(invTexScale.x, 0.0), texture2D(tex, gl_TexCoord[0].xy + vec2(invTexScale.x, 0.0)).x) - eyePos;
-    vec3 zt = viewportToEyeSpace(gl_TexCoord[0].xy + vec2(0.0, invTexScale.y), texture2D(tex, gl_TexCoord[0].xy + vec2(0.0, invTexScale.y)).x) - eyePos;
-    vec3 zb = eyePos - viewportToEyeSpace(gl_TexCoord[0].xy - vec2(0.0, invTexScale.y), texture2D(tex, gl_TexCoord[0].xy - vec2(0.0, invTexScale.y)).x);
-
-    vec3 dx = zl;
-    vec3 dy = zt;
-
-    if (abs(zr.z) < abs(zl.z))
-      dx = zr;
-
-    if (abs(zb.z) < abs(zt.z))
-      dy = zb;
-
-    //vec3 dx = dFdx(eyePos.xyz);
-    //vec3 dy = dFdy(eyePos.xyz);
-
-    vec4 worldPos = gl_ModelViewMatrixInverse*vec4(eyePos, 1.0);
-
-    float attenuation;
-    float shadow = shadowSample(worldPos.xyz, attenuation);
-
-    vec3 l = (gl_ModelViewMatrix*vec4(lightDir, 0.0)).xyz;
-    vec3 v = -normalize(eyePos);
-
-    vec3 n = normalize(cross(dx, dy));
-    vec3 h = normalize(v + l);
-
-    vec3 skyColor = vec3(0.1, 0.2, 0.4)*1.2;
-    vec3 groundColor = vec3(0.1, 0.1, 0.2);
-
-    float fresnel = 0.1 + (1.0 - 0.1)*cube(1.0 - max(dot(n, v), 0.0));
-
-    vec3 lVec = normalize(worldPos.xyz - lightPos);
-
-    float ln = dot(l, n)*attenuation;
-
-    vec3 rEye = reflect(-v, n).xyz;
-    vec3 rWorld = (gl_ModelViewMatrixInverse*vec4(rEye, 0.0)).xyz;
-
-    vec2 texScale = vec2(0.75, 1.0);	// to account for backbuffer aspect ratio (todo: pass in)
-
-    float refractScale = ior*0.025;
-    float reflectScale = ior*0.1;
-
-    // attenuate refraction near ground (hack)
-    refractScale *= smoothstep(0.1, 0.4, worldPos.y);
-
-    vec2 refractCoord = gl_TexCoord[0].xy + n.xy*refractScale*texScale;
-    //vec2 refractCoord = gl_TexCoord[0].xy + refract(-v, n, 1.0/1.33)*refractScale*texScale;	
-
-    // read thickness from refracted coordinate otherwise we get halos around objectsw
-    float thickness = max(texture2D(thicknessTex, refractCoord).x, 0.3);
-
-    //vec3 transmission = exp(-(vec3(1.0)-color.xyz)*thickness);
-    vec3 transmission = (1.0 - (1.0 - color.xyz)*thickness*0.8)*color.w;
-    vec3 refract = texture2D(sceneTex, refractCoord).xyz*transmission;
-
-    vec2 sceneReflectCoord = gl_TexCoord[0].xy - rEye.xy*texScale*reflectScale / eyePos.z;
-    vec3 sceneReflect = (texture2D(sceneTex, sceneReflectCoord).xyz)*shadow;
-
-    vec3 planarReflect = texture2D(reflectTex, gl_TexCoord[0].xy).xyz;
-    planarReflect = vec3(0.0);
-
-    // fade out planar reflections above the ground
-    vec3 reflect = mix(planarReflect, sceneReflect, smoothstep(0.05, 0.3, worldPos.y)) + mix(groundColor, skyColor, smoothstep(0.15, 0.25, rWorld.y)*shadow);
-
-    // lighting
-    vec3 diffuse = color.xyz*mix(vec3(0.29, 0.379, 0.59), vec3(1.0), (ln*0.5 + 0.5)*max(shadow, 0.4))*(1.0 - color.w);
-    vec3 specular = vec3(1.2*pow(max(dot(h, n), 0.0), 400.0));
-
-    gl_FragColor.xyz = diffuse + (mix(refract, reflect, fresnel) + specular)*color.w;
-    gl_FragColor.w = 1.0;
-
-    if (debug)
-      gl_FragColor = vec4(n*0.5 + vec3(0.5), 1.0);
-
-    // write valid z
-    vec4 clipPos = gl_ProjectionMatrix*vec4(0.0, 0.0, eyeZ, 1.0);
-    clipPos.z /= clipPos.w;
-
-    gl_FragDepth = clipPos.z*0.5 + 0.5;
-  }
-  );
-
-
-  FluidRenderer* CreateFluidRenderer(uint32_t width, uint32_t height)
-  {
-    FluidRenderer* renderer = new FluidRenderer();
-
-    renderer->mSceneWidth = width;
-    renderer->mSceneHeight = height;
-
-    // scene depth texture
-    glVerify(glGenTextures(1, &renderer->mDepthTex));
-    glVerify(glBindTexture(GL_TEXTURE_RECTANGLE_ARB, renderer->mDepthTex));
-
-    glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
-    glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
-    glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
-    glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
-    glVerify(glTexImage2D(GL_TEXTURE_RECTANGLE_ARB, 0, GL_LUMINANCE32F_ARB, width, height, 0, GL_LUMINANCE, GL_FLOAT, NULL));
-
-    // smoothed depth texture
-    glVerify(glGenTextures(1, &renderer->mDepthSmoothTex));
-    glVerify(glBindTexture(GL_TEXTURE_2D, renderer->mDepthSmoothTex));
-
-    glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
-    glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
-    glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
-    glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
-    glVerify(glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE32F_ARB, width, height, 0, GL_LUMINANCE, GL_FLOAT, NULL));
-
-    // scene copy
-    glVerify(glGenTextures(1, &renderer->mSceneTex));
-    glVerify(glBindTexture(GL_TEXTURE_2D, renderer->mSceneTex));
-
-    glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
-    glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR));
-    glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
-    glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
-    glVerify(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL));
-
-    glVerify(glGenFramebuffers(1, &renderer->mSceneFbo));
-    glVerify(glBindFramebuffer(GL_FRAMEBUFFER, renderer->mSceneFbo));
-    glVerify(glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, renderer->mSceneTex, 0));
-
-    // frame buffer
-    glVerify(glGenFramebuffers(1, &renderer->mDepthFbo));
-    glVerify(glBindFramebuffer(GL_FRAMEBUFFER, renderer->mDepthFbo));
-    glVerify(glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_RECTANGLE_ARB, renderer->mDepthTex, 0));
-
-    GLuint zbuffer;
-    glVerify(glGenRenderbuffers(1, &zbuffer));
-    glVerify(glBindRenderbuffer(GL_RENDERBUFFER, zbuffer));
-    glVerify(glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, width, height));
-    glVerify(glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, zbuffer));
-
-    glVerify(glDrawBuffer(GL_COLOR_ATTACHMENT0));
-    glVerify(glReadBuffer(GL_COLOR_ATTACHMENT0));
-
-    glCheckFramebufferStatus(GL_FRAMEBUFFER);
-    glBindFramebuffer(GL_FRAMEBUFFER, g_msaaFbo);
-
-    // reflect texture
-    glVerify(glGenTextures(1, &renderer->mReflectTex));
-    glVerify(glBindTexture(GL_TEXTURE_2D, renderer->mReflectTex));
-
-    glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
-    glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR));
-    glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
-    glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
-    glVerify(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL));
-
-    // thickness texture
-    const int thicknessWidth = width;
-    const int thicknessHeight = height;
-
-    glVerify(glGenTextures(1, &renderer->mThicknessTex));
-    glVerify(glBindTexture(GL_TEXTURE_2D, renderer->mThicknessTex));
-
-    glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
-    glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR));
-    glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
-    glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
-
-#if USE_HDR_DIFFUSE_BLEND	
-    glVerify(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, thicknessWidth, thicknessHeight, 0, GL_RGBA, GL_FLOAT, NULL));
-#else
-    glVerify(glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, thicknessWidth, thicknessHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL));
-#endif
-
-    // thickness buffer
-    glVerify(glGenFramebuffers(1, &renderer->mThicknessFbo));
-    glVerify(glBindFramebuffer(GL_FRAMEBUFFER, renderer->mThicknessFbo));
-    glVerify(glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, renderer->mThicknessTex, 0));
-
-    GLuint thickz;
-    glVerify(glGenRenderbuffers(1, &thickz));
-    glVerify(glBindRenderbuffer(GL_RENDERBUFFER, thickz));
-    glVerify(glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, thicknessWidth, thicknessHeight));
-    glVerify(glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, thickz));
-
-    glCheckFramebufferStatus(GL_FRAMEBUFFER);
-    glBindFramebuffer(GL_FRAMEBUFFER, g_msaaFbo);
-
-    // compile shaders
-    //renderer->mPointDepthProgram = CompileProgram(vertexPointDepthShader, fragmentPointDepthShader);
-    renderer->mPointThicknessProgram = CompileProgram(vertexPointDepthShader, fragmentPointThicknessShader);
-
-    //renderer->mEllipsoidThicknessProgram = CompileProgram(vertexEllipsoidDepthShader, fragmentEllipsoidThicknessShader);
-    renderer->mEllipsoidDepthProgram = CompileProgram(vertexEllipsoidDepthShader, fragmentEllipsoidDepthShader, geometryEllipsoidDepthShader);
-
-    renderer->mCompositeProgram = CompileProgram(vertexPassThroughShader, fragmentCompositeShader);
-    renderer->mDepthBlurProgram = CompileProgram(vertexPassThroughShader, fragmentBlurDepthShader);
-
-    return renderer;
-  }
-
-  void DestroyFluidRenderer(FluidRenderer* renderer)
-  {
-    glVerify(glDeleteFramebuffers(1, &renderer->mSceneFbo));
-    glVerify(glDeleteFramebuffers(1, &renderer->mDepthFbo));
-    glVerify(glDeleteTextures(1, &renderer->mDepthTex));
-    glVerify(glDeleteTextures(1, &renderer->mDepthSmoothTex));
-    glVerify(glDeleteTextures(1, &renderer->mSceneTex));
-
-    glVerify(glDeleteFramebuffers(1, &renderer->mThicknessFbo));
-    glVerify(glDeleteTextures(1, &renderer->mThicknessTex));
-  }
-
-  FluidRenderBuffers* CreateFluidRenderBuffers(int numFluidParticles, bool enableInterop)
-  {
-    FluidRenderBuffersGL* buffers = new FluidRenderBuffersGL(numFluidParticles);
-
-    // vbos
-    glVerify(glGenBuffers(1, &buffers->mPositionVBO));
-    glVerify(glBindBuffer(GL_ARRAY_BUFFER, buffers->mPositionVBO));
-    glVerify(glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 4 * numFluidParticles, 0, GL_DYNAMIC_DRAW));
-
-    // density
-    glVerify(glGenBuffers(1, &buffers->mDensityVBO));
-    glVerify(glBindBuffer(GL_ARRAY_BUFFER, buffers->mDensityVBO));
-    glVerify(glBufferData(GL_ARRAY_BUFFER, sizeof(int)*numFluidParticles, 0, GL_DYNAMIC_DRAW));
-
-    for (int i = 0; i < 3; ++i)
-    {
-      glVerify(glGenBuffers(1, &buffers->mAnisotropyVBO[i]));
-      glVerify(glBindBuffer(GL_ARRAY_BUFFER, buffers->mAnisotropyVBO[i]));
-      glVerify(glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 4 * numFluidParticles, 0, GL_DYNAMIC_DRAW));
-    }
-
-    glVerify(glGenBuffers(1, &buffers->mIndices));
-    glVerify(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffers->mIndices));
-    glVerify(glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(int)*numFluidParticles, 0, GL_DYNAMIC_DRAW));
-
-    if (enableInterop)
-    {
-      buffers->mPositionBuf = NvFlexRegisterOGLBuffer(g_flexLib, buffers->mPositionVBO, numFluidParticles, sizeof(Vec4));
-      buffers->mDensitiesBuf = NvFlexRegisterOGLBuffer(g_flexLib, buffers->mDensityVBO, numFluidParticles, sizeof(float));
-      buffers->mIndicesBuf = NvFlexRegisterOGLBuffer(g_flexLib, buffers->mIndices, numFluidParticles, sizeof(int));
-
-      buffers->mAnisotropyBuf[0] = NvFlexRegisterOGLBuffer(g_flexLib, buffers->mAnisotropyVBO[0], numFluidParticles, sizeof(Vec4));
-      buffers->mAnisotropyBuf[1] = NvFlexRegisterOGLBuffer(g_flexLib, buffers->mAnisotropyVBO[1], numFluidParticles, sizeof(Vec4));
-      buffers->mAnisotropyBuf[2] = NvFlexRegisterOGLBuffer(g_flexLib, buffers->mAnisotropyVBO[2], numFluidParticles, sizeof(Vec4));
-    }
-
-    return reinterpret_cast<FluidRenderBuffers*>(buffers);
-  }
-
-  void DestroyFluidRenderBuffers(FluidRenderBuffers* buffers)
-  {
-    delete reinterpret_cast<FluidRenderBuffersGL*>(buffers);
-  }
-
-  void UpdateFluidRenderBuffers(FluidRenderBuffers* buffersIn, NvFlexSolver* solver, bool anisotropy, bool density)
-  {
-    FluidRenderBuffersGL* buffers = reinterpret_cast<FluidRenderBuffersGL*>(buffersIn);
-    // use VBO buffer wrappers to allow Flex to write directly to the OpenGL buffers
-    // Flex will take care of any CUDA interop mapping/unmapping during the get() operations
-    if (!anisotropy)
-    {
-      // regular particles
-      NvFlexGetParticles(solver, buffers->mPositionBuf, NULL);
-    }
-    else
-    {
-      // fluid buffers
-      NvFlexGetSmoothParticles(solver, buffers->mPositionBuf, NULL);
-      NvFlexGetAnisotropy(solver, buffers->mAnisotropyBuf[0], buffers->mAnisotropyBuf[1], buffers->mAnisotropyBuf[2], NULL);
-    }
-
-    if (density)
-    {
-      NvFlexGetDensities(solver, buffers->mDensitiesBuf, NULL);
-    }
-    else
-    {
-      NvFlexGetPhases(solver, buffers->mDensitiesBuf, NULL);
-    }
-
-    NvFlexGetActive(solver, buffers->mIndicesBuf, NULL);
-  }
-
-  void UpdateFluidRenderBuffers(FluidRenderBuffers* buffersIn, Vec4* particles, float* densities, Vec4* anisotropy1, Vec4* anisotropy2, Vec4* anisotropy3, int numParticles, int* indices, int numIndices)
-  {
-    FluidRenderBuffersGL* buffers = reinterpret_cast<FluidRenderBuffersGL*>(buffersIn);
-    // regular particles
-    glVerify(glBindBuffer(GL_ARRAY_BUFFER, buffers->mPositionVBO));
-    glVerify(glBufferSubData(GL_ARRAY_BUFFER, 0, buffers->mNumParticles * sizeof(Vec4), particles));
-
-    Vec4*const anisotropies[] =
-    {
-      anisotropy1,
-      anisotropy2,
-      anisotropy3,
-    };
-
-    for (int i = 0; i < 3; i++)
-    {
-      Vec4* anisotropy = anisotropies[i];
-      if (anisotropy)
-      {
-        glVerify(glBindBuffer(GL_ARRAY_BUFFER, buffers->mAnisotropyVBO[i]));
-        glVerify(glBufferSubData(GL_ARRAY_BUFFER, 0, buffers->mNumParticles * sizeof(Vec4), anisotropy));
-      }
-    }
-
-    // density /phase buffer
-    if (densities)
-    {
-      glVerify(glBindBuffer(GL_ARRAY_BUFFER, buffers->mDensityVBO));
-      glVerify(glBufferSubData(GL_ARRAY_BUFFER, 0, buffers->mNumParticles * sizeof(float), densities));
-    }
-
-    if (indices)
-    {
-      glVerify(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffers->mIndices));
-      glVerify(glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, numIndices * sizeof(int), indices));
-    }
-
-    // reset
-    glVerify(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0));
-    glVerify(glBindBuffer(GL_ARRAY_BUFFER, 0));
-  }
-
-  DiffuseRenderBuffers* CreateDiffuseRenderBuffers(int numDiffuseParticles, bool& enableInterop)
-  {
-    DiffuseRenderBuffersGL* buffers = new DiffuseRenderBuffersGL(numDiffuseParticles);
-
-    if (numDiffuseParticles > 0)
-    {
-      glVerify(glGenBuffers(1, &buffers->mDiffusePositionVBO));
-      glVerify(glBindBuffer(GL_ARRAY_BUFFER, buffers->mDiffusePositionVBO));
-      glVerify(glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 4 * numDiffuseParticles, 0, GL_DYNAMIC_DRAW));
-      glVerify(glBindBuffer(GL_ARRAY_BUFFER, 0));
-
-      glVerify(glGenBuffers(1, &buffers->mDiffuseVelocityVBO));
-      glVerify(glBindBuffer(GL_ARRAY_BUFFER, buffers->mDiffuseVelocityVBO));
-      glVerify(glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 4 * numDiffuseParticles, 0, GL_DYNAMIC_DRAW));
-      glVerify(glBindBuffer(GL_ARRAY_BUFFER, 0));
-
-      if (enableInterop)
-      {
-        buffers->mDiffusePositionsBuf = NvFlexRegisterOGLBuffer(g_flexLib, buffers->mDiffusePositionVBO, numDiffuseParticles, sizeof(Vec4));
-        buffers->mDiffuseVelocitiesBuf = NvFlexRegisterOGLBuffer(g_flexLib, buffers->mDiffuseVelocityVBO, numDiffuseParticles, sizeof(Vec4));
-      }
-    }
-
-    return reinterpret_cast<DiffuseRenderBuffers*>(buffers);
-  }
-
-  void DestroyDiffuseRenderBuffers(DiffuseRenderBuffers* buffersIn)
-  {
-    DiffuseRenderBuffersGL* buffers = reinterpret_cast<DiffuseRenderBuffersGL*>(buffersIn);
-    if (buffers->mNumParticles > 0)
-    {
-      glDeleteBuffers(1, &buffers->mDiffusePositionVBO);
-      glDeleteBuffers(1, &buffers->mDiffuseVelocityVBO);
-
-      NvFlexUnregisterOGLBuffer(buffers->mDiffusePositionsBuf);
-      NvFlexUnregisterOGLBuffer(buffers->mDiffuseVelocitiesBuf);
-    }
-  }
-
-  void UpdateDiffuseRenderBuffers(DiffuseRenderBuffers* buffersIn, NvFlexSolver* solver)
-  {
-    DiffuseRenderBuffersGL* buffers = reinterpret_cast<DiffuseRenderBuffersGL*>(buffersIn);
-    // diffuse particles
-    if (buffers->mNumParticles)
-    {
-      NvFlexGetDiffuseParticles(solver, buffers->mDiffusePositionsBuf, buffers->mDiffuseVelocitiesBuf, NULL);
-    }
-  }
-
-  void UpdateDiffuseRenderBuffers(DiffuseRenderBuffers* buffersIn, Vec4* diffusePositions, Vec4* diffuseVelocities, int numDiffuseParticles)
-  {
-    DiffuseRenderBuffersGL* buffers = reinterpret_cast<DiffuseRenderBuffersGL*>(buffersIn);
-    // diffuse particles
-    if (buffers->mNumParticles)
-    {
-      glVerify(glBindBuffer(GL_ARRAY_BUFFER, buffers->mDiffusePositionVBO));
-      glVerify(glBufferSubData(GL_ARRAY_BUFFER, 0, buffers->mNumParticles * sizeof(Vec4), diffusePositions));
-
-      glVerify(glBindBuffer(GL_ARRAY_BUFFER, buffers->mDiffuseVelocityVBO));
-      glVerify(glBufferSubData(GL_ARRAY_BUFFER, 0, buffers->mNumParticles * sizeof(Vec4), diffuseVelocities));
-    }
-  }
-  
   GpuMesh* CreateGpuMesh(const Mesh* m)
   {
   	GpuMesh* mesh = new GpuMesh();
@@ -2652,7 +1821,7 @@ void DestroyRenderTexture(RenderTexture* t)
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_BLEND);
 
-    glLineWidth(1.0f);
+    glLineWidth(2.5f);
 
     for (int i = 0; i < 8; ++i)
     {
@@ -2736,34 +1905,30 @@ void DestroyRenderTexture(RenderTexture* t)
     imguiGraphDraw();
   }
 
-  // For hydrographics
-  void BindHydrographicShader(Vec3 lightPos, Vec3 lightTarget, Matrix44 lightTransform, ShadowMap* shadowMap, float bias, Vec4 fogColor)
-  {
-    glVerify(glViewport(0, 0, g_screenWidth, g_screenHeight));
-
-    if (s_hydrographicProgram == GLuint(-1))
-    {
-      s_hydrographicProgram = CompileProgram(vertexHydrographicShader, fragmentHydrographicShader);
-    }
-
-    if (s_hydrographicProgram)
-    {
-      glDepthMask(GL_TRUE);
-      glEnable(GL_DEPTH_TEST);
-
-      glVerify(glUseProgram(s_hydrographicProgram));
-
-      glVerify(glUniform1i(glGetUniformLocation(s_hydrographicProgram, "grid"), 0));
-      glVerify(glUniform1f(glGetUniformLocation(s_hydrographicProgram, "spotMin"), g_spotMin));
-      glVerify(glUniform1f(glGetUniformLocation(s_hydrographicProgram, "spotMax"), g_spotMax));
-      glVerify(glUniform4fv(glGetUniformLocation(s_hydrographicProgram, "fogColor"), 1, fogColor));
-
-      glVerify(glUniformMatrix4fv(glGetUniformLocation(s_hydrographicProgram, "objectTransform"), 1, false, Matrix44::kIdentity));
-
-      // set shadow parameters
-      ShadowApply(s_hydrographicProgram, lightPos, lightTarget, lightTransform, shadowMap->texture);
-    }
-  }
+  // not implemented - legacy from Flex - only bypass the methods for binary compatibility with the original Flex interface
+  void DrawCloth(const Vec4* positions, const Vec4* normals, const float* uvs, const int* indices, int numTris, int numPositions, int colorIndex, float expand, bool twosided, bool smooth) {}
+  void DrawPlanes(Vec4* planes, int n, float bias) {}
+  void DrawPoints(FluidRenderBuffers* buffersIn, int n, int offset, float radius, float screenWidth, float screenAspect, float fov, Vec3 lightPos, Vec3 lightTarget, Matrix44 lightTransform, ShadowMap* shadowMap, bool showDensity) {}
+  void DrawMesh(const Mesh* m, Vec3 color) {}
+  void BindSolidShader(Vec3 lightPos, Vec3 lightTarget, Matrix44 lightTransform, ShadowMap* shadowMap, float bias, Vec4 fogColor) {}
+  void UnbindSolidShader() {}
+  ShadowMap* ShadowCreate() { return nullptr; }
+  void ShadowEnd() {}
+  void SetMaterial(const Matrix44& xform, const RenderMaterial& mat) {}
+  void ShadowDestroy(ShadowMap* map) {}
+  void ShadowBegin(ShadowMap* map) {}
+  void DrawRope(Vec4* positions, int* indices, int numIndices, float radius, int color) {}
+  void BindHydrographicShader(Vec3 lightPos, Vec3 lightTarget, Matrix44 lightTransform, ShadowMap* shadowMap, float bias, Vec4 fogColor) {}
+  DiffuseRenderBuffers* CreateDiffuseRenderBuffers(int numDiffuseParticles, bool& enableInterop) { return nullptr; }
+  void DestroyFluidRenderer(FluidRenderer* renderer) {}
+  FluidRenderBuffers* CreateFluidRenderBuffers(int numFluidParticles, bool enableInterop) { return nullptr; }
+  void UpdateFluidRenderBuffers(FluidRenderBuffers* buffersIn, NvFlexSolver* solver, bool anisotropy, bool density) {}
+  FluidRenderer* CreateFluidRenderer(uint32_t width, uint32_t height) { return nullptr; }
+  void UpdateFluidRenderBuffers(FluidRenderBuffers* buffersIn, Vec4* particles, float* densities, Vec4* anisotropy1, Vec4* anisotropy2, Vec4* anisotropy3, int numParticles, int* indices, int numIndices) {}
+  void DestroyFluidRenderBuffers(FluidRenderBuffers* buffers) {}
+  void DestroyDiffuseRenderBuffers(DiffuseRenderBuffers* buffersIn) {}
+  void UpdateDiffuseRenderBuffers(DiffuseRenderBuffers* buffersIn, NvFlexSolver* solver) {}
+  void UpdateDiffuseRenderBuffers(DiffuseRenderBuffers* buffersIn, Vec4* diffusePositions, Vec4* diffuseVelocities, int numDiffuseParticles) {}
 
 }	// OGL Renderer
 
@@ -3119,11 +2284,9 @@ void EndFrameV2()
     glVerify(glBindFramebuffer(GL_DRAW_FRAMEBUFFER_EXT, 0));
     glVerify(glBlitFramebuffer(0, 0, g_screenWidth, g_screenHeight, 0, 0, g_screenWidth, g_screenHeight, GL_COLOR_BUFFER_BIT, GL_LINEAR));
   }
-
   // render help to back buffer
   glVerify(glBindFramebuffer(GL_FRAMEBUFFER, 0));
   glVerify(glClear(GL_DEPTH_BUFFER_BIT));
-
 }
 
 void drawPlane() {
@@ -3279,20 +2442,21 @@ void DrawGpuMeshV2(GpuMesh* m, const Matrix44& modelMat, bool showTexture)
   if (m)
   {
     int hasTexture = showTexture && m->texCoordsRigid.size() > 0 ? 1 : 0;
-    if (hasTexture) 
+    if (hasTexture)
     {
       //Enable texture
       glVerify(glBindTexture(GL_TEXTURE_2D, m->mTextureId));
       glVerify(glEnable(GL_TEXTURE_2D));
       glVerify(glActiveTexture(GL_TEXTURE0));
-      glVerify(glUniform1i(glGetUniformLocation(s_diffuseProgramV2, "tex"), 0));
+      glVerify(glUniform1i(glGetUniformLocation(s_rigidBodyProgram, "tex"), 0));
       //Consider if it has a texture loaded to bind it
-      glVerify(glUniform1i(glGetUniformLocation(s_diffuseProgramV2, "showTexture"), hasTexture));
+      glVerify(glUniform1i(glGetUniformLocation(s_rigidBodyProgram, "showTexture"), hasTexture));
     }
+    glVerify(glUniform1i(glGetUniformLocation(s_rigidBodyProgram, "showPhong"), 1));
     //Setup normal and model mat
-    glVerify(glUniformMatrix4fv(glGetUniformLocation(s_diffuseProgramV2, "normalMat"), 1, false, Transpose(AffineInverse(modelMat))));
-    glVerify(glUniformMatrix4fv(glGetUniformLocation(s_diffuseProgramV2, "model"), 1, false, modelMat));
-    
+    glVerify(glUniformMatrix4fv(glGetUniformLocation(s_rigidBodyProgram, "normalMat"), 1, false, Transpose(AffineInverse(modelMat))));
+    glVerify(glUniformMatrix4fv(glGetUniformLocation(s_rigidBodyProgram, "model"), 1, false, modelMat));
+
     // bind buffers
     glBindBuffer(GL_ARRAY_BUFFER, m->mPositionsVBO);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
@@ -3306,7 +2470,7 @@ void DrawGpuMeshV2(GpuMesh* m, const Matrix44& modelMat, bool showTexture)
       glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, 0);
       glEnableVertexAttribArray(2);
     }
-    
+
     glDrawArrays(GL_TRIANGLES, 0, m->mNumVertices);
 
     glDisableVertexAttribArray(0);
@@ -3340,67 +2504,18 @@ Vec2 InterpolateTextureCoordinates(Vec2 textCoordV0, Vec2 textCoordV1, Vec2 text
   return interpolatedTexCoords;
 }
 
-bool isSeam()
-{
-  return false;
-}
 
-void FindTextureSeamV2(Vec3 v0, Vec3 v1, Vec3 v2, Vec2 textCoordV0, Vec2 textCoordV1, Vec2 textCoordV2)
+void FindTextureSeam(Vec3 v0, Vec3 v1, Vec3 v2, Vec2 textCoordV0, Vec2 textCoordV1, Vec2 textCoordV2, PngImage textureImage)
 {
   // parameters
-  float epsilon = 0.08f;
-  float treshold = 0.4f;
-  // initial values
-  float w = 1.0f, u = 0.0f, v = 0.0f;
-  Vec2 textureAnt = w * textCoordV0 + u * textCoordV1 + v * textCoordV2;
-  BeginPoints(3.0f);
-  while (w > .0f)
-  {
-    while (u <= 1.0f)
-    {
-      v = .0f, w = 1 - (u + v);
-      while (v <= 1.0f)
-      {
-        Vec3 p = w * v0 + u * v1 + v * v2; // compute arbitrary position given barycentric coordinates
-
-                                           // Debug triangle sampler
-                                           // com o triangulo da malha rigida, encontrar o ponto de interseccao e reinterpolar as coordenadas
-                                           // detectar a descontinuidade na reinterpolacao
-        Vec2 textureP = InterpolateTextureCoordinates(textCoordV0, textCoordV1, textCoordV2, u, v, w);
-        if (Length(textureP - textureAnt) > treshold) // is a seam
-        {
-          // seam jump texture
-          DrawPoint(p, Vec4(1.0f, 0.0f, 0.0f, 1.0f));
-          //DrawPoint(v1, Vec4(1.0f, 0.0f, 0.0f, 1.0f));
-          //DrawPoint(v2, Vec4(1.0f, 0.0f, 0.0f, 1.0f));
-        }
-        else
-        {
-          DrawPoint(p, Vec4(0.0f, 1.0f, 0.0f, 1.0f));
-          //DrawPoint(v1, Vec4(0.0f, 1.0f, 0.0f, 1.0f));
-          //DrawPoint(v2, Vec4(0.0f, 1.0f, 0.0f, 1.0f));
-        }
-        textureAnt = textureP;
-        v += epsilon;
-        w = 1 - (u + v);
-      }
-      u += epsilon;
-    }
-  }
-  EndPoints();
-}
-
-void FindTextureSeam(Vec3 v0, Vec3 v1, Vec3 v2, Vec2 textCoordV0, Vec2 textCoordV1, Vec2 textCoordV2)
-{
-  // parameters
-  float epsilon = 0.0025f;
+  float epsilon = 0.00125f;
   float treshold = 0.15f;
   float wV0, uV1, vV2;
   float u, v, w;
   Vec2 textureAnt;
   // initial values
 
-  BeginPoints(2.0f);
+  // trasverse a triangle iterating barycentric coordinates and ploting the area inside a texture seam
   for (wV0 = 1.0f, uV1 = vV2 = 0.0f; wV0 >= .0f, vV2 <= 1.0f; wV0 -= epsilon, vV2 += epsilon)
   {
     for (u = .0f, v = vV2, w = wV0, textureAnt = wV0 * textCoordV0 + uV1 * textCoordV1 + vV2 * textCoordV2; u <= 1.0f, v <=1.0f, w >= .0f; u += epsilon, w -= epsilon, v = 1 - (u + w))
@@ -3410,288 +2525,145 @@ void FindTextureSeam(Vec3 v0, Vec3 v1, Vec3 v2, Vec2 textCoordV0, Vec2 textCoord
       // com o triangulo da malha rigida, encontrar o ponto de interseccao e reinterpolar as coordenadas
       // detectar a descontinuidade na reinterpolacao
       Vec2 textureP = InterpolateTextureCoordinates(textCoordV0, textCoordV1, textCoordV2, u, v, w);
-      if (Length(textureP - textureAnt) > treshold) // is a seam
-      {
-        // seam jump texture
-        DrawPoint(p, Vec4(1.0f, 0.0f, 0.0f, 1.0f));
-        //DrawPoint(v1, Vec4(1.0f, 0.0f, 0.0f, 1.0f));
-        //DrawPoint(v2, Vec4(1.0f, 0.0f, 0.0f, 1.0f));
-      }
-      else
-      {
-        DrawPoint(p, Vec4(0.0f, 1.0f, 0.0f, 1.0f));
-        //DrawPoint(v1, Vec4(0.0f, 1.0f, 0.0f, 1.0f));
-        //DrawPoint(v2, Vec4(0.0f, 1.0f, 0.0f, 1.0f));
-      }
+      float textureDistance = Length(textureP - textureAnt);
 
-      //if (u >= .98f || v >= .98f || w >= .98)
-      //{
-        //DrawPoint(p, Vec4(.0f, .0f, 1.0f, 1.0f));
-      //}
+      PlotTexturePixel(p, textureP, textureImage);
 
       textureAnt = textureP;
     }
   }
-
-  EndPoints();
 }
 
-void FixTextureSeamsV2(int baseIndex, std::vector<Vec4> filmPositions, Vec2 texCoord0, Vec2 texCoord1, Vec2 texCoord2)
+
+void PlotTexturePixel(Vec3 position, Vec2 textureCoords, PngImage textureImage) 
 {
-  float maxDistanceUV = .4f;
+  // get textel coordinates
+  int textelCoordX = textureCoords.x * textureImage.m_width;
+  int textelCoordY = textureCoords.y * textureImage.m_height;
 
+  // avoid textel coordinates out of range
+  textelCoordX = textelCoordX > textureImage.m_width - 1 ? textureImage.m_width - 1 : textelCoordX;
+  textelCoordY = textelCoordY > textureImage.m_height - 1 ? textureImage.m_height - 1 : textelCoordY;
 
-  float distance01 = Length(texCoord0 - texCoord1);
-  float distance02 = Length(texCoord0 - texCoord2);
-  float distance12 = Length(texCoord1 - texCoord2);
+  textelCoordX = textelCoordX < 0 ? 0 : textelCoordX;
+  textelCoordY = textelCoordY < 0 ? 0 : textelCoordY;
 
-  //show texture seams
+  // consider each pixel in rgba format by stb_load image procedure with 4 chanels
+  GLuint texturePixel = textureImage.m_data[textelCoordX + textureImage.m_height * textelCoordY];
 
-  BeginPoints(4.0f); // parei aqui -> gerar codigo hard coded para debugar a criacao de vertice e indice
-  Vec4 red = Vec4(1.0f, 0.0f, 0.0f, 1.0f);
-  Vec4 blue = Vec4(0.0f, 0.0f, 1.0f, 1.0f);
-  if (distance01 > maxDistanceUV || distance02 > maxDistanceUV || distance12 > maxDistanceUV)
+  unsigned char a = texturePixel >> 24 & 255;
+  unsigned char b = texturePixel >> 16 & 255;
+  unsigned char g = texturePixel >> 8 & 255;
+  unsigned char r = texturePixel >> 0 & 255;
+
+  Vec4 pixelTextureColor = Vec4((float)r / 255.0f, (float)g / 255.0f, float(b) / 255.0f, (float)a / 255.0f);
+  
+  // to a better performance consider begin point and end point procedure called outside this function
+  // because this function will be called many times in a loop
+  // begin points (called outside)
+  DrawPoint(position, pixelTextureColor);
+  // end points (called outside)
+
+}
+
+inline int GridIndex(int x, int y, int dx) { return y*dx + x; } // duplicated fnc
+
+void BuildColorCompensation(Vec4* compensColors, Vec4* filmPositions, std::vector<Vec4> flatFilmPositions, const int dimX, const int dimZ)
+{
+  ColorGradient *colorGradient = new ColorGradient();
+
+  for (int z = 0; z < dimZ; z++)
   {
+    for (int x = 0; x < dimX; x++)
+    {
+      float restLength[8] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+      float finalLength[8] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+      int nearbyCount = 8;
+      
+      if (x > 0 && z > 0 && x < (dimX - 1) && z < (dimZ - 1))
+      {
+        restLength[0] = Length(Vec3(flatFilmPositions[GridIndex(x, z, dimX)]) - Vec3(flatFilmPositions[GridIndex(x, z - 1, dimX)]));
+        restLength[1] = Length(Vec3(flatFilmPositions[GridIndex(x, z, dimX)]) - Vec3(flatFilmPositions[GridIndex(x + 1, z, dimX)]));
+        restLength[2] = Length(Vec3(flatFilmPositions[GridIndex(x, z, dimX)]) - Vec3(flatFilmPositions[GridIndex(x, z + 1, dimX)]));
+        restLength[3] = Length(Vec3(flatFilmPositions[GridIndex(x, z, dimX)]) - Vec3(flatFilmPositions[GridIndex(x - 1, z, dimX)]));
 
-    // montar previamente os triangulos candidatos da malha rigida
-    // passar para a funcao os triangulos candidatos da malha rigida
-    FindTextureSeam(Vec3(filmPositions[baseIndex]), Vec3(filmPositions[baseIndex + 1]), Vec3(filmPositions[baseIndex + 2]), Vec2(texCoord0), Vec2(texCoord1), Vec2(texCoord2));
+        restLength[4] = Length(Vec3(flatFilmPositions[GridIndex(x, z, dimX)]) - Vec3(flatFilmPositions[GridIndex(x - 1, z - 1, dimX)]));
+        restLength[5] = Length(Vec3(flatFilmPositions[GridIndex(x, z, dimX)]) - Vec3(flatFilmPositions[GridIndex(x - 1, z + 1, dimX)]));
+        restLength[6] = Length(Vec3(flatFilmPositions[GridIndex(x, z, dimX)]) - Vec3(flatFilmPositions[GridIndex(x + 1, z + 1, dimX)]));
+        restLength[7] = Length(Vec3(flatFilmPositions[GridIndex(x, z, dimX)]) - Vec3(flatFilmPositions[GridIndex(x - 1, z + 1, dimX)]));
 
+        finalLength[0] = Length(Vec3(filmPositions[GridIndex(x, z, dimX)]) - Vec3(filmPositions[GridIndex(x, z - 1, dimX)]));
+        finalLength[1] = Length(Vec3(filmPositions[GridIndex(x, z, dimX)]) - Vec3(filmPositions[GridIndex(x + 1, z, dimX)]));
+        finalLength[2] = Length(Vec3(filmPositions[GridIndex(x, z, dimX)]) - Vec3(filmPositions[GridIndex(x, z + 1, dimX)]));
+        finalLength[3] = Length(Vec3(filmPositions[GridIndex(x, z, dimX)]) - Vec3(filmPositions[GridIndex(x - 1, z, dimX)]));
+
+        finalLength[4] = Length(Vec3(filmPositions[GridIndex(x, z, dimX)]) - Vec3(filmPositions[GridIndex(x - 1, z - 1, dimX)]));
+        finalLength[5] = Length(Vec3(filmPositions[GridIndex(x, z, dimX)]) - Vec3(filmPositions[GridIndex(x - 1, z + 1, dimX)]));
+        finalLength[6] = Length(Vec3(filmPositions[GridIndex(x, z, dimX)]) - Vec3(filmPositions[GridIndex(x + 1, z + 1, dimX)]));
+        finalLength[7] = Length(Vec3(filmPositions[GridIndex(x, z, dimX)]) - Vec3(filmPositions[GridIndex(x + 1, z - 1, dimX)]));
+      }
+      else
+      {
+        finalLength[0] = restLength[0] = 1.0f;
+      }
+
+      float variationAcum = 0.0f;
+
+      for (int count = 0; count < nearbyCount; count++)
+      {
+        variationAcum += abs(finalLength[count] - restLength[count]) / restLength[count];
+      }
+
+      float avgVariation = variationAcum / nearbyCount;
+
+      compensColors[GridIndex(x, z, dimX)] = avgVariation;//Vec4(Vec3(colorGradient->getColorAtValue(avgVariation)), 1.0f);
+
+    }
   }
-  EndPoints();
-
 }
 
-//#define DEBUG_CONTACTS
-//#define DEBUG_TEXCOORDS
-void FindContacts(Vec3 filmContactVertex, int filmContactVertexIndex, Vec3 filmContactPlane, GpuMesh* gpuMesh, GpuMesh* filmMesh, Mat44 modelMatrix, int gridHeight, int gridWidth, std::vector<Vec4> filmPositions)
+
+void BuildContactUVs(Vec3 filmContactVertex, int filmContactVertexIndex, Vec3 filmContactPlane, GpuMesh* gpuMesh, Mat44 modelMatrix, std::vector<Vec4> contactPositions, std::vector<Vec4> &contactUVs)
 {
+  // look for every triangle in the rigid body to cast a ray
   for (int i = 0; i < gpuMesh->triangles.size(); ++i)
   {
-    // discard vertices with texture coordinates
-    //if (filmMesh->texCoordsFilm[filmContactVertexIndex].x >= .0f)
-    //{
-      //continue;
-    //}
-
-    Vec3 v0 = Vec3(modelMatrix * Vec4(gpuMesh->positions[i * 3 + 0], 1.0f));
-    Vec3 v1 = Vec3(modelMatrix * Vec4(gpuMesh->positions[i * 3 + 1], 1.0f));
-    Vec3 v2 = Vec3(modelMatrix * Vec4(gpuMesh->positions[i * 3 + 2], 1.0f));
-
-    //Vec3 normal = Normalize(Cross(v1 - v0, v2 - v0));
-
-    float t = INFINITY;
-    float u, v, w;
-
-    if (gpuMesh->texCoordsRigid.size() && rayTriangleIntersectMT(filmContactVertex, filmContactPlane, v0, v1, v2, t, u, v, w))
+    // process only vertices without texture coordinates
+    if (contactUVs[filmContactVertexIndex].x == -1.0f)
     {
-#ifdef DEBUG_CONTACTS
-      BeginPoints(2.0f);
-      Vec4 color = Vec4(0.0f, 1.0f, 0.0f, 0.8f);
-      Vec3 contactPoint = filmContactVertex + t * filmContactPlane;
-      DrawPoint(contactPoint, color);
-      EndPoints();
-#endif
-    // get texture coords from rigid mesh and transfer to soft-body
-      Vec2 texCoordsRigid = InterpolateTextureCoordinates(gpuMesh->texCoordsRigid[i * 3 + 0], 
-        gpuMesh->texCoordsRigid[i * 3 + 1], gpuMesh->texCoordsRigid[i * 3 + 2], u, v, w);
+      Vec3 v0 = Vec3(modelMatrix * Vec4(gpuMesh->positions[i * 3 + 0], 1.0f));
+      Vec3 v1 = Vec3(modelMatrix * Vec4(gpuMesh->positions[i * 3 + 1], 1.0f));
+      Vec3 v2 = Vec3(modelMatrix * Vec4(gpuMesh->positions[i * 3 + 2], 1.0f));
 
-        filmMesh->texCoordsFilm[filmContactVertexIndex] = Vec4(texCoordsRigid.x, texCoordsRigid.y, 0.0f, 0.0f);
-    }
-
-    /*
-    int filmOffsetIndex = filmContactVertexIndex % 3;
-    int filmBaseIndex;
-    switch (filmOffsetIndex) {
-    case 0:
-      filmBaseIndex = filmContactVertexIndex;
-      break;
-    case 1:
-      filmBaseIndex = filmContactVertexIndex - 1;
-      break;
-    case 2:
-      filmBaseIndex = filmContactVertexIndex - 2;
-      break;
-    }
-
-    Vec2 texCoord0 = Vec2(filmMesh->texCoordsFilm[filmBaseIndex + 0]);
-    Vec2 texCoord1 = Vec2(filmMesh->texCoordsFilm[filmBaseIndex + 1]);
-    Vec2 texCoord2 = Vec2(filmMesh->texCoordsFilm[filmBaseIndex + 2]);
-
-    if (texCoord0.x >= .0f && texCoord1.x >= .0f && texCoord2.x >= .0f)
-    {
-      // 
-      FixTextureSeamsV2(filmBaseIndex, filmPositions, texCoord0, texCoord1, texCoord2);
-    }
-    */
-  }
-
-  //BeginPoints(4);
-  //DrawPoint(Vec3(filmMesh->positions[0]), Vec4(0.0f, 1.0f, 0.0f, 1.0f));
-  //DrawPoint(Vec3(filmMesh->positions[9]), Vec4(1.0f, 0.0f, 0.0f, 1.0f));
-  //EndPoints();
-
-#ifdef DEBUG_TEXCOORDS
-  BeginPoints(5);
-
-  int filmOffsetIndex = filmContactVertexIndex % 3;
-  int filmBaseIndex;
-  switch (filmOffsetIndex){
-    case 0:
-      filmBaseIndex = filmContactVertexIndex;
-      break;
-    case 1:
-      filmBaseIndex = filmContactVertexIndex - 1;
-      break;
-    case 2:
-      filmBaseIndex = filmContactVertexIndex - 2;
-      break;
-  }
-
-  Vec2 texCoord0 = Vec2(filmMesh->texCoordsFilm[filmBaseIndex + 0]);
-  Vec2 texCoord1 = Vec2(filmMesh->texCoordsFilm[filmBaseIndex + 1]);
-  Vec2 texCoord2 = Vec2(filmMesh->texCoordsFilm[filmBaseIndex + 2]);
-
-  float textureFactor = texCoord0.x * texCoord1.x * texCoord2.x;
-
-  //texture atributted to only one vertex
-  /*
-  if (texCoord0.x >= .0f && (texCoord1.x <= .0f || texCoord2.x <= .0f))
-  {
-    texCoord0.x = -1.0f;
-    texCoord1.x = -1.0f;
-    texCoord2.x = -1.0f;
-  }
-  if (texCoord1.x >= .0f && (texCoord0.x <= .0f || texCoord2.x <= .0f))
-  {
-    texCoord0.x = -1.0f;
-    texCoord1.x = -1.0f;
-    texCoord2.x = -1.0f;
-  }
-  if (texCoord2.x >= .0f && (texCoord0.x <= .0f || texCoord1.x <= .0f))
-  {
-    texCoord0.x = -1.0f;
-    texCoord1.x = -1.0f;
-    texCoord2.x = -1.0f;
-  }
-  */
-  float seamDistance = .4f;
-  
-  if (fabs(texCoord0.x - texCoord1.x) > seamDistance || fabs(texCoord0.x - texCoord2.x) > seamDistance || fabs(texCoord1.x - texCoord2.x) > seamDistance)
-  {
-    //texCoord0.x = (texCoord1.x + texCoord2.x) * .5;
-    DrawPoint(Vec3(filmMesh->positions[filmBaseIndex + 0]), Vec4(0.0f, 1.0f, 0.0f, 1.0f));
-  }
-
-  //if (fabs(texCoord1.x - texCoord0.x) > seamDistance || fabs(texCoord1.x - texCoord2.x) > seamDistance)
-  //{
-    //texCoord1.x = (texCoord0.x + texCoord2.x) * .5;
-    //DrawPoint(Vec3(filmMesh->positions[filmBaseIndex + 1]), Vec4(0.0f, 1.0f, 0.0f, 1.0f));
-  //}
-
-  //if (fabs(texCoord2.x - texCoord0.x) > seamDistance || fabs(texCoord2.x - texCoord1.x) > seamDistance)
-  //{
-    //texCoord2.x = (texCoord0.x + texCoord1.x) * .5;
-    //DrawPoint(Vec3(filmMesh->positions[filmBaseIndex + 2]), Vec4(0.0f, 1.0f, 0.0f, 1.0f));
-  //}
-  
-  
-
-  //texture atributted for twe
-  /*
-  if (texCoord0.x < .0f && texCoord1.x >= .0f && texCoord2.x >= .0f)
-  {
-    DrawPoint(Vec3(filmMesh->positions[filmBaseIndex + 1]), Vec4(0.0f, 0.0f, 1.0f, 1.0f));
-    DrawPoint(Vec3(filmMesh->positions[filmBaseIndex + 2]), Vec4(0.0f, 0.0f, 1.0f, 1.0f));
-  }
-
-  if (texCoord1.x < .0f && texCoord0.x >= .0f && texCoord2.x >= .0f)
-  {
-    DrawPoint(Vec3(filmMesh->positions[filmBaseIndex + 0]), Vec4(0.0f, 0.0f, 1.0f, 1.0f));
-    DrawPoint(Vec3(filmMesh->positions[filmBaseIndex + 2]), Vec4(0.0f, 0.0f, 1.0f, 1.0f));
-  }
-
-  if (texCoord2.x < .0f && texCoord0.x >= .0f && texCoord1.x >= .0f)
-  {
-    DrawPoint(Vec3(filmMesh->positions[filmBaseIndex + 0]), Vec4(0.0f, 0.0f, 1.0f, 1.0f));
-    DrawPoint(Vec3(filmMesh->positions[filmBaseIndex + 1]), Vec4(0.0f, 0.0f, 1.0f, 1.0f));
-  }
-  */
-
-  /*
-  if (texCoord1.x < .0f && (texCoord0.x && texCoord2.x) >= 0)
-  {
-    //texCoord1.x = Min(fabs(texCoord1.x - texCoord0.x), fabs(texCoord1.x - texCoord2.x));
-    //texCoord1.y = Min(fabs(texCoord1.y - texCoord0.y), fabs(texCoord1.y - texCoord2.y));
-    DrawPoint(Vec3(filmMesh->positions[filmBaseIndex + 1]), Vec4(0.0f, 1.0f, 0.0f, 1.0f));
-  }
-  if (texCoord2.x < .0f && (texCoord0.x && texCoord1.x) >= 0)
-  {
-    //texCoord2.x = Min(fabs(texCoord2.x - texCoord0.x), fabs(texCoord2.x - texCoord1.x));
-    //texCoord2.y = Min(fabs(texCoord2.y - texCoord0.y), fabs(texCoord2.y - texCoord1.y));
-    DrawPoint(Vec3(filmMesh->positions[filmBaseIndex + 2]), Vec4(0.0f, 1.0f, 0.0f, 1.0f));
-  }
-  */
-
-  //filmMesh->texCoordsFilm[52].x = filmMesh->texCoordsFilm[51].x;
-  //filmMesh->texCoordsFilm[filmBaseIndex + 1] = Vec4(texCoord1);
-  //filmMesh->texCoordsFilm[filmBaseIndex + 2] = Vec4(texCoord2);
-
-  filmMesh->texCoordsFilm[filmBaseIndex + 0] = Vec4(texCoord0);
-  filmMesh->texCoordsFilm[filmBaseIndex + 1] = Vec4(texCoord1);
-  filmMesh->texCoordsFilm[filmBaseIndex + 2] = Vec4(texCoord2);
-
-  EndPoints();
-#endif
-
-  /*
-  OLD CODE USED FOR PRIOR TESTS - KEEP FOR DEBUGGING AND REFERENCE
-  if (0)
-  {
-    for (int i = 0; i < gpuMesh->positions.size(); i++)
-    {
-
-      Vec3 positionW = modelMatrix * Vec4(gpuMesh->positions[i], 1.0f);
-
-      float distance = Length(filmContactVertex - positionW);
-      // found contact nearby a rigid mesh vertex
-      if (distance <= 0.1f) 
+      float t = INFINITY;
+      float u, v, w;
+      // apply Möller–Trumbore algorithm to cast a ray from the contact point to the triangle
+      if (gpuMesh->texCoordsRigid.size() && rayTriangleIntersectMT(filmContactVertex, filmContactPlane, v0, v1, v2, t, u, v, w))
       {
-        //get texture coords from rigid mesh and transfer to soft-body
-        filmMesh->texCoordsFilm[filmContactVertexIndex] = Vec4(gpuMesh->texCoordsRigid[i]);
+        // interpolate texture coordinates by barycentric coordinates and triangle texture coordinates
+        Vec2 texCoordsRigid = InterpolateTextureCoordinates(gpuMesh->texCoordsRigid[i * 3 + 0],
+          gpuMesh->texCoordsRigid[i * 3 + 1], gpuMesh->texCoordsRigid[i * 3 + 2], u, v, w);
 
-        if (0)
-        {
-          float filmRow = floor(filmContactVertexIndex / gridWidth);
-          float filmCol = filmContactVertexIndex % gridWidth;
-      
-          int row = (filmRow / gridHeight) * g_dynamic_texture.m_height;
-          int col = (filmCol / gridWidth) * g_dynamic_texture.m_width;
+        // update the texture coordinates to be used in the flat film
+        contactUVs[filmContactVertexIndex] = Vec4(texCoordsRigid.x, texCoordsRigid.y, 0.0f, 0.0f);
 
-          glm::ivec4 color = glm::ivec4(0, 0, 0, 255);
-          uint32_t pixel = (BYTE(color.a) << 24) + (BYTE(color.b) << 16) + (BYTE(color.g) << 8) + BYTE(color.r);
-
-          int index = g_dynamic_texture.m_width * row + col;
-          g_dynamic_texture.m_data[index] = pixel;
-        }
       }
+
     }
+
   }
-  */
+
 }
 
-void FixTextureSeams(GpuMesh* filmMesh, std::vector<Vec4> &positions, std::vector<int> &indices)
+
+void DetectTextureSeams(GpuMesh* filmMesh, std::vector<Vec4> &contactPositions, std::vector<Vec4> &contactUVs)
 {
   float maxDistanceUV = .3f;
-  //std::map<int, int>::iterator it;
-  //std::map<int, int> correctionList;
+  Vec4 red = Vec4(1.0f, 0.0f, 0.0f, 1.0f);
+  Vec4 blu = Vec4(0.0f, 0.0f, 1.0f, 1.0f);
+  Vec4 gre = Vec4(0.0f, 1.0f, 0.0f, 1.0f);
 
-  std::vector<int> newTriangleIndexes;
-  std::vector<Vec4> newVertices;
-  std::vector<Vec4> newTexCoords;
-
-
-  // for all triangle indexes
+  // for all triangle indexes in triangle film mesh
   for (int i = 0; i < filmMesh->triangleIntIndexes.size(); i = i + 3) //
   {
     // for a triangle
@@ -3699,27 +2671,82 @@ void FixTextureSeams(GpuMesh* filmMesh, std::vector<Vec4> &positions, std::vecto
     int index1 = filmMesh->triangleIntIndexes[i + 1];
     int index2 = filmMesh->triangleIntIndexes[i + 2];
 
-    Vec3 texCoord0 = Vec3(filmMesh->texCoordsFilm[index0]);
-    Vec3 texCoord1 = Vec3(filmMesh->texCoordsFilm[index1]);
-    Vec3 texCoord2 = Vec3(filmMesh->texCoordsFilm[index2]);
+    Vec3 texCoord0 = Vec3(contactUVs[index0]);
+    Vec3 texCoord1 = Vec3(contactUVs[index1]);
+    Vec3 texCoord2 = Vec3(contactUVs[index2]);
    
-    // if has valid texture coordinate
-    if (texCoord0.x > 0 && texCoord1.x > 0 && texCoord2.x > 0)
+    // if texture coordinat is set
+    if (texCoord0.x != -1 && texCoord1.x != -1 && texCoord2.x != -1)
     {
       float distance01 = Length(texCoord0 - texCoord1);
       float distance02 = Length(texCoord0 - texCoord2);
       float distance12 = Length(texCoord1 - texCoord2);
-      // texture distance greather than treshold
+      // texture distance in a triangle edge is greather than treshold maxDistanceUV
+      // is a candidate texture seam
       if (distance01 > maxDistanceUV || distance02 > maxDistanceUV || distance12 > maxDistanceUV)
-      {        
-        FindTextureSeam(Vec3(positions[index0]), Vec3(positions[index1]), Vec3(positions[index2]), Vec2(texCoord0), Vec2(texCoord1), Vec2(texCoord2));
+      { 
+
+        Vec3 half01 = .5f * (filmMesh->positions[index0] + filmMesh->positions[index1]);
+        Vec3 half02 = .5f * (filmMesh->positions[index0] + filmMesh->positions[index2]);
+        Vec3 half12 = .5f * (filmMesh->positions[index1] + filmMesh->positions[index2]);
+
+        // detect what edges of the triangle cross the seam 
+        // v0 is in a vertex that cross the seam
+
+        if (distance01 > maxDistanceUV && distance02 > maxDistanceUV)
+        {
+          BeginLines();
+          DrawLine(filmMesh->positions[index0], filmMesh->positions[index1], blu);
+          DrawLine(filmMesh->positions[index0], filmMesh->positions[index2], blu);
+          EndLines();
+
+          BeginPoints(4.0);
+          DrawPoint(filmMesh->positions[index0], red);
+          DrawPoint(half01, gre);
+          DrawPoint(half02, gre);
+          EndPoints();
+          //DrawPoint(filmMesh->positions[index1], blu);
+          //DrawPoint(filmMesh->positions[index2], blu);
+        }
+        // v1 is in a vertex that cross the seam
+        if (distance01 > maxDistanceUV && distance12 > maxDistanceUV)
+        {
+          BeginLines();
+          DrawLine(filmMesh->positions[index0], filmMesh->positions[index1], blu);
+          DrawLine(filmMesh->positions[index1], filmMesh->positions[index2], blu);
+          EndLines();
+
+          //DrawPoint(filmMesh->positions[index0], blu);
+          BeginPoints(4.0);
+          DrawPoint(filmMesh->positions[index1], red);
+          DrawPoint(half01, gre);
+          DrawPoint(half12, gre);
+          EndPoints();
+          //DrawPoint(filmMesh->positions[index2], blu);
+        }
+        // v2 is in a vertex that cross the seam
+        if (distance02 > maxDistanceUV && distance12 > maxDistanceUV)
+        {
+          BeginLines();
+          DrawLine(filmMesh->positions[index0], filmMesh->positions[index2], blu);
+          DrawLine(filmMesh->positions[index1], filmMesh->positions[index2], blu);
+          EndLines();
+
+          //DrawPoint(filmMesh->positions[index0], blu);
+          //DrawPoint(filmMesh->positions[index1], blu);
+          BeginPoints(4.0);
+          DrawPoint(filmMesh->positions[index2], red);
+          DrawPoint(half02, gre);
+          DrawPoint(half12, gre);
+          EndPoints();
+        }
+              
       }
+      
     }    
   }
 
 }
-
-
 
 
 void ReadDisplacements(int* backbuffer, int width, int height)
@@ -3734,123 +2761,6 @@ void WriteDisplacements(int* pixels, int width, int height)
 #define CHANNEL_NUM 4
 
   stbi_write_png("../../movies/stbpng.png", width, height, CHANNEL_NUM, pixels, width * CHANNEL_NUM);
-}
-
-void EnableShadowTexture(Texture texture)
-{
-  glEnable(GL_TEXTURE_2D);
-  glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, texture);
-}
-
-GpuMesh* CreateGpuMeshV2(const Mesh* m)
-{
-  GpuMesh* mesh = new GpuMesh();
-
-  mesh->mNumVertices = GLuint(m->GetNumVertices());
-  mesh->mNumFaces = GLuint(m->GetNumFaces());
-  mesh->mNumIndices = GLuint(m->m_indices.size());
-
-  // generate vao vbo ibo
-  glVerify(glGenVertexArrays(1, &mesh->mVAO));
-  glVerify(glGenBuffers(1, &mesh->mPositionsVBO));
-  glVerify(glGenBuffers(1, &mesh->mIndicesIBO));
-
-  // setup vao vbo ibo
-  glVerify(glBindVertexArray(mesh->mVAO));
-
-  glVerify(glBindBuffer(GL_ARRAY_BUFFER, mesh->mPositionsVBO));
-  glVerify(glBufferData(GL_ARRAY_BUFFER, (sizeof(float) * 3 + sizeof(float) * 3) * mesh->mNumVertices, NULL, GL_DYNAMIC_DRAW));
-
-  glVerify(glBufferSubData(GL_ARRAY_BUFFER, 0, mesh->mNumVertices * sizeof(float) * 3, &m->m_positions[0]));
-  glVerify(glBufferSubData(GL_ARRAY_BUFFER, mesh->mNumVertices * sizeof(float) * 3, mesh->mNumVertices * sizeof(float) * 3, &m->m_normals[0]));
-
-  glVerify(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->mIndicesIBO));
-  glVerify(glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(int) * mesh->mNumIndices, &m->m_indices[0], GL_STATIC_DRAW));
-
-  glVerify(glEnableVertexAttribArray(0));
-  glVerify(glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 3, (void *)0));
-  glVerify(glEnableVertexAttribArray(1));
-  glVerify(glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 3, (void *)(mesh->mNumVertices * sizeof(float) * 3)));
-
-  glVerify(glBindBuffer(GL_ARRAY_BUFFER, 0));
-  glVerify(glBindVertexArray(0));
-
-  return mesh;
-}
-
-GpuMesh* CreateGpuMeshTex(const Mesh* m)
-{
-  GpuMesh* mesh = new GpuMesh();
-
-  mesh->mNumVertices = GLuint(m->GetNumVertices());
-  mesh->mNumFaces = GLuint(m->GetNumFaces());
-  mesh->mNumIndices = GLuint(m->m_indices.size());
-  mesh->mTextureId = LoadTexture(m->map_Kd.c_str());
-
-  // generate vao vbo ibo
-  glVerify(glGenVertexArrays(1, &mesh->mVAO));
-  glVerify(glGenBuffers(1, &mesh->mPositionsVBO));
-  glVerify(glGenBuffers(1, &mesh->mIndicesIBO));
-
-  // setup vao vbo ibo
-  glVerify(glBindVertexArray(mesh->mVAO));
-
-  glVerify(glBindBuffer(GL_ARRAY_BUFFER, mesh->mPositionsVBO));
-  glVerify(glBufferData(GL_ARRAY_BUFFER, (sizeof(float) * 3 + sizeof(float) * 3 + sizeof(float) * 2) * mesh->mNumVertices, NULL, GL_DYNAMIC_DRAW));
-
-  glVerify(glBufferSubData(GL_ARRAY_BUFFER, 0, mesh->mNumVertices * sizeof(float) * 3, &m->m_positions[0]));
-  glVerify(glBufferSubData(GL_ARRAY_BUFFER, mesh->mNumVertices * sizeof(float) * 3, mesh->mNumVertices * sizeof(float) * 3, &m->m_normals[0]));
-  glVerify(glBufferSubData(GL_ARRAY_BUFFER, mesh->mNumVertices * (sizeof(float) * 3 + sizeof(float) * 3), mesh->mNumVertices * sizeof(float) * 2, &m->m_texcoords[0][0]));
-
-  glVerify(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->mIndicesIBO));
-  glVerify(glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(int) * mesh->mNumIndices, &m->m_indices[0], GL_STATIC_DRAW));
-
-  glVerify(glEnableVertexAttribArray(0));
-  glVerify(glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 3, (void *)0));
-  glVerify(glEnableVertexAttribArray(1));
-  glVerify(glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 3, (void *)(mesh->mNumVertices * sizeof(float) * 3)));
-  glVerify(glEnableVertexAttribArray(2));
-  glVerify(glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 2, (void *)(mesh->mNumVertices * (sizeof(float) * 3 + sizeof(float) * 3))));
-
-  glVerify(glBindBuffer(GL_ARRAY_BUFFER, 0));
-  glVerify(glBindVertexArray(0));
-
-  return mesh;
-}
-
-GpuMesh* CreateGpuMeshTexV2(const Mesh* m)
-{
-  GpuMesh* mesh = new GpuMesh();
-
-  mesh->mNumVertices = GLuint(m->GetNumVertices());
-  mesh->mNumFaces = GLuint(m->GetNumFaces());
-  mesh->mNumIndices = GLuint(m->m_indices.size());
-  mesh->mTextureId = LoadTexture(m->map_Kd.c_str());
-
-  // generate vbo ibo
-  glVerify(glGenBuffers(1, &mesh->mPositionsVBO));
-  glVerify(glGenBuffers(1, &mesh->mNormalsVBO));
-  glVerify(glGenBuffers(1, &mesh->mTexCoordsVBO));
-  glVerify(glGenBuffers(1, &mesh->mIndicesIBO));
-
-  // setup vbo ibo
-  glVerify(glBindBuffer(GL_ARRAY_BUFFER, mesh->mPositionsVBO));
-  glVerify(glBufferData(GL_ARRAY_BUFFER, mesh->mNumVertices * sizeof(Vec3) , &m->m_positions[0], GL_DYNAMIC_DRAW));
-
-  glVerify(glBindBuffer(GL_ARRAY_BUFFER, mesh->mNormalsVBO));
-  glVerify(glBufferData(GL_ARRAY_BUFFER, mesh->mNumVertices * sizeof(Vec3), &m->m_normals[0], GL_DYNAMIC_DRAW));
-
-  glVerify(glBindBuffer(GL_ARRAY_BUFFER, mesh->mTexCoordsVBO));
-  glVerify(glBufferData(GL_ARRAY_BUFFER, mesh->mNumVertices * sizeof(Vec3), &m->m_texcoords[0][0], GL_STATIC_DRAW));
-
-  glVerify(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->mIndicesIBO));
-  glVerify(glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(int) * mesh->mNumIndices, &m->m_indices[0], GL_STATIC_DRAW));
-
-  glVerify(glBindBuffer(GL_ARRAY_BUFFER, 0));
-  glVerify(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0));
-
-  return mesh;
 }
 
 size_t traverseScene(const aiScene *scene, const aiNode* node, Mesh* mesh, std::string basePath) {
@@ -3878,7 +2788,7 @@ size_t traverseScene(const aiScene *scene, const aiNode* node, Mesh* mesh, std::
     if (AI_SUCCESS == mtl_properties->Get(AI_MATKEY_TEXTURE_DIFFUSE(i), map_Kd)) 
     {
       std::string texturePath = basePath + '/' + map_Kd.C_Str();
-      mesh->mTextureId = LoadTexture(texturePath.c_str());
+      mesh->mTextureId = LoadTexture(texturePath.c_str(), g_rigid_model_texture_image);
       if (mesh->mTextureId == 0)
       {
         std::cout << "Texture loading error" << std::endl;
@@ -3944,7 +2854,7 @@ void createVBOs(const aiScene *scene, GpuMesh* gpu_mesh, std::string basePath, M
 
   Mesh* mesh = new Mesh();
   gpu_mesh->mNumVertices = GLuint(traverseScene(scene, scene->mRootNode, mesh, basePath));
-  gpu_mesh->mTextureId = GLuint(mesh->mTextureId);
+  g_rigid_model_texture_id = gpu_mesh->mTextureId = GLuint(mesh->mTextureId); // share rigid model texture id with the reverse mapping film 
   gpu_mesh->triangles = mesh->m_triangles;
 
   std::cout << "           #Vertices   = " << gpu_mesh->mNumVertices << std::endl;
@@ -3958,6 +2868,12 @@ void createVBOs(const aiScene *scene, GpuMesh* gpu_mesh, std::string basePath, M
   mesh->Normalize(1.0f - margin);
   mesh->Transform(TranslationMatrix(Point3(margin, margin, margin)*0.5f));
 
+  float maxDistanceUV = 0.0f;
+  float minDistanceUV = 1.0f;
+  float avgDistanceUV = 0.0f;
+  int countDistanceUV = 0;
+  float sumDistanceUV = 0.0f;
+
   for (int i = 0; i < mesh->m_positions.size(); i++)
   {
     // can't copy directly because of type incompatibility between point and Vec3
@@ -3969,6 +2885,22 @@ void createVBOs(const aiScene *scene, GpuMesh* gpu_mesh, std::string basePath, M
     {
       gpu_mesh->texCoordsRigid.push_back(mesh->m_texcoords[0][i]);
     }
+
+    if (i % 3 == 0)
+    {
+      float texDistance01 = Length(mesh->m_positions[i] - mesh->m_positions[i+1]);
+      float texDistance12 = Length(mesh->m_positions[i+1] - mesh->m_positions[i+2]);
+      float texDistance02 = Length(mesh->m_positions[i] - mesh->m_positions[i+2]);
+
+      maxDistanceUV = Max(maxDistanceUV, Max(texDistance01, Max(texDistance12, texDistance02)));
+      minDistanceUV = Min(minDistanceUV, Min(texDistance01, Min(texDistance12, texDistance02)));
+
+      sumDistanceUV = sumDistanceUV + (texDistance01 + texDistance12 + texDistance02);
+      countDistanceUV += 3;
+    }
+
+    avgDistanceUV = sumDistanceUV / countDistanceUV;
+
   }
 
   glGenBuffers(1, &gpu_mesh->mPositionsVBO);
@@ -4078,10 +3010,12 @@ GpuMesh* CreateGpuMesh(const char* filename, Mat44 transformation, float margin)
   return gpu_mesh;
 }
 
+/*
 void SetGpuMeshTriangles(GpuMesh* gpuMesh, std::vector<Triangle> triangles, std::vector<TriangleIndexes> triangleIndexes) {
   gpuMesh->triangles = triangles;
   gpuMesh->triangleIndexes = triangleIndexes;
 }
+*/
 
 #define CULLING
 /*
@@ -4128,12 +3062,13 @@ GpuMesh* CreateGpuFilm(Matrix44 model, Vec4* positions, Vec4* normals, Vec4* uvs
   mesh->mNumFaces = nIndices / 3;
   mesh->mNumIndices = nIndices;
   mesh->modelTransform = model;
-  mesh->mTextureId = GetHydrographicTextureId(); //set texture ID for film
+  mesh->mTextureId = GetChessboardTextureId(); //set texture ID for film
   mesh->texCoordsFilm.resize(0);
   for (int i = 0; i < nVertices; i++)
   {
     mesh->positions.push_back(Vec3(positions[i]));
     mesh->texCoordsFilm.push_back(uvs[i]);
+    mesh->colors.push_back(Vec4(1.0f));
   }
 
   for (int i = 0; i < nIndices; i++)
@@ -4141,17 +3076,24 @@ GpuMesh* CreateGpuFilm(Matrix44 model, Vec4* positions, Vec4* normals, Vec4* uvs
     mesh->triangleIntIndexes.push_back(indices[i]);
   }
 
+  // seam indexes buffer storage
+  //glVerify(glGenBuffers(1, &mesh->mSeamIndexes));
+
+
   // configure plane VAO
   glVerify(glGenVertexArrays(1, &mesh->mVAO));
   glVerify(glGenBuffers(1, &mesh->mPositionsVBO));
   glVerify(glGenBuffers(1, &mesh->mIndicesIBO));
+
   glVerify(glBindVertexArray(mesh->mVAO));
   glVerify(glBindBuffer(GL_ARRAY_BUFFER, mesh->mPositionsVBO));
-  glVerify(glBufferData(GL_ARRAY_BUFFER, nVertices * (sizeof(Vec4) + sizeof(Vec4) + sizeof(Vec4)), NULL, GL_DYNAMIC_DRAW));
+  //glVerify(glBufferData(GL_ARRAY_BUFFER, nVertices * (sizeof(Vec4) + sizeof(Vec4) + sizeof(Vec4)), NULL, GL_DYNAMIC_DRAW));
+  glVerify(glBufferData(GL_ARRAY_BUFFER, nVertices * (sizeof(Vec4) + sizeof(Vec4) + sizeof(Vec4) + sizeof(Vec4)), NULL, GL_DYNAMIC_DRAW));
 
   glVerify(glBufferSubData(GL_ARRAY_BUFFER, 0, nVertices * sizeof(Vec4), &positions[0]));
   glVerify(glBufferSubData(GL_ARRAY_BUFFER, nVertices * sizeof(Vec4), nVertices * sizeof(Vec4), &normals[0]));
   glVerify(glBufferSubData(GL_ARRAY_BUFFER, nVertices * (sizeof(Vec4) + sizeof(Vec4)), nVertices * sizeof(Vec4), &uvs[0]));
+  glVerify(glBufferSubData(GL_ARRAY_BUFFER, nVertices * (sizeof(Vec4) + sizeof(Vec4) + sizeof(Vec4)), nVertices * sizeof(Vec4), &mesh->colors[0]));
 
   glVerify(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->mIndicesIBO));
   glVerify(glBufferData(GL_ELEMENT_ARRAY_BUFFER, nIndices * sizeof(int), &indices[0], GL_STATIC_DRAW));
@@ -4162,50 +3104,14 @@ GpuMesh* CreateGpuFilm(Matrix44 model, Vec4* positions, Vec4* normals, Vec4* uvs
   glVerify(glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(nVertices * sizeof(Vec4))));
   glVerify(glEnableVertexAttribArray(2));
   glVerify(glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(nVertices * (sizeof(Vec4) + sizeof(Vec4)))));
+  glVerify(glEnableVertexAttribArray(3));
+  glVerify(glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(nVertices * (sizeof(Vec4) + sizeof(Vec4) + sizeof(Vec4)))));
 
   glVerify(glBindVertexArray(0));
 
   return mesh;
 }
 
-GpuMesh* CreateGpuFilmV2(Matrix44 model, Vec4* positions, Vec4* normals, Vec4* uvs, int nVertices, int* indices, int nIndices)
-{
-  // buffer layout block
-  // |all position vertices|all normal vertices| all tex coords|
-  GpuMesh* mesh = new GpuMesh();
-  mesh->mNumVertices = nVertices;
-  mesh->mNumFaces = nIndices / 3;
-  mesh->mNumIndices = nIndices;
-  mesh->modelTransform = model;
-
-  // configure plane VAO
-  glVerify(glGenVertexArrays(1, &mesh->mVAO));
-  glVerify(glGenBuffers(1, &mesh->mPositionsVBO));
-  glVerify(glGenBuffers(1, &mesh->mNormalsVBO));
-  glVerify(glGenBuffers(1, &mesh->mTexCoordsVBO));
-  glVerify(glGenBuffers(1, &mesh->mIndicesIBO));
-  glVerify(glBindVertexArray(mesh->mVAO));
-  glVerify(glBindBuffer(GL_ARRAY_BUFFER, mesh->mPositionsVBO));
-  glVerify(glBufferData(GL_ARRAY_BUFFER, nVertices * sizeof(Vec4), &positions[0], GL_STATIC_DRAW));
-
-  glVerify(glBufferSubData(GL_ARRAY_BUFFER, 0, nVertices * sizeof(Vec4), &positions[0]));
-  glVerify(glBufferSubData(GL_ARRAY_BUFFER, nVertices * sizeof(Vec4), nVertices * sizeof(Vec4), &normals[0]));
-  glVerify(glBufferSubData(GL_ARRAY_BUFFER, nVertices * (sizeof(Vec4) + sizeof(Vec4)), nVertices * sizeof(Vec4), &uvs[0]));
-
-  glVerify(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh->mIndicesIBO));
-  glVerify(glBufferData(GL_ELEMENT_ARRAY_BUFFER, nIndices * sizeof(int), &indices[0], GL_STATIC_DRAW));
-
-  glVerify(glEnableVertexAttribArray(0));
-  glVerify(glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0));
-  glVerify(glEnableVertexAttribArray(1));
-  glVerify(glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(nVertices * sizeof(Vec4))));
-  glVerify(glEnableVertexAttribArray(2));
-  glVerify(glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(nVertices * (sizeof(Vec4) + sizeof(Vec4)))));
-
-  glVerify(glBindVertexArray(0));
-
-  return mesh;
-}
 
 // Create a NULL-terminated string by reading the provided file
 static char* readShaderSource(const char* shaderFile) {
@@ -4218,43 +3124,73 @@ static char* readShaderSource(const char* shaderFile) {
   long size = ftell(fp);
 
   fseek(fp, 0L, SEEK_SET);
-  char* buf = new char[size + 2];
+  //char* buf = new char[size + 2];
+  char* buf = new char[size];
   memset(buf, 0, size);
   fread(buf, 1, size, fp);
 
-  buf[size] = '\r';
-  buf[size + 1] = '\n';
+  //buf[size] = '\r';
+  //buf[size + 1] = '\n';
   fclose(fp);
 
   return buf;
 }
 
-/* ************************************************************************* */
-/*                                                                           */
-/* ************************************************************************* */
+
+//https://stackoverflow.com/questions/7344640/getting-garbage-chars-when-reading-glsl-files
+std::string loadFileToString(char const * const fname)
+{
+  std::ifstream ifile(fname);
+  std::string filetext;
+
+  while (ifile.good()) {
+    std::string line;
+    std::getline(ifile, line);
+    filetext.append(line + "\n");
+  }
+
+  return filetext;
+}
+
 
 // Create a GLSL program object from vertex and fragment shader files
-unsigned int InitShader(const char* vShaderFile, const char* fShaderFile) {
 
-  tShader shaders[2] = {
-    { vShaderFile, GL_VERTEX_SHADER, NULL },
-    { fShaderFile, GL_FRAGMENT_SHADER, NULL }
-  };
-
+unsigned int InitShader(const Shader *shaders, const bool readFile) 
+{
   GLuint program = glCreateProgram();
 
-  for (int i = 0; i < 2; ++i)
+  // for each shader of the pipeline
+  for (int i = 0; i < 5; ++i)
   {
-    Shader& s = shaders[i];
-    s.source = readShaderSource(s.filename);
-    if (shaders[i].source == NULL)
+    std::string shaderSource;
+    Shader s = shaders[i];
+    if (s.filename == NULL)
+    {
+      continue; // bypass optional shaders
+    }
+
+    if (readFile)
+    {
+      shaderSource = loadFileToString(s.filename);
+    } 
+    else
+    {
+      shaderSource = shaders[i].source;
+    }
+
+    std::cout << "Creating shader " << s.filename << std::endl;
+
+    if (shaderSource.length() == 0)
     {
       std::cerr << "Failed to read " << s.filename << std::endl;
       exit(EXIT_FAILURE);
     }
 
     GLuint shader = glCreateShader(s.type);
-    glShaderSource(shader, 1, (const GLchar**)&s.source, NULL);
+
+    const GLchar *source = NULL;
+    source = (const GLchar *)shaderSource.c_str();
+    glShaderSource(shader, 1, &source, 0);
     glCompileShader(shader);
 
     GLint  compiled;
@@ -4272,10 +3208,11 @@ unsigned int InitShader(const char* vShaderFile, const char* fShaderFile) {
       exit(EXIT_FAILURE);
     }
 
-    delete[] s.source;
+    std::cout << "Shader program " << s.filename << " compiled sucessfull " << std::endl;
 
     glAttachShader(program, shader);
   }
+
 
   /* link  and error check */
   glLinkProgram(program);
@@ -4317,79 +3254,54 @@ void _check_gl_error(const char *file, int line) {
   }
 }
 
-GLuint GetHydrographicTextureId()
+GLuint GetChessboardTextureId()
 {
-  return texHydrographicId;
+  return g_chessboard_texture_id;
 }
 
-GLuint GetModelTextureId()
+GLuint GetRigidModelTextureId()
 {
-  return texModelId;
+  return g_rigid_model_texture_id;
 }
 
-void BindTexture(unsigned int *textureId, Vec4 *pixels, int texWidth, int texHeight)
+GLuint GetHeatmapTextureId()
 {
-	glGenTextures(1, textureId);
-	glBindTexture(GL_TEXTURE_2D, *textureId);
+  return g_heatmap_texture_id;
+}
 
-  // mim-maps generates seam problems in transfer texture process  
-	//glTexStorage2D(GL_TEXTURE_2D, 2 /* mip map levels */, GL_RGB8, texWidth, texHeight);
-	//glTexSubImage2D(GL_TEXTURE_2D, 0 /* mip map level */, 0 /* xoffset */, 0 /* yoffset */, texWidth, texHeight, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
-	//glGenerateMipmap(GL_TEXTURE_2D);
+void SetViewport(int x, int y, int width, int height)
+{
+  glVerify(glViewport(x, y, width, height));
+}
 
-	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+void GetFrustum(float l, float r, float b, float t, float n, float f)
+{
+  glFrustum(l, r, b, t, n, f);
+}
+
+void BindRigidBodyShader(Matrix44 view, Matrix44 proj, Vec3 lightPos, Vec3 camPos, Vec4 lightColor, Vec4 ambientColor, Vec4 specularColor, unsigned int specularExpoent, Vec4 diffuseColor)
+{
   
-
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, texWidth, texHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
-  glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-
-  glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER));
-  glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER));
-
-  // float borderColor[] = { 1.0f, 1.0f, 1.0f, 1.0f };// FIX this doesn't work!
-  // glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);// FIX this doesn't work!
-
-
-}
-
-
-
-void BindSolidShaderV2(Matrix44 view, Matrix44 proj, Vec3 lightPos, Vec3 camPos, Vec4 lightColor, Vec4 ambientColor, Vec4 specularColor, unsigned int specularExpoent, Vec4 diffuseColor, bool showTexture)
-{
-  glVerify(glViewport(0, 0, g_screenWidth, g_screenHeight));
-  
-  if (s_diffuseProgramV2)
+  if (s_rigidBodyProgram)
   {
     glDepthMask(GL_TRUE);
     glEnable(GL_DEPTH_TEST);
 
-    glVerify(glUseProgram(s_diffuseProgramV2));
-
-    glVerify(glUniform3fv(glGetUniformLocation(s_diffuseProgramV2, "uLPos"), 1, lightPos));
-    glVerify(glUniform4fv(glGetUniformLocation(s_diffuseProgramV2, "uLColor"), 1, lightColor));
-    glVerify(glUniform4fv(glGetUniformLocation(s_diffuseProgramV2, "uColor"), 1, diffuseColor));
-    glVerify(glUniform3fv(glGetUniformLocation(s_diffuseProgramV2, "uCamPos"), 1, camPos));
-    glVerify(glUniform4fv(glGetUniformLocation(s_diffuseProgramV2, "uAmbient"), 1, ambientColor));
-    glVerify(glUniform4fv(glGetUniformLocation(s_diffuseProgramV2, "uSpecular"), 1, specularColor));
-    glVerify(glUniform1ui(glGetUniformLocation(s_diffuseProgramV2, "uSpecularExpoent"), specularExpoent));
-    glVerify(glUniformMatrix4fv(glGetUniformLocation(s_diffuseProgramV2, "view"), 1, false, &view[0]));
-    glVerify(glUniformMatrix4fv(glGetUniformLocation(s_diffuseProgramV2, "proj"), 1, false, &proj[0]));
+    glVerify(glUseProgram(s_rigidBodyProgram));
+    glVerify(glUniform3fv(glGetUniformLocation(s_rigidBodyProgram, "uLPos"), 1, lightPos));
+    glVerify(glUniform4fv(glGetUniformLocation(s_rigidBodyProgram, "uLColor"), 1, lightColor));
+    glVerify(glUniform4fv(glGetUniformLocation(s_rigidBodyProgram, "uColor"), 1, diffuseColor));
+    glVerify(glUniform3fv(glGetUniformLocation(s_rigidBodyProgram, "uCamPos"), 1, camPos));
+    glVerify(glUniform4fv(glGetUniformLocation(s_rigidBodyProgram, "uAmbient"), 1, ambientColor));
+    glVerify(glUniform4fv(glGetUniformLocation(s_rigidBodyProgram, "uSpecular"), 1, specularColor));
+    glVerify(glUniform1ui(glGetUniformLocation(s_rigidBodyProgram, "uSpecularExpoent"), specularExpoent));
+    glVerify(glUniformMatrix4fv(glGetUniformLocation(s_rigidBodyProgram, "view"), 1, false, &view[0]));
+    glVerify(glUniformMatrix4fv(glGetUniformLocation(s_rigidBodyProgram, "proj"), 1, false, &proj[0]));
   }
 }
 
-void BindFilmShader(Matrix44 view, Matrix44 proj, Vec3 lightPos, Vec3 camPos, Vec4 lightColor, Vec4 ambientColor, Vec4 specularColor, unsigned int specularExpoent, Vec4 diffuseColor, bool showTexture)
+void BindFilmShader(Matrix44 view, Matrix44 proj, Vec3 lightPos, Vec3 camPos, Vec4 lightColor, Vec4 ambientColor, Vec4 specularColor, unsigned int specularExpoent, Vec4 diffuseColor)
 {
-  glVerify(glViewport(0, 0, g_screenWidth, g_screenHeight));
-
-  if (s_filmProgram == GLuint(-1))
-  {
-    s_filmProgram = InitShader("../../shaders/film.vs", "../../shaders/film.fs");
-  }
 
   if (s_filmProgram)
   {
@@ -4411,140 +3323,114 @@ void BindFilmShader(Matrix44 view, Matrix44 proj, Vec3 lightPos, Vec3 camPos, Ve
   }
 }
 
-
-
-void UseSolidShader()
+void SetReverseTextureParams()
 {
-	glVerify(glUseProgram(s_diffuseProgram));
+  //glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+
+  glActiveTexture(GL_TEXTURE0);
+  glDisable(GL_TEXTURE_2D);
+  glDisable(GL_TEXTURE_RECTANGLE_ARB);
+  glActiveTexture(GL_TEXTURE1);
+  glDisable(GL_TEXTURE_2D);
+  glActiveTexture(GL_TEXTURE2);
+  glDisable(GL_TEXTURE_2D);
+  glActiveTexture(GL_TEXTURE3);
+  glDisable(GL_TEXTURE_2D);
+  glActiveTexture(GL_TEXTURE4);
+  glDisable(GL_TEXTURE_2D);
+  glDisable(GL_TEXTURE_CUBE_MAP);
+  glActiveTexture(GL_TEXTURE5);
+  glDisable(GL_TEXTURE_2D);
+
+  glActiveTexture(GL_TEXTURE0);
+
+  glDisable(GL_BLEND);
+  glDisable(GL_LIGHTING);
+  glDisable(GL_BLEND);
+  glDisable(GL_POINT_SPRITE);
+
+  // save scene camera transform
+  //glMatrixMode(GL_MODELVIEW);
+  //glPushMatrix();
+  //glLoadIdentity();
+
+  //const Matrix44 ortho = OrthographicMatrix(0.0f, float(g_screenWidth), 0.0f, float(g_screenHeight), -1.0f, 1.0f);
+
+  //glMatrixMode(GL_PROJECTION);
+  //glPushMatrix();
+  //glLoadMatrixf(ortho);
+
+  //glUseProgram(0);
+  //glDisable(GL_DEPTH_TEST);
+  //glDisable(GL_CULL_FACE);
+  //glEnable(GL_BLEND);
+  //glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  //glDisable(GL_TEXTURE_2D);
+  glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
 }
 
-void UseHydrographicShader()
+void UnsetReverseTextureParams()
 {
-	glVerify(glUseProgram(s_hydrographicProgram));
+  // restore camera transform (for picking)
+  glMatrixMode(GL_MODELVIEW);
+  glPopMatrix();
+
+  glMatrixMode(GL_PROJECTION);
+  glPopMatrix();
 }
 
-
-
-void BindDisplacementsShader(Matrix44 view, Matrix44 proj, Vec3 lightPos, Vec3 lightTarget)
+void BindReverseTextureShader(Matrix44 view, Matrix44 proj, Vec3 lightPos, Vec3 camPos, 
+  Vec4 lightColor, Vec4 ambientColor, Vec4 specularColor, unsigned int specularExpoent, 
+  Vec4 diffuseColor, float maxDistanceUV, float nearDistanceUV, 
+  float weight1, float weight2, float tesselationInner, float tesselationOuter)
 {
-  glVerify(glUseProgram(s_displacementProgram));
 
-  glVerify(glUniformMatrix4fv(glGetUniformLocation(s_displacementProgram, "objectTransform"), 1, false, Matrix44::kIdentity));
-  glVerify(glUniformMatrix4fv(glGetUniformLocation(s_displacementProgram, "view"), 1, false, &view[0]));
-  glVerify(glUniformMatrix4fv(glGetUniformLocation(s_displacementProgram, "proj"), 1, false, &proj[0]));
-  glVerify(glUniformMatrix4fv(glGetUniformLocation(s_displacementProgram, "normalMat"), 1, false, Transpose(AffineInverse(Matrix44::kIdentity))));
-
-
-}
-
-void DrawDisplacements(const Vec4* positions, const Vec4* normals, const Vec4* uvs, const int numPositions, const int* indices, int numTris)
-{
-  glGenVertexArrays(1, &VAO);
-  glGenBuffers(1, &VBO);
-  glGenBuffers(1, &EBO);
-
-  glBindVertexArray(VAO);
-  glBindBuffer(GL_ARRAY_BUFFER, VBO);
-  //glBufferData(GL_ARRAY_BUFFER, numPositions * (sizeof(Vec4) + sizeof(Vec4) + sizeof(Vec4)), NULL, GL_STATIC_DRAW);
-
-  glVerify(glBufferData(GL_ARRAY_BUFFER, numPositions * sizeof(Vec4), &positions[0], GL_STATIC_DRAW));
-  glVerify(glBufferData(GL_ARRAY_BUFFER, numPositions * sizeof(Vec4), &normals[0], GL_STATIC_DRAW));
-  glVerify(glBufferData(GL_ARRAY_BUFFER, numPositions * sizeof(Vec4), &uvs[0], GL_STATIC_DRAW));
-
-  glVerify(glEnableVertexAttribArray(0));
-  glVerify(glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, sizeof(Vec4), (void *)0));
-  glVerify(glEnableVertexAttribArray(1));
-  glVerify(glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(Vec4), (void *)(numPositions * sizeof(Vec4))));
-  glVerify(glEnableVertexAttribArray(2));
-  glVerify(glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(Vec4), (void *)(numPositions * (sizeof(Vec4) + sizeof(Vec4)))));
-
-
-
-  glVerify(glBindBuffer(GL_ARRAY_BUFFER, VAO));
-  glVerify(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO));
-
-  glVerify(glClientActiveTexture(GL_TEXTURE1)); //optional 
-
-  glVerify(glDrawElements(GL_TRIANGLES, numTris, GL_UNSIGNED_INT, indices));
-
-  glVerify(glBindVertexArray(0));
-}
-
-void UnbindHydrographicShader()
-{
-	glActiveTexture(GL_TEXTURE1);
-	glDisable(GL_TEXTURE_2D);
-	glActiveTexture(GL_TEXTURE0);
-	glUseProgram(0);
-}
-
-void EnableTexture()
-{
-	GLint program;
-	glGetIntegerv(GL_CURRENT_PROGRAM, &program);
-
-	if (program == GLint(s_hydrographicProgram))
-	{
-		glVerify(glActiveTexture(GL_TEXTURE1));//optional //0 texture unit is used by shadow pass
-		glVerify(glEnable(GL_TEXTURE_2D));//optional
-		glVerify(glBindTexture(GL_TEXTURE_2D, texHydrographicId));
-
-		glVerify(glUniform1i(glGetUniformLocation(s_hydrographicProgram, "tex"), 1));//0 texture unit is used by shadow pass
-		glVerify(glUniform1i(glGetUniformLocation(s_hydrographicProgram, "showTexture"), 1));
-	}
-}
-
-void EnableTextureV2()
-{
-  if (s_filmProgram)
+  if (s_reverseTexProgram)
   {
-    glVerify(glUseProgram(s_filmProgram));
-    
-    glVerify(glEnable(GL_TEXTURE_2D));//optional
-    glVerify(glActiveTexture(GL_TEXTURE0));//optional //0 texture unit is used by shadow pass
-    glVerify(glBindTexture(GL_TEXTURE_2D, texHydrographicId));
+    glDepthMask(GL_TRUE);
+    glEnable(GL_DEPTH_TEST);
 
-    glVerify(glUniform1i(glGetUniformLocation(s_filmProgram, "tex"), 0));//0 texture unit is used by shadow pass
-    glVerify(glUniform1i(glGetUniformLocation(s_filmProgram, "showTexture"), 1));
+    glVerify(glUseProgram(s_reverseTexProgram));
+    glVerify(glUniform1f(glGetUniformLocation(s_reverseTexProgram, "uTesselationInner"), tesselationInner));
+    glVerify(glUniform1f(glGetUniformLocation(s_reverseTexProgram, "uTesselationOuter"), tesselationOuter));
+    glVerify(glUniform1f(glGetUniformLocation(s_reverseTexProgram, "uMaxDistanceUV"), maxDistanceUV));
+    glVerify(glUniform1f(glGetUniformLocation(s_reverseTexProgram, "uNearDistanceUV"), nearDistanceUV));
+    glVerify(glUniform1f(glGetUniformLocation(s_reverseTexProgram, "uWeight1"), weight1));
+    glVerify(glUniform1f(glGetUniformLocation(s_reverseTexProgram, "uWeight2"), weight2));
+    glVerify(glUniform3fv(glGetUniformLocation(s_reverseTexProgram, "uLPos"), 1, lightPos));
+    glVerify(glUniform4fv(glGetUniformLocation(s_reverseTexProgram, "uLColor"), 1, lightColor));
+    glVerify(glUniform4fv(glGetUniformLocation(s_reverseTexProgram, "uColor"), 1, diffuseColor));
+    glVerify(glUniform3fv(glGetUniformLocation(s_reverseTexProgram, "uCamPos"), 1, camPos));
+    //glVerify(glUniform4fv(glGetUniformLocation(s_reverseTexProgram, "uAmbient"), 1, ambientColor));
+    //glVerify(glUniform4fv(glGetUniformLocation(s_reverseTexProgram, "uSpecular"), 1, specularColor));
+    //glVerify(glUniform1ui(glGetUniformLocation(s_reverseTexProgram, "uSpecularExpoent"), specularExpoent));
+    glVerify(glUniformMatrix4fv(glGetUniformLocation(s_reverseTexProgram, "view"), 1, false, &view[0]));
+    glVerify(glUniformMatrix4fv(glGetUniformLocation(s_reverseTexProgram, "proj"), 1, false, &proj[0]));
+    glVerify(glUniformMatrix4fv(glGetUniformLocation(s_reverseTexProgram, "normalMat"), 1, false, Transpose(AffineInverse(Matrix44::kIdentity))));
+    glVerify(glUniformMatrix4fv(glGetUniformLocation(s_reverseTexProgram, "model"), 1, false, Matrix44::kIdentity));
   }
 }
 
-void EnableTexture(GLuint textureId)
-{
-  GLint shader;
-  glGetIntegerv(GL_CURRENT_PROGRAM, &shader);
-  glVerify(glUseProgram(shader));
 
-  glVerify(glEnable(GL_TEXTURE_2D));//optional
-  glVerify(glActiveTexture(GL_TEXTURE0));//optional //0 texture unit is used by shadow pass
-  glVerify(glBindTexture(GL_TEXTURE_2D, textureId));
-
-  glVerify(glUniform1i(glGetUniformLocation(shader, "tex"), 0));//0 texture unit is used by shadow pass
-  glVerify(glUniform1i(glGetUniformLocation(shader, "showTexture"), 1));
-}
-
-void DisableTexture()
-{
-	glActiveTexture(GL_TEXTURE1);
-	glDisable(GL_TEXTURE_2D);
-	glActiveTexture(GL_TEXTURE0);
-	glDisable(GL_TEXTURE_2D);
-	glDeleteTextures(0, &texHydrographicId);
-}
-
-void DrawHydrographicV2(GpuMesh* mesh, const Vec4* positions, const Vec4* normals, const Vec4* uvs, const int* indices, int nIndices, int numPositions, bool showTexture)
+void DrawHydrographicFilm(GpuMesh* mesh, const Vec4* positions, const Vec4* normals, const Vec4* uvs, const int* indices, int nIndices, int numPositions, bool showTexture)
 {
   // Enable texture
   glVerify(glEnable(GL_TEXTURE_2D));//
   glVerify(glActiveTexture(GL_TEXTURE0));//
-  glVerify(glBindTexture(GL_TEXTURE_2D, mesh->mTextureId));
+  glVerify(glBindTexture(GL_TEXTURE_2D, GetChessboardTextureId()));
   glVerify(glUniform1i(glGetUniformLocation(s_filmProgram, "tex"), 0));//
-  int hasTexture = showTexture && mesh->texCoordsFilm.size() > 0 ? 1 : 0;
-  glVerify(glUniform1i(glGetUniformLocation(s_filmProgram, "showTexture"), hasTexture));
+                                                                       //int hasTexture = showTexture && mesh->texCoordsFilm.size() > 0 ? 1 : 0;
+                                                                       //glVerify(glUniform1i(glGetUniformLocation(s_filmProgram, "showTexture"), hasTexture));
+  glVerify(glUniform1i(glGetUniformLocation(s_filmProgram, "showTexture"), showTexture));
+  glVerify(glUniform1i(glGetUniformLocation(s_filmProgram, "showPhong"), 1));
   // update positions and normals
   glVerify(glBindBuffer(GL_ARRAY_BUFFER, mesh->mPositionsVBO)); // 
   glVerify(glBufferSubData(GL_ARRAY_BUFFER, 0, mesh->mNumVertices * sizeof(Vec4), positions));
   glVerify(glBufferSubData(GL_ARRAY_BUFFER, mesh->mNumVertices * sizeof(Vec4), mesh->mNumVertices * sizeof(Vec4), normals));
+  if (showTexture)
+  {
+    glVerify(glBufferSubData(GL_ARRAY_BUFFER, mesh->mNumVertices * (sizeof(Vec4) + sizeof(Vec4)), mesh->mNumVertices * sizeof(Vec4), uvs));
+  }
   // draw VAO
   glVerify(glBindVertexArray(mesh->mVAO));
   glVerify(glDrawElements(GL_TRIANGLES, nIndices, GL_UNSIGNED_INT, 0));
@@ -4554,45 +3440,84 @@ void DrawHydrographicV2(GpuMesh* mesh, const Vec4* positions, const Vec4* normal
   glDisable(GL_TEXTURE_2D);
 }
 
-void DrawDistortion(GpuMesh* mesh, const Vec4* positions, const Vec4* normals, const Vec4* uvs, const int* indices, int nIndices, int numPositions, bool showTexture, Mat44 model)
+void DrawReverseTexture(GpuMesh* mesh, const Vec4* positions, const Vec4* normals, const Vec4* uvs, const int* indices, int nIndices, int numPositions, Vec4* stretchColors, int textureMode)
 {
-  int hasTexture = showTexture && mesh->texCoordsFilm.size() ? 1 : 0;
-  if (hasTexture)
+  glVerify(glUniform1i(glGetUniformLocation(s_reverseTexProgram, "textureMode"), textureMode));
+  if (textureMode > 0)
   {
     // Enable texture
     glVerify(glEnable(GL_TEXTURE_2D));//
     glVerify(glActiveTexture(GL_TEXTURE0));//
-    glVerify(glBindTexture(GL_TEXTURE_2D, mesh->mTextureId));
-    glVerify(glUniform1i(glGetUniformLocation(s_filmProgram, "tex"), 0));//
-    glVerify(glUniform1i(glGetUniformLocation(s_filmProgram, "showTexture"), hasTexture));
+    glVerify(glBindTexture(GL_TEXTURE_2D, GetRigidModelTextureId()));
+    glVerify(glUniform1i(glGetUniformLocation(s_reverseTexProgram, "reverseTexture"), 0));//
   }
-  // Enable blending for transparency
-  //glEnable(GL_BLEND);
-  //glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-  // update positions and normals
+  if (textureMode > 1)
+  {
+    glVerify(glEnable(GL_TEXTURE_1D));
+    glVerify(glActiveTexture(GL_TEXTURE1));
+    glVerify(glBindTexture(GL_TEXTURE_1D, GetHeatmapTextureId()));
+    glVerify(glUniform1i(glGetUniformLocation(s_reverseTexProgram, "colorMap"), 1));//
+  }
+
   glVerify(glBindBuffer(GL_ARRAY_BUFFER, mesh->mPositionsVBO));
   glVerify(glBufferSubData(GL_ARRAY_BUFFER, 0, mesh->mNumVertices * sizeof(Vec4), positions));
   glVerify(glBufferSubData(GL_ARRAY_BUFFER, mesh->mNumVertices * sizeof(Vec4), mesh->mNumVertices * sizeof(Vec4), normals));
   // update texture coords
-  glVerify(glBufferSubData(GL_ARRAY_BUFFER, mesh->mNumVertices * (sizeof(Vec4) + sizeof(Vec4)), mesh->mNumVertices * sizeof(Vec4), mesh->texCoordsFilm.data()));
+  if (textureMode > 0)
+  {
+    glVerify(glBufferSubData(GL_ARRAY_BUFFER, mesh->mNumVertices * (sizeof(Vec4) + sizeof(Vec4)), mesh->mNumVertices * sizeof(Vec4), uvs));
+  }
+  glVerify(glBufferSubData(GL_ARRAY_BUFFER, mesh->mNumVertices * (sizeof(Vec4) + sizeof(Vec4) + sizeof(Vec4)), mesh->mNumVertices * sizeof(Vec4), stretchColors));
   // draw VAO
   glVerify(glBindVertexArray(mesh->mVAO));
-  // update indices (in the case of seams corrections)
-  glVerify(glBindBuffer(GL_ARRAY_BUFFER, mesh->mIndicesIBO));
-  glVerify(glBufferData(GL_ELEMENT_ARRAY_BUFFER, nIndices * sizeof(int), &indices[0], GL_STATIC_DRAW));
 
-  glVerify(glDrawElements(GL_TRIANGLES, nIndices, GL_UNSIGNED_INT, 0));
+  if (g_enable_paches)
+  {
+    glVerify(glDrawElements(GL_PATCHES, nIndices, GL_UNSIGNED_INT, 0)); // when using tesselation shader
+  }
+  else
+  {
+    glVerify(glDrawElements(GL_TRIANGLES, nIndices, GL_UNSIGNED_INT, 0));
+  }
+
   glVerify(glBindVertexArray(0));
   // disable texture
-  if (hasTexture)
+  if (textureMode > 0)
   {
     glActiveTexture(GL_TEXTURE0);
     glDisable(GL_TEXTURE_2D);
   }
+  if (textureMode > 1)
+  {
+    glVerify(glActiveTexture(GL_TEXTURE1));
+    glDisable(GL_TEXTURE_1D);
+  }
 }
 
-void SetupContactsTexture(GpuMesh* filmMesh)
+GLuint* GetTexturePixels(GLuint textureID, int width, int height, int chanels)
 {
-  LoadDynamicTexture(g_dynamic_texture, g_dynamic_texture_ID);
-  filmMesh->mTextureId = g_dynamic_texture_ID;
+  GLuint* pixels = new GLuint[width * height * chanels];
+  glBindTexture(GL_TEXTURE_2D, textureID);
+  //glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_INT, pixels);
+  glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+
+  return pixels;
+}
+
+
+void CreateHydrographicFilmImage(int W, int H, int imgW)
+{
+  FILE   *out = fopen("../../movies/texture.tga", "wb");
+  char   *pixel_data = new char[3 * imgW*H];
+  short  TGAhead[] = { 0, 2, 0, 0, 0, 0, imgW, H, 24 };
+
+  //glReadBuffer(GL_BACK);
+  glPixelStorei(GL_PACK_ALIGNMENT, 1);
+  glReadPixels(int((W - imgW)*0.5f), 0, imgW, H, GL_BGR, GL_UNSIGNED_BYTE, pixel_data);
+
+  fwrite(&TGAhead, sizeof(TGAhead), 1, out);
+  fwrite(pixel_data, 3 * imgW*H, 1, out);
+  fclose(out);
+
+  delete[] pixel_data;
 }

@@ -1,0 +1,44 @@
+#
+# example .mtl file
+#
+newmtl default_red
+Ns 8.0
+# Ns is the exponent factor for specular calculations, ranging between 0 and 1000
+# After loading, it will be multiplied 4 times
+Tr 1.0
+# sometimes Tr is used in place of d, representing translucency.
+Kd 0.7 0.0 0.0
+# Kd represents the diffuse color of the material.
+Ks 1.0 1.0 1.0
+# Ks represents the specular color of the material.
+Ka 0.15 0.08 0.08
+# Ka represents the ambient color of the material.
+
+newmtl default_green
+Ns 64.0
+Tr 1.0
+Kd 0.2 0.6 0.6
+Ks 1.0 1.0 1.0
+Ka 0.0 0.15 0.18
+
+newmtl default_blue
+Ns 15.0
+Tr 1.0
+Kd 0.10 0.06 0.7
+Ks 1.0 1.0 1.0
+Ka 0.0 0.4 0.21
+
+newmtl default_purple
+Ns 15.0
+Tr 1.0
+Kd 0.6 0.0 0.6
+Ks 1.0 1.0 1.0
+Ka 0.2 0.0 0.2
+
+newmtl default_board
+Ns 64.0
+Tr 1.0
+Kd 0.8 0.8 0.8
+Ks 1.0 1.0 1.0
+Ka 0.15 0.15 0.15
+map_Kd ../textures/EPRek.png

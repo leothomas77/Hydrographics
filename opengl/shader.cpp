@@ -151,11 +151,13 @@ namespace OGL_Renderer
 		fclose(f);
 	}
 
-	GLuint CompileProgram(const char *vsource, const char *fsource, const char* gsource)
+	GLuint CompileProgram(const char *vsource, const char *fsource, const char* gsource, const char* tcsource, const char* tesource)
 	{
 		GLuint vertexShader = GLuint(-1);
 		GLuint geometryShader = GLuint(-1);
 		GLuint fragmentShader = GLuint(-1);
+    GLuint tesselationControlShader = GLuint(-1);
+    GLuint tesselationEvaluationShader = GLuint(-1);
 
 		GLuint program = glCreateProgram();
 
@@ -177,7 +179,27 @@ namespace OGL_Renderer
 			glAttachShader(program, fragmentShader);
 		}
 
-		if (gsource)
+    if (tcsource && tesource)
+    {
+      tesselationControlShader = glCreateShader(GL_TESS_CONTROL_SHADER);
+      glShaderSource(tesselationControlShader, 1, &tcsource, 0);
+      glCompileShader(tesselationControlShader);
+      GlslPrintShaderLog(tesselationControlShader);
+      glAttachShader(program, tesselationControlShader);
+
+      tesselationEvaluationShader = glCreateShader(GL_TESS_EVALUATION_SHADER);
+      glShaderSource(tesselationEvaluationShader, 1, &tesource, 0);
+      glCompileShader(tesselationEvaluationShader);
+      GlslPrintShaderLog(tesselationEvaluationShader);
+      glAttachShader(program, tesselationEvaluationShader);
+
+      GLint MaxPatchVertices = 0;
+      glGetIntegerv(GL_MAX_PATCH_VERTICES, &MaxPatchVertices);
+      printf("Max supported patch vertices %d\n", MaxPatchVertices);
+      glPatchParameteri(GL_PATCH_VERTICES, 3);
+    }
+    
+    if (gsource)
 		{
 			geometryShader = glCreateShader(GL_GEOMETRY_SHADER);
 			glShaderSource(geometryShader, 1, &gsource, 0);
@@ -190,6 +212,8 @@ namespace OGL_Renderer
 			glProgramParameteriEXT(program, GL_GEOMETRY_INPUT_TYPE_EXT, GL_POINTS);
 			glProgramParameteriEXT(program, GL_GEOMETRY_OUTPUT_TYPE_EXT, GL_TRIANGLE_STRIP);
 		}
+
+
 
 		glLinkProgram(program);
 
