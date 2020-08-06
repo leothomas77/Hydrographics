@@ -3,7 +3,7 @@
 //#define DEBUG_SIM
 
 
-#define CAM_DISTANCE_R 93.7f //163.02f
+#define CAM_DISTANCE_R 93.7f //this distance works together with far cam measure to generate hydographic image file
 #define IMG_WIDTH 1082
 
 #define SDL_CONTROLLER_BUTTON_LEFT_TRIGGER (SDL_CONTROLLER_BUTTON_MAX + 1)
@@ -309,7 +309,6 @@ NvFlexLibrary* g_flexLib;
 std::vector<Vec4> g_contact_positions;
 std::vector<Vec4> g_contact_normals;
 std::vector<Vec4> g_contact_uvs;
-std::vector<Vec4> g_stretch_colors;
 std::vector<Vec4> g_compens_colors;
 std::vector<int> g_contact_indexes;
 float g_max_distance_uv = 0.36f;
@@ -376,7 +375,7 @@ float fy = (dy / dY)*dZ;
 float g_fov = kPi / 4.0f;
 float g_camSpeed;
 float g_camNear = .001f;
-float g_camFar = 100.0f;
+float g_camFar = 1000.0f;
 
 Vec3 g_lightPos;
 Vec3 g_lightDir = Normalize(Vec3(5.0f, -15.0f, 7.5f));

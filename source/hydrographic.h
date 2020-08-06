@@ -252,7 +252,6 @@ public:
     g_contact_normals.resize(g_buffers->normals.size());
     g_contact_indexes.resize(g_buffers->triangles.size());
     g_contact_uvs.resize(g_buffers->positions.size());
-    g_stretch_colors.resize(g_buffers->positions.size());
     g_compens_colors.resize(g_buffers->positions.size());
 
     // create a copy of flat film positinos before deformation occurs
@@ -261,7 +260,6 @@ public:
     for (int i = 0; i < g_buffers->positions.size(); i++)
     {
       g_contact_uvs[i] = Vec4(-1.0f); // initialize contact uv with -1 means this vertice has not contact with rigid body
-      g_stretch_colors[i] = Vec4(0.0f); // initial stretch is zero
       g_compens_colors[i] = Vec4(1.0f); // initial compens is neutral value
     }
     g_buffers->normals.copyto(&g_contact_normals[0], g_buffers->normals.size());

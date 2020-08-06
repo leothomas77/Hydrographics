@@ -25,7 +25,6 @@
 //
 // Copyright (c) 20132017 NVIDIA Corporation. All rights reserved.
 #include "../source/shaders.h"
-#include "../source/ColorGradient.h"
 
 #include "../core/mesh.h"
 #include "../core/tga.h"	
@@ -2570,8 +2569,6 @@ inline int GridIndex(int x, int y, int dx) { return y*dx + x; } // duplicated fn
 
 void BuildColorCompensation(Vec4* compensColors, Vec4* filmPositions, std::vector<Vec4> flatFilmPositions, const int dimX, const int dimZ)
 {
-  ColorGradient *colorGradient = new ColorGradient();
-
   for (int z = 0; z < dimZ; z++)
   {
     for (int x = 0; x < dimX; x++)
@@ -2605,6 +2602,7 @@ void BuildColorCompensation(Vec4* compensColors, Vec4* filmPositions, std::vecto
       else
       {
         finalLength[0] = restLength[0] = 1.0f;
+        nearbyCount = 1.0f;
       }
 
       float variationAcum = 0.0f;

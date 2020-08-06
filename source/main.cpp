@@ -97,7 +97,6 @@ void Init(int scene, bool centerCamera = true, bool resetSimParams = true)
   g_contact_uvs.resize(0);
   g_contact_indexes.resize(0);
   // for draw color compensation
-  g_stretch_colors.resize(0);
   g_compens_colors.resize(0);
 
   // for compute fps and the metrics
@@ -444,9 +443,8 @@ void RenderScene()
   //Mat44 projOrtho = OrthographicMatrix(l, r, b, t, g_camNear, g_camFar);
   //float aspect = (g_screenWidth*fy) / (g_screenHeight*fx);
   //g_proj = projOrtho;
-  //g_proj = ProjectionMatrix(RadToDeg(g_fov), g_aspect, g_camNear, g_camFar);
-
-  g_proj = Frustum(-g_screenWidth, g_screenWidth, -g_screenHeight, g_screenHeight, g_camNear, g_camFar);
+  //g_proj = Frustum(-g_screenWidth, g_screenWidth, -g_screenHeight, g_screenHeight, g_camNear, g_camFar);
+  g_proj = ProjectionMatrix(RadToDeg(g_fov), g_aspect, g_camNear, g_camFar);
   g_camDistance = Length(g_camPos[g_camIndex] - g_centroid);
  
   g_view = RotationMatrix(-g_camAngle[g_camIndex].x, Vec3(0.0f, 1.0f, 0.0f))*RotationMatrix(-g_camAngle[g_camIndex].y, Vec3(cosf(-g_camAngle[g_camIndex].x), 0.0f, sinf(-g_camAngle[g_camIndex].x)))*TranslationMatrix(-Point3(g_camPos[g_camIndex]));
@@ -1123,8 +1121,6 @@ void UpdateFrame(bool &quit)
     // because of read buffer data from comming from gpu to cpu
     BuildReverseTextureMapping();
     BuildColorCompensation(&g_compens_colors[0], &g_buffers->positions[0], g_contact_positions, g_filmDimX, g_filmDimZ);
-    //PostProcessReverseTexture();
-    //g_drawReverseTexture = true;
   }
 
 
