@@ -487,30 +487,16 @@ void RenderScene()
       g_proj = Frustum(-IMG_WIDTH, IMG_WIDTH, -g_screenHeight, g_screenHeight, g_camNear, g_camFar);
       g_view = RotationMatrix(-g_camAngle[g_camIndex].x, Vec3(0.0f, 1.0f, 0.0f))*RotationMatrix(-g_camAngle[g_camIndex].y, Vec3(cosf(-g_camAngle[g_camIndex].x), 0.0f, sinf(-g_camAngle[g_camIndex].x)))*TranslationMatrix(-Point3(camPos));
       BindReverseTextureShader(g_view, g_proj, g_lightPos, camPos, g_lightColor, g_ambientColor, g_specularColor, g_specularExpoent, g_diffuseColor, g_max_distance_uv, g_near_distance_uv, g_weight1, g_weight2, g_tesselation_inner, g_tesselation_outer);
-      DrawReverseTexture(g_gpu_film_mesh, &g_contact_positions[0], &g_contact_normals[0], &g_contact_uvs[0], &g_contact_indexes[0], g_contact_indexes.size(), g_contact_positions.size(), true, &g_compens_colors[0], g_colorCompensation);
+      DrawReverseTexture(g_gpu_film_mesh, &g_contact_positions[0], &g_contact_normals[0], &g_contact_uvs[0], &g_contact_indexes[0], g_contact_indexes.size(), g_contact_positions.size(), &g_compens_colors[0], g_textureMode);
       CreateHydrographicFilmImage(g_screenWidth, g_screenHeight, IMG_WIDTH);
       g_camIndex = g_camIndexAux;//restore current view
     }
     else
     {
-      //then now render the reverse texture if selected
-      if (g_drawReverseTexture)
-      {
-        showTexture = true;
+      if (g_drawReverseTexture || g_drawStretchColor || g_drawColorCompensation) {
+        //render the reverse texture in the selected mode
         BindReverseTextureShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], g_lightColor, g_ambientColor, g_specularColor, g_specularExpoent, g_diffuseColor, g_max_distance_uv, g_near_distance_uv, g_weight1, g_weight2, g_tesselation_inner, g_tesselation_outer);
-        DrawReverseTexture(g_gpu_film_mesh, &g_contact_positions[0], &g_contact_normals[0], &g_contact_uvs[0], &g_contact_indexes[0], g_contact_indexes.size(), g_contact_positions.size(), showTexture, &g_compens_colors[0], g_colorCompensation);
-      }
-      if (g_drawStretchColor)
-      {
-        showTexture = false;
-        BindReverseTextureShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], g_lightColor, g_ambientColor, g_specularColor, g_specularExpoent, g_diffuseColor, g_max_distance_uv, g_near_distance_uv, g_weight1, g_weight2, g_tesselation_inner, g_tesselation_outer);
-        DrawReverseTexture(g_gpu_film_mesh, &g_contact_positions[0], &g_contact_normals[0], &g_contact_uvs[0], &g_contact_indexes[0], g_contact_indexes.size(), g_contact_positions.size(), showTexture, &g_stretch_colors[0], true);
-      }
-      if (g_drawStretchFactor)
-      {
-        showTexture = false;
-        BindReverseTextureShader(g_view, g_proj, g_lightPos, g_camPos[g_camIndex], g_lightColor, g_ambientColor, g_specularColor, g_specularExpoent, g_diffuseColor, g_max_distance_uv, g_near_distance_uv, g_weight1, g_weight2, g_tesselation_inner, g_tesselation_outer);
-        DrawReverseTexture(g_gpu_film_mesh, &g_contact_positions[0], &g_contact_normals[0], &g_contact_uvs[0], &g_contact_indexes[0], g_contact_indexes.size(), g_contact_positions.size(), showTexture, &g_compens_colors[0], true);
+        DrawReverseTexture(g_gpu_film_mesh, &g_contact_positions[0], &g_contact_normals[0], &g_contact_uvs[0], &g_contact_indexes[0], g_contact_indexes.size(), g_contact_positions.size(), &g_compens_colors[0], g_textureMode);
       }
     }
   }
@@ -568,7 +554,7 @@ void RenderDebug()
         Vec3 restB = g_contact_positions[b];
         float restLength = Length(restA - restB);
         float displacementCoef = abs(distortedLength - restLength) / restLength;
-        color = colorGradient->getColorAtValue(displacementCoef * g_stretchFactor);
+        //color = colorGradient->getColorAtValue(displacementCoef * g_stretchFactor);
       }
 
       //Heatmap of stiffness
@@ -1137,7 +1123,7 @@ void UpdateFrame(bool &quit)
     // this block should execute before unmap command
     // because of read buffer data from comming from gpu to cpu
     BuildReverseTextureMapping();
-    BuildColorCompensation(&g_stretch_colors[0], &g_compens_colors[0], &g_buffers->positions[0], g_contact_positions, g_filmDimX, g_filmDimZ);
+    BuildColorCompensation(&g_compens_colors[0], &g_buffers->positions[0], g_contact_positions, g_filmDimX, g_filmDimZ);
     //PostProcessReverseTexture();
     //g_drawReverseTexture = true;
   }

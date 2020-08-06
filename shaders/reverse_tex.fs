@@ -1,15 +1,17 @@
 ﻿#version 430
 
 uniform vec3 uLPos;
-uniform vec4 uLColor;
+//uniform vec4 uLColor;
 uniform vec4 uColor;
 uniform vec3 uCamPos;
-uniform vec4 uAmbient;
-uniform vec4 uSpecular;
-uniform uint uSpecularExpoent;
-uniform bool uColorCompensation;
-uniform bool showTexture;
-uniform sampler2D tex;
+//uniform vec4 uAmbient;
+//uniform vec4 uSpecular;
+//uniform uint uSpecularExpoent;
+//uniform bool showTexture;
+uniform sampler2D reverseTexture;
+uniform sampler1D colorMap;
+uniform int textureMode;
+
 //inputs from geometry shader
 in GS_OUT
 {
@@ -19,61 +21,37 @@ in GS_OUT
     vec4 vColor;
 		vec2 uv0;
 		vec2 uv1;
-
 } fs_in;
 
 out vec4 outFragColor;
 
 void main(void) {
-	vec4 diffuse  = vec4(0.0);
-	vec4 specular = vec4(0.0);
 	vec3 normal  = normalize(-fs_in.vNormal);
-	vec4 lColor	 = uLColor;
-	// material properties
-	vec4 matAmb	 = uAmbient;
+  vec4 matDif = vec4(1.0f);
 
-  vec4 matDif;
-  vec4 compFactor = vec4(1.0f);
-  //vec2 uvT; //Tarini 
-  //uvT.x = ( fwidth( fs_in.uv0.x ) < fwidth( fs_in.uv1.x )-0.001 )? fs_in.uv0.x : fs_in.uv1.x;
-	//uvT.y = ( fwidth( fs_in.uv0.y ) < fwidth( fs_in.uv1.y )-0.001 )? fs_in.uv0.y : fs_in.uv1.y;
+  float compensationFactor = 1.0f - fs_in.vColor.x;
 
-  //uvT.x = ( fwidth( fs_in.uv0.x ) < fwidth( fs_in.uv0.x +0.001) )? fs_in.uv0.x : fs_in.uv0.x +000.1;
-	//uvT.y = ( fwidth( fs_in.uv0.y ) < fwidth( fs_in.uv0.y +0.001) )? fs_in.uv0.y : fs_in.uv0.y +000.1;
 
-  matDif  = showTexture ? texture(tex, fs_in.vTexCoords) : fs_in.vColor;
   if (fs_in.vTexCoords.x >= 0.0f && fs_in.vTexCoords.y >= 0.0f)
   {
-    compFactor = fs_in.vColor;
+    matDif  = texture(reverseTexture, fs_in.vTexCoords);
+
+    if (textureMode == 2)
+    {
+      matDif *=  compensationFactor;
+    }
   }
-  //matDif  = showTexture ? texture(tex, uvT) : uColor;
-
-
-	vec4 matSpec = uSpecular;
-	//ambient
-	vec4 ambient = matAmb;
-	//diffuse
-	vec3 pos = normalize(fs_in.vPosW);
-	vec3 vL = normalize(uLPos - pos);
-	float NdotL = dot(normal, vL);
-	if (NdotL > 0)
-	{
-	  diffuse = matDif * NdotL;
-	}
-	//specular
-	vec3 vV = normalize(uCamPos - pos);
-	vec3 vR = normalize(reflect(-vL, normal));
-	float RdotV = dot(vV, vR);
-	if (RdotV > 0)
-	{
-	  specular = matSpec * pow(RdotV, uSpecularExpoent);
-	}
-	// should use other components to apply phong
-
-  if (uColorCompensation)
+  
+  if (textureMode == 3)
   {
-    matDif = matDif * compFactor;  
+    matDif = vec4(compensationFactor);
   }
+
+  if (textureMode == 4)
+  {
+    matDif = texture(colorMap, fs_in.vColor.x);
+  }
+
   outFragColor = matDif;
 }
 //

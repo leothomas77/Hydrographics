@@ -371,8 +371,8 @@ float fy = (dy / dY)*dZ;
 //float g_fov = 2 * float(atan(0.5*g_screenHeight / fy)); // *180 / M_PI;
 float g_fov = kPi / 4.0f;
 float g_camSpeed;
-float g_camNear = .0001f;
-float g_camFar = 1000.0f;
+float g_camNear = .001f;
+float g_camFar = 100.0f;
 
 Vec3 g_lightPos;
 Vec3 g_lightDir = Normalize(Vec3(5.0f, -15.0f, 7.5f));
@@ -398,12 +398,11 @@ bool g_drawHydrographicCollisionMesh = true;
 bool g_drawStiffness = false;
 bool g_drawStretching = false;
 bool g_drawStretchColor = false;
-bool g_drawStretchFactor = false;
-float g_stretchFactor = 2.0f;
+int g_textureMode = 1;
 int g_drawSprings;		// 0: no draw, 1: draw stretch 2: draw tether
 bool g_drawBases = false;
 bool g_drawReverseTexture = false;
-bool g_colorCompensation = false;
+bool g_drawColorCompensation = false;
 bool g_createReverseTextureFile = false;
 bool g_drawFixedSeams = false;
 bool g_drawContacts = false;

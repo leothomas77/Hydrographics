@@ -53,6 +53,7 @@
 
 GLuint g_chessboard_texture_id;
 GLuint g_rigid_model_texture_id;
+GLuint g_heatmap_texture_id;
 
 GLuint s_reverseTexProgram = GLuint(-1);
 GLuint s_rigidBodyProgram = GLuint(-1);
@@ -175,38 +176,34 @@ GLuint LoadTexture(const char* filename, PngImage& image)
 }
 
 
-
-GLuint CreateDynamicTexture(PngImage &img)
+GLuint Load1DTexture(const std::vector<Vec4> textureData)
 {
-  img.m_height = 256;
-  img.m_width = 256;
+  GLuint tex;
 
-  img.m_data = new uint32_t[img.m_height * img.m_width];
+  glVerify(glGenTextures(1, &tex));
+  glVerify(glActiveTexture(GL_TEXTURE1));
+  glVerify(glBindTexture(GL_TEXTURE_1D, tex));
 
-  //initialize pixel color for dynamic texture 
-  for (int col = 0; col < img.m_width; col++)
+  glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
+  float data[] =
   {
-    for (int row = 0; row < img.m_height; row++)
-    {
-      glm::ivec4 color = glm::ivec4(255, 255, 255, 255);
-      uint32_t pixel = (BYTE(color.a) << 24) + (BYTE(color.b) << 16) + (BYTE(color.g) << 8) + BYTE(color.r);
+    0.0f, 0.0f, 1.0f, 1.0f, //blue
+    0.0f, 1.0f, 1.0f, 1.0f, 
+    0.0f, 1.0f, 0.0f, 1.0f, //green
+    1.0f, 1.0f, 0.0f, 1.0f,
+    1.0f, 0.0f, 0.0f, 1.0f //red
+  };
 
-      int index = img.m_height * col + row;
-      img.m_data[index] = pixel;
-    }
-  }
+  int textureSize = sizeof(data) / sizeof(Vec4(1.0f));
 
-  GLuint textID = -1;
+  glTexImage1D(GL_TEXTURE_1D, 0, GL_RGBA32F, textureSize, 0, GL_RGBA, GL_FLOAT, data);
+  glVerify(glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_WRAP_S, GL_CLAMP));
+  glVerify(glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_WRAP_T, GL_CLAMP));
+  glVerify(glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MAG_FILTER, GL_LINEAR));
+  glVerify(glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MIN_FILTER, GL_LINEAR));
 
-  glGenTextures(1, &textID);
-  glBindTexture(GL_TEXTURE_2D, textID);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, img.m_width, img.m_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, img.m_data);
-  glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
-  glVerify(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
-
-  return textID;
+  return tex;
 }
 
 
@@ -1447,6 +1444,15 @@ namespace OGL_Renderer
 
     g_chessboard_texture_id = LoadTexture(GetFilePathByPlatform("../../textures/malha_rgb.jpg").c_str(), g_chessboard_texture_image);
 
+    std::vector<Vec4> heatmapColors;
+    heatmapColors.push_back(Vec4(0.0f, 0.0f, 1.0f, 1.0f));
+    heatmapColors.push_back(Vec4(0.0f, 1.0f, 1.0f, 1.0f));
+    heatmapColors.push_back(Vec4(0.0f, 1.0f, 0.0f, 1.0f));
+    heatmapColors.push_back(Vec4(1.0f, 1.0f, 0.0f, 1.0f));
+    heatmapColors.push_back(Vec4(1.0f, 0.0f, 0.0f, 1.0f));
+
+    g_heatmap_texture_id = Load1DTexture(heatmapColors);
+
 	  g_msaaSamples = msaaSamples;
 	  g_window = window;
   }
@@ -2562,52 +2568,56 @@ void PlotTexturePixel(Vec3 position, Vec2 textureCoords, PngImage textureImage)
 
 inline int GridIndex(int x, int y, int dx) { return y*dx + x; } // duplicated fnc
 
-void BuildColorCompensation(Vec4* stretchColors, Vec4* compensColors, Vec4* filmPositions, std::vector<Vec4> flatFilmPositions, const int dimX, const int dimZ)
+void BuildColorCompensation(Vec4* compensColors, Vec4* filmPositions, std::vector<Vec4> flatFilmPositions, const int dimX, const int dimZ)
 {
   ColorGradient *colorGradient = new ColorGradient();
-
 
   for (int z = 0; z < dimZ; z++)
   {
     for (int x = 0; x < dimX; x++)
     {
+      float restLength[8] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+      float finalLength[8] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+      int nearbyCount = 8;
+      
       if (x > 0 && z > 0 && x < (dimX - 1) && z < (dimZ - 1))
       {
-        float restLength0 = Length(Vec3(flatFilmPositions[GridIndex(x, z, dimX)]) - Vec3(flatFilmPositions[GridIndex(x, z - 1, dimX)]));
-        float restLength1 = Length(Vec3(flatFilmPositions[GridIndex(x, z, dimX)]) - Vec3(flatFilmPositions[GridIndex(x + 1, z, dimX)]));
-        float restLength2 = Length(Vec3(flatFilmPositions[GridIndex(x, z, dimX)]) - Vec3(flatFilmPositions[GridIndex(x, z + 1, dimX)]));
-        float restLength3 = Length(Vec3(flatFilmPositions[GridIndex(x, z, dimX)]) - Vec3(flatFilmPositions[GridIndex(x - 1, z, dimX)]));
+        restLength[0] = Length(Vec3(flatFilmPositions[GridIndex(x, z, dimX)]) - Vec3(flatFilmPositions[GridIndex(x, z - 1, dimX)]));
+        restLength[1] = Length(Vec3(flatFilmPositions[GridIndex(x, z, dimX)]) - Vec3(flatFilmPositions[GridIndex(x + 1, z, dimX)]));
+        restLength[2] = Length(Vec3(flatFilmPositions[GridIndex(x, z, dimX)]) - Vec3(flatFilmPositions[GridIndex(x, z + 1, dimX)]));
+        restLength[3] = Length(Vec3(flatFilmPositions[GridIndex(x, z, dimX)]) - Vec3(flatFilmPositions[GridIndex(x - 1, z, dimX)]));
 
-        float restLength4 = Length(Vec3(flatFilmPositions[GridIndex(x, z, dimX)]) - Vec3(flatFilmPositions[GridIndex(x - 1, z - 1, dimX)]));
-        float restLength5 = Length(Vec3(flatFilmPositions[GridIndex(x, z, dimX)]) - Vec3(flatFilmPositions[GridIndex(x - 1, z + 1, dimX)]));
-        float restLength6 = Length(Vec3(flatFilmPositions[GridIndex(x, z, dimX)]) - Vec3(flatFilmPositions[GridIndex(x + 1, z + 1, dimX)]));
-        float restLength7 = Length(Vec3(flatFilmPositions[GridIndex(x, z, dimX)]) - Vec3(flatFilmPositions[GridIndex(x - 1, z + 1, dimX)]));
+        restLength[4] = Length(Vec3(flatFilmPositions[GridIndex(x, z, dimX)]) - Vec3(flatFilmPositions[GridIndex(x - 1, z - 1, dimX)]));
+        restLength[5] = Length(Vec3(flatFilmPositions[GridIndex(x, z, dimX)]) - Vec3(flatFilmPositions[GridIndex(x - 1, z + 1, dimX)]));
+        restLength[6] = Length(Vec3(flatFilmPositions[GridIndex(x, z, dimX)]) - Vec3(flatFilmPositions[GridIndex(x + 1, z + 1, dimX)]));
+        restLength[7] = Length(Vec3(flatFilmPositions[GridIndex(x, z, dimX)]) - Vec3(flatFilmPositions[GridIndex(x - 1, z + 1, dimX)]));
 
+        finalLength[0] = Length(Vec3(filmPositions[GridIndex(x, z, dimX)]) - Vec3(filmPositions[GridIndex(x, z - 1, dimX)]));
+        finalLength[1] = Length(Vec3(filmPositions[GridIndex(x, z, dimX)]) - Vec3(filmPositions[GridIndex(x + 1, z, dimX)]));
+        finalLength[2] = Length(Vec3(filmPositions[GridIndex(x, z, dimX)]) - Vec3(filmPositions[GridIndex(x, z + 1, dimX)]));
+        finalLength[3] = Length(Vec3(filmPositions[GridIndex(x, z, dimX)]) - Vec3(filmPositions[GridIndex(x - 1, z, dimX)]));
 
-        float finalLength0 = Length(Vec3(filmPositions[GridIndex(x, z, dimX)]) - Vec3(filmPositions[GridIndex(x, z - 1, dimX)]));
-        float finalLength1 = Length(Vec3(filmPositions[GridIndex(x, z, dimX)]) - Vec3(filmPositions[GridIndex(x + 1, z, dimX)]));
-        float finalLength2 = Length(Vec3(filmPositions[GridIndex(x, z, dimX)]) - Vec3(filmPositions[GridIndex(x, z + 1, dimX)]));
-        float finalLength3 = Length(Vec3(filmPositions[GridIndex(x, z, dimX)]) - Vec3(filmPositions[GridIndex(x - 1, z, dimX)]));
-
-        float finalLength4 = Length(Vec3(filmPositions[GridIndex(x, z, dimX)]) - Vec3(filmPositions[GridIndex(x - 1, z - 1, dimX)]));
-        float finalLength5 = Length(Vec3(filmPositions[GridIndex(x, z, dimX)]) - Vec3(filmPositions[GridIndex(x - 1, z + 1, dimX)]));
-        float finalLength6 = Length(Vec3(filmPositions[GridIndex(x, z, dimX)]) - Vec3(filmPositions[GridIndex(x + 1, z + 1, dimX)]));
-        float finalLength7 = Length(Vec3(filmPositions[GridIndex(x, z, dimX)]) - Vec3(filmPositions[GridIndex(x - 1, z + 1, dimX)]));
-
-        float variation0 = abs(finalLength0 - restLength0) / restLength0;
-        float variation1 = abs(finalLength1 - restLength1) / restLength1;
-        float variation2 = abs(finalLength2 - restLength2) / restLength2;
-        float variation3 = abs(finalLength3 - restLength3) / restLength3;
-        float variation4 = abs(finalLength4 - restLength4) / restLength4;
-        float variation5 = abs(finalLength5 - restLength5) / restLength5;
-        float variation6 = abs(finalLength6 - restLength6) / restLength6;
-        float variation7 = abs(finalLength7 - restLength7) / restLength7;
-
-        float avgVariation = (variation0 + variation1 + variation2 + variation3 + variation4 + variation5 + variation6 + variation7) / 8.0f;
-
-        stretchColors[GridIndex(x, z, dimX)] = colorGradient->getColorAtValue(avgVariation);
-        compensColors[GridIndex(x, z, dimX)] = Vec4(Vec3(1.0f - avgVariation), 1.0f);
+        finalLength[4] = Length(Vec3(filmPositions[GridIndex(x, z, dimX)]) - Vec3(filmPositions[GridIndex(x - 1, z - 1, dimX)]));
+        finalLength[5] = Length(Vec3(filmPositions[GridIndex(x, z, dimX)]) - Vec3(filmPositions[GridIndex(x - 1, z + 1, dimX)]));
+        finalLength[6] = Length(Vec3(filmPositions[GridIndex(x, z, dimX)]) - Vec3(filmPositions[GridIndex(x + 1, z + 1, dimX)]));
+        finalLength[7] = Length(Vec3(filmPositions[GridIndex(x, z, dimX)]) - Vec3(filmPositions[GridIndex(x + 1, z - 1, dimX)]));
       }
+      else
+      {
+        finalLength[0] = restLength[0] = 1.0f;
+      }
+
+      float variationAcum = 0.0f;
+
+      for (int count = 0; count < nearbyCount; count++)
+      {
+        variationAcum += abs(finalLength[count] - restLength[count]) / restLength[count];
+      }
+
+      float avgVariation = variationAcum / nearbyCount;
+
+      compensColors[GridIndex(x, z, dimX)] = avgVariation;//Vec4(Vec3(colorGradient->getColorAtValue(avgVariation)), 1.0f);
+
     }
   }
 }
@@ -3254,6 +3264,11 @@ GLuint GetRigidModelTextureId()
   return g_rigid_model_texture_id;
 }
 
+GLuint GetHeatmapTextureId()
+{
+  return g_heatmap_texture_id;
+}
+
 void SetViewport(int x, int y, int width, int height)
 {
   glVerify(glViewport(x, y, width, height));
@@ -3386,9 +3401,9 @@ void BindReverseTextureShader(Matrix44 view, Matrix44 proj, Vec3 lightPos, Vec3 
     glVerify(glUniform4fv(glGetUniformLocation(s_reverseTexProgram, "uLColor"), 1, lightColor));
     glVerify(glUniform4fv(glGetUniformLocation(s_reverseTexProgram, "uColor"), 1, diffuseColor));
     glVerify(glUniform3fv(glGetUniformLocation(s_reverseTexProgram, "uCamPos"), 1, camPos));
-    glVerify(glUniform4fv(glGetUniformLocation(s_reverseTexProgram, "uAmbient"), 1, ambientColor));
-    glVerify(glUniform4fv(glGetUniformLocation(s_reverseTexProgram, "uSpecular"), 1, specularColor));
-    glVerify(glUniform1ui(glGetUniformLocation(s_reverseTexProgram, "uSpecularExpoent"), specularExpoent));
+    //glVerify(glUniform4fv(glGetUniformLocation(s_reverseTexProgram, "uAmbient"), 1, ambientColor));
+    //glVerify(glUniform4fv(glGetUniformLocation(s_reverseTexProgram, "uSpecular"), 1, specularColor));
+    //glVerify(glUniform1ui(glGetUniformLocation(s_reverseTexProgram, "uSpecularExpoent"), specularExpoent));
     glVerify(glUniformMatrix4fv(glGetUniformLocation(s_reverseTexProgram, "view"), 1, false, &view[0]));
     glVerify(glUniformMatrix4fv(glGetUniformLocation(s_reverseTexProgram, "proj"), 1, false, &proj[0]));
     glVerify(glUniformMatrix4fv(glGetUniformLocation(s_reverseTexProgram, "normalMat"), 1, false, Transpose(AffineInverse(Matrix44::kIdentity))));
@@ -3425,38 +3440,36 @@ void DrawHydrographicFilm(GpuMesh* mesh, const Vec4* positions, const Vec4* norm
   glDisable(GL_TEXTURE_2D);
 }
 
-void DrawReverseTexture(GpuMesh* mesh, const Vec4* positions, const Vec4* normals, const Vec4* uvs, const int* indices, int nIndices, int numPositions, bool showTexture, Vec4* stretchColors, bool colorCompensation)
+void DrawReverseTexture(GpuMesh* mesh, const Vec4* positions, const Vec4* normals, const Vec4* uvs, const int* indices, int nIndices, int numPositions, Vec4* stretchColors, int textureMode)
 {
-  //int hasTexture = showTexture && mesh->texCoordsFilm.size() ? 1 : 0;
-  if (showTexture)
+  glVerify(glUniform1i(glGetUniformLocation(s_reverseTexProgram, "textureMode"), textureMode));
+  if (textureMode > 0)
   {
     // Enable texture
     glVerify(glEnable(GL_TEXTURE_2D));//
     glVerify(glActiveTexture(GL_TEXTURE0));//
     glVerify(glBindTexture(GL_TEXTURE_2D, GetRigidModelTextureId()));
-    glVerify(glUniform1i(glGetUniformLocation(s_reverseTexProgram, "tex"), 0));//
+    glVerify(glUniform1i(glGetUniformLocation(s_reverseTexProgram, "reverseTexture"), 0));//
   }
-  glVerify(glUniform1i(glGetUniformLocation(s_reverseTexProgram, "showTexture"), showTexture));
-  glVerify(glUniform1i(glGetUniformLocation(s_reverseTexProgram, "uColorCompensation"), colorCompensation));
+  if (textureMode > 1)
+  {
+    glVerify(glEnable(GL_TEXTURE_1D));
+    glVerify(glActiveTexture(GL_TEXTURE1));
+    glVerify(glBindTexture(GL_TEXTURE_1D, GetHeatmapTextureId()));
+    glVerify(glUniform1i(glGetUniformLocation(s_reverseTexProgram, "colorMap"), 1));//
+  }
 
-  // Enable blending for transparency
-  //glEnable(GL_BLEND);
-  //glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-  // update positions and normals
   glVerify(glBindBuffer(GL_ARRAY_BUFFER, mesh->mPositionsVBO));
   glVerify(glBufferSubData(GL_ARRAY_BUFFER, 0, mesh->mNumVertices * sizeof(Vec4), positions));
   glVerify(glBufferSubData(GL_ARRAY_BUFFER, mesh->mNumVertices * sizeof(Vec4), mesh->mNumVertices * sizeof(Vec4), normals));
   // update texture coords
-  if (showTexture)
+  if (textureMode > 0)
   {
     glVerify(glBufferSubData(GL_ARRAY_BUFFER, mesh->mNumVertices * (sizeof(Vec4) + sizeof(Vec4)), mesh->mNumVertices * sizeof(Vec4), uvs));
   }
   glVerify(glBufferSubData(GL_ARRAY_BUFFER, mesh->mNumVertices * (sizeof(Vec4) + sizeof(Vec4) + sizeof(Vec4)), mesh->mNumVertices * sizeof(Vec4), stretchColors));
   // draw VAO
   glVerify(glBindVertexArray(mesh->mVAO));
-  // update indices (in the case of seams corrections) // NOT NECESSARY
-  //glVerify(glBindBuffer(GL_ARRAY_BUFFER, mesh->mIndicesIBO));
-  //glVerify(glBufferData(GL_ELEMENT_ARRAY_BUFFER, nIndices * sizeof(int), &indices[0], GL_STATIC_DRAW));
 
   if (g_enable_paches)
   {
@@ -3468,13 +3481,16 @@ void DrawReverseTexture(GpuMesh* mesh, const Vec4* positions, const Vec4* normal
   }
 
   glVerify(glBindVertexArray(0));
-
-
   // disable texture
-  if (showTexture)
+  if (textureMode > 0)
   {
     glActiveTexture(GL_TEXTURE0);
     glDisable(GL_TEXTURE_2D);
+  }
+  if (textureMode > 1)
+  {
+    glVerify(glActiveTexture(GL_TEXTURE1));
+    glDisable(GL_TEXTURE_1D);
   }
 }
 

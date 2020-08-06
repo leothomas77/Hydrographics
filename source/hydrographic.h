@@ -114,7 +114,7 @@ public:
       //6: urna
       //7: onca
       //8: tartaruga
-      selectedModel = 2;
+      selectedModel = 3;
     }
 
     Mesh* mesh = NULL; //mesh model to create sdf structures
@@ -339,36 +339,68 @@ public:
 		imguiSlider("Horizontal invMass", &g_horizontalInvMass, 0.0f, 1.0f, 0.005f);
 		imguiSlider("Vertical invMass", &g_verticalInvMass, 0.0f, 1.0f, 0.005f);
     imguiSlider("Stretch Stiffness", &stretchStiffness, 0.0f, 1.0f, 0.0001f);
-    imguiSlider("Stretch Factor", &g_stretchFactor, 1.0f, 5.0f, 0.0001f);
 
     if (imguiCheck("Draw Collision Mesh", g_drawHydrographicCollisionMesh))
       g_drawHydrographicCollisionMesh = !g_drawHydrographicCollisionMesh;
-    if (imguiCheck("Hydrographic Film", g_drawHydrographic))
+    if (imguiCheck("Draw Hydrographic Film", g_drawHydrographic))
       g_drawHydrographic = !g_drawHydrographic;
 
     if (imguiCheck("Draw Reverse Texture", g_drawReverseTexture))
     {
       g_drawReverseTexture = !g_drawReverseTexture;
-      g_drawHydrographic = !g_drawHydrographic;
-      g_drawHydrographicCollisionMesh = !g_drawHydrographicCollisionMesh;
+      g_drawHydrographic = false;
+      g_drawHydrographicCollisionMesh = false;      
+      g_drawStretchColor = false;
+
       g_createReverseTextureFile = true;
+
+
+      if (g_drawReverseTexture)
+      {
+        if (g_drawColorCompensation)
+          g_textureMode = 2;
+        else
+          g_textureMode = 1;
+      }
+      else
+      {
+        if (g_drawColorCompensation)
+        {
+          g_textureMode = 3;
+        }
+      }
     }
 
-    if (imguiCheck("Color compensation", g_colorCompensation))
-      g_colorCompensation = !g_colorCompensation;
+    if (imguiCheck("Draw Color Compensation", g_drawColorCompensation))
+    {
+      g_drawColorCompensation = !g_drawColorCompensation;
+      g_drawHydrographic = false;
+      g_drawHydrographicCollisionMesh = false;
+      g_drawStretchColor = false;
 
-    if (imguiCheck("Draw stretch colors", g_drawStretchColor))
+      if (g_drawReverseTexture)
+      {
+        if (g_drawColorCompensation)
+          g_textureMode = 2;
+        else
+          g_textureMode = 1;
+      }
+      else 
+      {
+        g_textureMode = 3;
+      }
+
+    }
+
+    if (imguiCheck("Draw Stretch Colors", g_drawStretchColor))
     {
       g_drawStretchColor = !g_drawStretchColor;
+      g_drawHydrographic = false;
+      g_drawHydrographicCollisionMesh = false;
       g_drawReverseTexture = false;
-      g_drawStretchFactor = false;
-    }
+      g_drawColorCompensation = false;
 
-    if (imguiCheck("Draw stretch factor", g_drawStretchFactor))
-    {
-      g_drawStretchFactor = !g_drawStretchFactor;
-      g_drawStretchColor = false;
-      g_drawReverseTexture = false;
+      g_textureMode = 4;
     }
 
     /*
