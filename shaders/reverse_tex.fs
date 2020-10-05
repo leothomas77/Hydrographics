@@ -1,18 +1,12 @@
 ﻿#version 430
 
 uniform vec3 uLPos;
-//uniform vec4 uLColor;
 uniform vec4 uColor;
 uniform vec3 uCamPos;
-//uniform vec4 uAmbient;
-//uniform vec4 uSpecular;
-//uniform uint uSpecularExpoent;
-//uniform bool showTexture;
 uniform sampler2D reverseTexture;
 uniform sampler1D colorMap;
 uniform int textureMode;
 
-//inputs from geometry shader
 in GS_OUT
 {
     vec3 vNormal;
@@ -30,7 +24,6 @@ void main(void) {
   vec4 matDif = vec4(1.0f);
 
   float compensationFactor = 1.0f - fs_in.vColor.x;
-
 
   if (fs_in.vTexCoords.x >= 0.0f && fs_in.vTexCoords.y >= 0.0f)
   {

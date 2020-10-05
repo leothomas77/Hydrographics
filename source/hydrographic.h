@@ -87,7 +87,7 @@ public:
       g_params.numPlanes = 0;
       // relaxation solver params
       g_params.relaxationMode = eNvFlexRelaxationGlobal;
-      g_params.relaxationFactor = 0.25f;
+      g_params.relaxationFactor = 0.5f;
       //g_params.relaxationMode = eNvFlexRelaxationLocal;
       //g_params.relaxationFactor = 0.2f;
       // plastic params not used
@@ -113,7 +113,7 @@ public:
       //6: urna
       //7: onca
       //8: tartaruga
-      selectedModel = 3;
+      selectedModel = 2;
     }
 
     Mesh* mesh = NULL; //mesh model to create sdf structures
@@ -462,7 +462,7 @@ public:
   float bendStiffness = 0.75f; // not used
   float shearStiffness = 0.5f; // not used
   float gridY = 0.3f; // film Y position
-  int factor = 15;
+  int factor = 23;
   float SimulatedModelScaledSquareSize; //simulated scaled size of chessboard square considering the current model simulated with 1.0 square ratio
 	std::vector<ModelData> models;
 };
